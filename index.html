@@ -71,9 +71,9 @@
       </section>
 
       <section class="tab-panel hidden" id="tab-candidates">
-        <div class="section-heading"><div><h2>Hồ sơ thí sinh</h2><p>Nhập hồ sơ học sinh độc lập với số báo danh và môn thi. Có thể cập nhật danh sách nhiều lần.</p></div><button id="download-csv-template" class="btn btn-light">Tải CSV mẫu</button></div>
-        <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, grade_code, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Có thể mở CSV bằng Excel và lưu dạng CSV UTF-8.</div>
-        <form id="import-form" class="inline-form"><label>File danh sách học sinh<input id="candidate-csv" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập hồ sơ</button></form>
+        <div class="section-heading"><div><h2>Hồ sơ thí sinh</h2><p>Nhập hồ sơ học sinh độc lập với số báo danh và môn thi. Có thể cập nhật danh sách nhiều lần.</p></div><button id="download-csv-template" class="btn btn-light" type="button">Tải Excel mẫu (.xlsx)</button></div>
+        <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, grade_code, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Chỉ nhập bằng Excel (.xlsx). Tất cả cột phải ở dạng Text; ngày sinh nhập dạng văn bản YYYY-MM-DD (ví dụ 2009-08-24). Không dùng CSV để tránh lỗi mã hóa tiếng Việt. Nếu mã định danh hoặc ngày sinh là ô số/ngày của Excel, hệ thống sẽ báo lỗi để tránh mất số 0 đầu hoặc đảo ngày tháng.</div>
+        <form id="import-form" class="inline-form"><label>File danh sách học sinh<input id="candidate-csv" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập hồ sơ</button></form>
         <div id="import-preview" class="table-wrap"></div>
         <div class="section-heading subheading candidate-toolbar">
           <div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Quản lý hồ sơ theo khối, lớp; SBD và môn thi được thiết lập ở các bước riêng.</p></div>
@@ -127,7 +127,7 @@
           <label id="subject-student-list-wrap">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3" placeholder="Nhập mã học sinh, mỗi dòng một mã"></textarea></label>
           <label>Môn thi<select id="subject-code"></select></label>
           <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
-          <label>File đăng ký môn<input id="subject-csv" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+          <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
         <div class="notice notice-info">Nên ưu tiên tải file Excel .xlsx nếu CSV bị lỗi font. CSV môn thi dùng các cột student_code hoặc class_code, subject_code, subject_order. Với môn lựa chọn, mỗi học sinh cần đúng hai môn khác nhau; subject_order=1 là ca 1, subject_order=2 là ca 2. Với môn bắt buộc, subject_order có thể để trống nếu chưa phân ca.</div>
