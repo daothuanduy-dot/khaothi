@@ -51,8 +51,20 @@
         <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Có thể mở CSV bằng Excel và lưu dạng CSV UTF-8.</div>
         <form id="import-form" class="inline-form"><label>File danh sách học sinh<input id="candidate-csv" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập hồ sơ</button></form>
         <div id="import-preview" class="table-wrap"></div>
-        <div class="section-heading subheading"><div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Danh sách hồ sơ được đưa vào kỳ thi; SBD và môn thi được thiết lập ở các bước riêng.</p></div></div>
-        <div class="table-wrap"><table><thead><tr><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Lớp</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
+        <div class="section-heading subheading"><div><h3 id="candidate-form-title">Thêm thí sinh</h3><p>Thêm mới hoặc chọn Sửa trong danh sách để cập nhật hồ sơ.</p></div></div>
+        <form id="candidate-edit-form" class="form-grid">
+          <input id="candidate-edit-id" type="hidden">
+          <label>Mã định danh<input id="candidate-edit-code" required maxlength="100" placeholder="Mã học sinh / mã định danh"></label>
+          <label>Họ và tên<input id="candidate-edit-name" required maxlength="200" placeholder="Họ và tên đầy đủ"></label>
+          <label>Ngày sinh<input id="candidate-edit-dob" type="date"></label>
+          <label>Giới tính<select id="candidate-edit-gender"><option value="">-- Chọn --</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
+          <label>Dân tộc<input id="candidate-edit-ethnicity" maxlength="100" placeholder="Ví dụ: Kinh"></label>
+          <label>Lớp<input id="candidate-edit-class" required maxlength="50" placeholder="Ví dụ: 12A1"></label>
+          <div class="form-actions"><button id="candidate-save" class="btn btn-primary" type="submit">Thêm thí sinh</button><button id="candidate-cancel-edit" class="btn btn-light hidden" type="button">Hủy sửa</button></div>
+        </form>
+        <div id="candidate-form-message" class="notice hidden"></div>
+        <div class="section-heading subheading"><div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Danh sách hồ sơ được đưa vào kỳ thi; SBD và môn thi được thiết lập ở các bước riêng.</p></div><label class="search-label">Tìm kiếm<input id="candidate-search" type="search" placeholder="Mã, họ tên hoặc lớp"></label></div>
+        <div class="table-wrap"><table><thead><tr><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Lớp</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
       </section>
 
       <section class="tab-panel hidden" id="tab-subjects">
