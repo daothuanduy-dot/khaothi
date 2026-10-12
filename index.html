@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Hệ thống quản lý kỳ thi, số báo danh và xếp phòng thi THPT Lê Hồng Phong">
+  <title>Khảo thí trực tuyến | THPT Lê Hồng Phong</title>
+  <link rel="stylesheet" href="./css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
+    <div class="top-actions"><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+  </header>
+  <main class="container">
+    <section id="setup-screen" class="panel setup-panel">
+      <div class="eyebrow">CẤU HÌNH LẦN ĐẦU</div><h1>Kết nối Supabase</h1>
+      <p>Nhập URL và khóa <b>publishable/anon</b> của project Supabase khảo thí. Không nhập khóa <code>service_role</code>.</p>
+      <form id="setup-form" class="form-grid">
+        <label>Supabase Project URL<input id="supabase-url" type="url" placeholder="https://xxxxxxxx.supabase.co" required></label>
+        <label>Publishable / anon key<input id="supabase-key" type="password" placeholder="sb_publishable_... hoặc anon key" required autocomplete="off"></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Kết nối</button><button class="btn btn-light" id="clear-config" type="button">Xóa cấu hình</button></div>
+      </form>
+      <p class="hint">Cấu hình được lưu trong trình duyệt hiện tại. Nếu dùng máy dùng chung, hãy đăng xuất và xóa cấu hình khi cần.</p>
+    </section>
+
+    <section id="login-screen" class="panel login-panel hidden">
+      <div class="eyebrow">XÁC THỰC</div><h1>Đăng nhập quản trị</h1><p>Dùng tài khoản đã tạo trong Supabase Authentication.</p>
+      <form id="login-form" class="form-grid">
+        <label>Email<input id="login-email" type="email" required autocomplete="username"></label>
+        <label>Mật khẩu<input id="login-password" type="password" required autocomplete="current-password"></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Đăng nhập</button><button class="btn btn-light" id="change-config" type="button">Đổi cấu hình</button></div>
+      </form><div id="login-message" class="notice hidden"></div>
+    </section>
+
+    <section id="app-screen" class="hidden">
+      <div class="welcome-row"><div><div class="eyebrow">BẢNG ĐIỀU KHIỂN</div><h1>Quản lý kỳ thi</h1><p>Quản lý kỳ thi, đăng ký môn lựa chọn và phương án xếp phòng.</p></div><button id="reload-exams" class="btn btn-light">Làm mới</button></div>
+      <nav class="tabs" aria-label="Chức năng"><button class="tab active" data-tab="exams">Kỳ thi</button><button class="tab" data-tab="candidates">Thí sinh</button><button class="tab" data-tab="rooming">Xếp phòng môn lựa chọn</button><button class="tab" data-tab="settings">Cấu hình</button></nav>
+      <div id="global-message" class="notice hidden"></div>
+
+      <section class="tab-panel" id="tab-exams">
+        <div class="section-heading"><div><h2>Danh sách kỳ thi</h2><p>Tạo kỳ thi mới hoặc chọn kỳ thi để quản lý.</p></div></div>
+        <form id="create-exam-form" class="inline-form"><label>Tên kỳ thi<input id="new-exam-name" required placeholder="Ví dụ: Khảo sát chất lượng lần 1"></label><label>Năm học<input id="new-exam-year" required placeholder="2026-2027"></label><button class="btn btn-primary" type="submit">+ Tạo kỳ thi</button></form>
+        <div class="table-wrap"><table><thead><tr><th>Tên kỳ thi</th><th>Năm học</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead><tbody id="exam-table-body"><tr><td colspan="5" class="empty">Chưa tải dữ liệu.</td></tr></tbody></table></div>
+      </section>
+
+      <section class="tab-panel hidden" id="tab-candidates">
+        <div class="section-heading"><div><h2>Thí sinh và đăng ký môn</h2><p>Nhập danh sách CSV theo mẫu. Mỗi học sinh phải có SBD và đúng hai môn lựa chọn.</p></div><button id="download-csv-template" class="btn btn-light">Tải CSV mẫu</button></div>
+        <div class="notice notice-info">Chọn kỳ thi ở mục Xếp phòng trước khi nhập. CSV dùng UTF-8, dấu phẩy phân tách cột; cột elective_1 và elective_2 dùng mã: SU, DIA, GDKTPL, LY, HOA, SINH, TIN.</div>
+        <form id="import-form" class="inline-form"><label>File CSV<input id="candidate-csv" type="file" accept=".csv,text/csv" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập</button></form>
+        <div id="import-preview" class="table-wrap"></div>
+        <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Mã học sinh</th><th>Họ tên</th><th>Lớp</th><th>Môn lựa chọn 1</th><th>Môn lựa chọn 2</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="6" class="empty">Chọn một kỳ thi để xem thí sinh.</td></tr></tbody></table></div>
+      </section>
+
+      <section class="tab-panel hidden" id="tab-rooming">
+        <div class="section-heading"><div><h2>Xếp phòng thi môn lựa chọn</h2><p>Toán và Ngữ văn theo lịch cứng; chức năng này chỉ xếp hai môn lựa chọn trong cùng buổi.</p></div></div>
+        <div class="notice notice-info"><b>Quy tắc:</b> ca 1 thi môn lựa chọn thứ nhất, ca 2 thi môn lựa chọn thứ hai. Mỗi phòng được ghép học sinh cùng cặp môn lựa chọn, nhờ đó một phòng chỉ có hai môn và không trùng môn giữa hai ca.</div>
+        <div class="form-grid rooming-controls">
+          <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
+          <label>Sức chứa phòng<input id="room-capacity" type="number" min="1" max="100" value="24" required></label>
+          <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
+          <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
+          <div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phương án</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Khóa phương án</button></div>
+        </div>
+        <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
+        <div class="table-wrap"><table><thead><tr><th>Phòng</th><th>Sĩ số</th><th>Ca 1</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="5" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
+        <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách chi tiết theo SBD.</p></div><button id="export-rooming" class="btn btn-light" disabled>Xuất CSV</button></div>
+        <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th></tr></thead><tbody id="assignment-table-body"><tr><td colspan="6" class="empty">Chưa có phân công.</td></tr></tbody></table></div>
+      </section>
+
+      <section class="tab-panel hidden" id="tab-settings">
+        <div class="section-heading"><div><h2>Cấu hình kỳ thi</h2><p>Các môn bắt buộc có lịch cứng; bảy môn lựa chọn dùng mã thống nhất.</p></div></div>
+        <div class="subject-grid" id="subject-catalog"></div>
+        <div class="notice">Mã môn: SU – Lịch sử; DIA – Địa lí; GDKTPL – Giáo dục kinh tế và pháp luật; LY – Vật lí; HOA – Hóa học; SINH – Sinh học; TIN – Tin học. SBD 6 hoặc 8 chữ số và quy tắc tiền tố khối sẽ được cấu hình trong phần quản lý SBD của phiên bản tiếp theo.</div>
+      </section>
+    </section>
+    <footer><span>Khảo thí trực tuyến · Phiên bản v0.1.0</span><span>GitHub Pages + Supabase</span></footer>
+  </main>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

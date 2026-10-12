@@ -1,0 +1,7 @@
+{
+  "name": "thpt-le-hong-phong-khao-thi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hệ thống khảo thí trực tuyến dùng GitHub Pages và Supabase"
+}
