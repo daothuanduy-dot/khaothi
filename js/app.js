@@ -485,6 +485,12 @@ async function applySubject(){
 async function loadSubjectRegistrations(){
   const examId=$('subject-exam-select').value;
   const body=$('subject-table-body');
+  // Keep headers synchronized even if an older index.html is cached or deployed.
+  const subjectTable=body.closest('table');
+  if(subjectTable){
+    const thead=subjectTable.querySelector('thead');
+    if(thead)thead.innerHTML='<tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th></tr>';
+  }
   if(!examId){message($('subject-message'),'Hãy chọn kỳ thi.','error');body.innerHTML='';return}
   const {data:regs,error}=await state.client.from('exam_candidate_subjects')
     .select('candidate_id,subject_code,subject_type,subject_order')
