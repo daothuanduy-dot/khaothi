@@ -8,6 +8,22 @@
   <link rel="stylesheet" href="./css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    .candidate-toolbar{align-items:center;gap:16px}.candidate-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,1fr) minmax(220px,2fr) auto;gap:12px;align-items:end;margin:18px 0}
+    .candidate-bulk-toolbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin-bottom:12px;background:#f5f7fb;border:1px solid #dce4f1;border-radius:12px}
+    .select-all-label{display:flex;align-items:center;gap:8px}.candidate-bulk-toolbar span{color:#64748b;margin-right:auto}
+    .candidate-actions{white-space:nowrap}.danger-btn{background:#fff0f0!important;color:#b42318!important;border:1px solid #fecaca!important}
+    .candidate-modal{width:min(760px,calc(100vw - 28px));max-width:760px;border:0;border-radius:18px;padding:0;box-shadow:0 24px 80px #0f172a44}
+    .candidate-modal::backdrop{background:#0f172a88;backdrop-filter:blur(2px)}.candidate-modal form{padding:24px}
+    .modal-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.modal-heading h3{margin:0 0 6px}.modal-heading p{margin:0;color:#64748b}
+    .modal-close{border:0;background:#eef2f7;border-radius:10px;width:38px;height:38px;font-size:25px;cursor:pointer}
+    .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+    .candidate-modal label{display:flex;flex-direction:column;gap:7px}
+    .candidate-modal input,.candidate-modal select{width:100%;box-sizing:border-box}
+    .candidate-row-check{width:16px;height:16px}
+    @media(max-width:800px){.candidate-filters{grid-template-columns:1fr 1fr}.candidate-modal form{padding:18px}.candidate-modal .form-grid{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -48,23 +64,42 @@
 
       <section class="tab-panel hidden" id="tab-candidates">
         <div class="section-heading"><div><h2>Hồ sơ thí sinh</h2><p>Nhập hồ sơ học sinh độc lập với số báo danh và môn thi. Có thể cập nhật danh sách nhiều lần.</p></div><button id="download-csv-template" class="btn btn-light">Tải CSV mẫu</button></div>
-        <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Có thể mở CSV bằng Excel và lưu dạng CSV UTF-8.</div>
+        <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, grade_code, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Có thể mở CSV bằng Excel và lưu dạng CSV UTF-8.</div>
         <form id="import-form" class="inline-form"><label>File danh sách học sinh<input id="candidate-csv" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập hồ sơ</button></form>
         <div id="import-preview" class="table-wrap"></div>
-        <div class="section-heading subheading"><div><h3 id="candidate-form-title">Thêm thí sinh</h3><p>Thêm mới hoặc chọn Sửa trong danh sách để cập nhật hồ sơ.</p></div></div>
-        <form id="candidate-edit-form" class="form-grid">
-          <input id="candidate-edit-id" type="hidden">
-          <label>Mã định danh<input id="candidate-edit-code" required maxlength="100" placeholder="Mã học sinh / mã định danh"></label>
-          <label>Họ và tên<input id="candidate-edit-name" required maxlength="200" placeholder="Họ và tên đầy đủ"></label>
-          <label>Ngày sinh<input id="candidate-edit-dob" type="date"></label>
-          <label>Giới tính<select id="candidate-edit-gender"><option value="">-- Chọn --</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
-          <label>Dân tộc<input id="candidate-edit-ethnicity" maxlength="100" placeholder="Ví dụ: Kinh"></label>
-          <label>Lớp<input id="candidate-edit-class" required maxlength="50" placeholder="Ví dụ: 12A1"></label>
-          <div class="form-actions"><button id="candidate-save" class="btn btn-primary" type="submit">Thêm thí sinh</button><button id="candidate-cancel-edit" class="btn btn-light hidden" type="button">Hủy sửa</button></div>
-        </form>
+        <div class="section-heading subheading candidate-toolbar">
+          <div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Quản lý hồ sơ theo khối, lớp; SBD và môn thi được thiết lập ở các bước riêng.</p></div>
+          <button id="candidate-add-open" class="btn btn-primary" type="button">+ Thêm mới</button>
+        </div>
+        <div class="candidate-filters">
+          <label>Khối<select id="candidate-grade-filter"><option value="">Tất cả các khối</option></select></label>
+          <label>Lớp<select id="candidate-class-filter"><option value="">Tất cả các lớp</option></select></label>
+          <label class="search-label">Tìm kiếm<input id="candidate-search" type="search" placeholder="Mã định danh hoặc họ tên"></label>
+          <button id="candidate-clear-filters" class="btn btn-light" type="button">Xóa lọc</button>
+        </div>
+        <div class="candidate-bulk-toolbar">
+          <label class="select-all-label"><input id="candidate-select-all" type="checkbox"> Chọn tất cả trong danh sách đang lọc</label>
+          <span id="candidate-selected-count">Đã chọn 0 thí sinh</span>
+          <button id="candidate-bulk-delete" class="btn danger-btn" type="button" disabled>Xóa đã chọn</button>
+        </div>
         <div id="candidate-form-message" class="notice hidden"></div>
-        <div class="section-heading subheading"><div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Danh sách hồ sơ được đưa vào kỳ thi; SBD và môn thi được thiết lập ở các bước riêng.</p></div><label class="search-label">Tìm kiếm<input id="candidate-search" type="search" placeholder="Mã, họ tên hoặc lớp"></label></div>
-        <div class="table-wrap"><table><thead><tr><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Lớp</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th><input id="candidate-header-check" type="checkbox" aria-label="Chọn tất cả"></th><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th><th>Thao tác</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="9" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
+        <dialog id="candidate-modal" class="candidate-modal">
+          <form id="candidate-edit-form">
+            <div class="modal-heading"><div><h3 id="candidate-form-title">Thêm thí sinh</h3><p>Nhập hồ sơ học sinh. Không cần nhập SBD hoặc môn thi tại đây.</p></div><button id="candidate-modal-close" class="modal-close" type="button" aria-label="Đóng">×</button></div>
+            <input id="candidate-edit-id" type="hidden">
+            <div class="form-grid">
+              <label>Mã định danh<input id="candidate-edit-code" required maxlength="100" placeholder="Mã học sinh / mã định danh"></label>
+              <label>Họ và tên<input id="candidate-edit-name" required maxlength="200" placeholder="Họ và tên đầy đủ"></label>
+              <label>Khối<select id="candidate-edit-grade" required><option value="">-- Chọn khối --</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></label>
+              <label>Lớp<input id="candidate-edit-class" required maxlength="50" placeholder="Ví dụ: 12A1"></label>
+              <label>Ngày sinh<input id="candidate-edit-dob" type="date"></label>
+              <label>Giới tính<select id="candidate-edit-gender"><option value="">-- Chọn --</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
+              <label>Dân tộc<input id="candidate-edit-ethnicity" maxlength="100" placeholder="Ví dụ: Kinh"></label>
+            </div>
+            <div class="modal-actions"><button id="candidate-cancel-edit" class="btn btn-light" type="button">Hủy</button><button id="candidate-save" class="btn btn-primary" type="submit">Lưu thí sinh</button></div>
+          </form>
+        </dialog>
       </section>
 
       <section class="tab-panel hidden" id="tab-subjects">
