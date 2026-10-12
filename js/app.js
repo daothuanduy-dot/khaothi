@@ -486,31 +486,31 @@ async function loadSubjectRegistrations(){
   const examId=$('subject-exam-select').value;
   const body=$('subject-table-body');
   if(!examId){message($('subject-message'),'Hãy chọn kỳ thi.','error');body.innerHTML='';return}
-  // Avoid ambiguous PostgREST embedding: exam_candidate_subjects can have
-  // multiple foreign-key paths to exam_candidates. Fetch registrations and candidates separately.
-  const {data:regs,error:regError}=await state.client.from('exam_candidate_subjects')
+  const {data:regs,error}=await state.client.from('exam_candidate_subjects')
     .select('candidate_id,subject_code,subject_type,subject_order')
     .eq('exam_id',examId).order('subject_code');
-  if(regError){message($('subject-message'),`Không tải được đăng ký môn: ${regError.message}`,'error');return}
+  if(error){message($('subject-message'),`Không tải được thống kê môn: ${error.message}`,'error');return}
   body.innerHTML='';
   if(!regs||!regs.length){
-    body.innerHTML='<tr><td colspan="7" class="empty">Chưa có đăng ký môn cho kỳ thi này.</td></tr>';
+    body.innerHTML='<tr><td colspan="5" class="empty">Chưa có đăng ký môn cho kỳ thi này.</td></tr>';
     return;
   }
-  const candidateIds=[...new Set(regs.map(r=>r.candidate_id).filter(v=>v!==null&&v!==undefined))];
-  if(!candidateIds.length){
-    message($('subject-message'),'Có bản ghi đăng ký môn nhưng thiếu candidate_id. Hãy kiểm tra dữ liệu CSDL.','error');return;
-  }
-  const {data:candidates,error:candidateError}=await state.client.from('exam_candidates')
-    .select('id,student_code,student_name,class_code').eq('exam_id',examId).in('id',candidateIds);
-  if(candidateError){message($('subject-message'),`Không tải được hồ sơ thí sinh: ${candidateError.message}`,'error');return}
-  const candidateById=new Map((candidates||[]).map(c=>[String(c.id),c]));
+  // Summarize by subject/type/order and count unique candidates, not raw rows.
+  const summary=new Map();
   for(const r of regs){
-    const candidate=candidateById.get(String(r.candidate_id))||{};
-    body.insertAdjacentHTML('beforeend',`<tr><td>${esc(candidate.student_code||'')}</td><td>${esc(candidate.student_name||'')}</td><td>${esc(candidate.class_code||'')}</td><td>${esc(r.subject_code||'')}</td><td>${esc(subjectName(r.subject_code)||({TOAN:'Toán',VAN:'Ngữ văn'}[r.subject_code]||r.subject_code||''))}</td><td>${r.subject_type==='required'?'Bắt buộc':'Lựa chọn'}</td><td>${esc(r.subject_order??'')}</td></tr>`);
+    const code=String(r.subject_code||'').trim().toUpperCase();
+    const type=r.subject_type==='required'?'required':'elective';
+    const order=type==='elective'?(r.subject_order??''):'';
+    const key=[code,type,String(order)].join('|');
+    if(!summary.has(key))summary.set(key,{code,type,order,students:new Set()});
+    if(r.candidate_id!==null&&r.candidate_id!==undefined)summary.get(key).students.add(String(r.candidate_id));
+  }
+  const rows=[...summary.values()].sort((a,b)=>a.code.localeCompare(b.code,'vi')||a.type.localeCompare(b.type)||Number(a.order||0)-Number(b.order||0));
+  for(const r of rows){
+    const name=subjectName(r.code)||({TOAN:'Toán',VAN:'Ngữ văn'}[r.code]||r.code);
+    body.insertAdjacentHTML('beforeend',`<tr><td>${esc(r.code)}</td><td>${esc(name)}</td><td>${r.type==='required'?'Bắt buộc':'Lựa chọn'}</td><td>${r.order===''?'—':esc(r.order)}</td><td><strong>${r.students.size.toLocaleString('vi-VN')}</strong></td></tr>`);
   }
 }
-
 function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDefault();const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');message($('login-message'),err.message,'error');showScreen('setup-screen')}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error){message($('login-message'),error.message,'error');return}await enterApp(data.user)});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',e=>{const b=e.target.closest('[data-select-exam]');if(b){state.selectedExam=b.dataset.selectExam;$('rooming-exam-select').value=state.selectedExam;loadCandidates();switchTab('rooming')}});$('rooming-exam-select').onchange=()=>{state.selectedExam=$('rooming-exam-select').value;state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;loadCandidates()};$('download-csv-template').addEventListener('click',downloadExcelTemplate);$('import-form').addEventListener('submit',importCsv);$('candidate-edit-form').addEventListener('submit',saveCandidate);$('candidate-add-open').onclick=()=>openCandidateModal();$('candidate-cancel-edit').onclick=resetCandidateForm;$('candidate-modal-close').onclick=resetCandidateForm;$('candidate-search').addEventListener('input',renderCandidateTable);$('candidate-grade-filter').onchange=()=>{populateCandidateClassFilter();renderCandidateTable()};$('candidate-class-filter').onchange=renderCandidateTable;$('candidate-clear-filters').onclick=()=>{$('candidate-grade-filter').value='';populateCandidateClassFilter();$('candidate-class-filter').value='';$('candidate-search').value='';renderCandidateTable()};$('candidate-table-body').addEventListener('click',e=>{const edit=e.target.closest('[data-candidate-edit]');if(edit)openCandidateModal(edit.dataset.candidateEdit)});$('candidate-table-body').addEventListener('change',e=>{const box=e.target.closest('[data-candidate-check]');if(box)updateCandidateSelection(box.dataset.candidateCheck,box.checked)});const selectVisible=checked=>{const ids=getFilteredCandidates().map(c=>c.id);const s=new Set(state.selectedCandidateIds||[]);ids.forEach(id=>checked?s.add(id):s.delete(id));state.selectedCandidateIds=[...s];renderCandidateTable()};$('candidate-select-all').onchange=e=>selectVisible(e.target.checked);$('candidate-header-check').onchange=e=>selectVisible(e.target.checked);$('candidate-bulk-delete').onclick=deleteSelectedCandidates;$('download-subject-template').onclick=downloadSubjectTemplate;$('apply-subject').onclick=applySubject;$('load-subject-registrations').onclick=loadSubjectRegistrations;$('subject-exam-select').onchange=loadSubjectRegistrations;$('subject-scope').onchange=()=>{const scope=$('subject-scope').value;$('subject-class-code').disabled=!['class','class_students'].includes(scope);$('subject-student-code').disabled=scope!=='student';$('subject-csv').disabled=scope!=='file';$('subject-grade').disabled=scope!=='grade';$('subject-student-list').disabled=scope!=='class_students';$('subject-class-code-wrap').classList.add('hidden');$('subject-class-picker-wrap').classList.toggle('hidden',scope!=='class');$('subject-student-class-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-picker-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-code-wrap').classList.toggle('hidden',scope!=='student');$('subject-grade-wrap').classList.toggle('hidden',scope!=='grade');$('subject-student-list-wrap').classList.add('hidden');if(['class','class_students'].includes(scope)&&state.client)loadSubjectPickerCandidates();};$('subject-scope').dispatchEvent(new Event('change'));$('subject-student-class').onchange=renderSubjectStudentPicker;$('subject-exam-select').addEventListener('change',()=>{if(['class','class_students'].includes($('subject-scope').value))loadSubjectPickerCandidates()});$('subject-classes-select-all').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=true);$('subject-classes-clear').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=false);$('subject-students-select-all').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=true);$('subject-students-clear').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=false);$('subject-mode').onchange=()=>{const elective=$('subject-mode').value==='elective';$('subject-order-wrap').classList.toggle('hidden',!elective);if(!elective)$('subject-order').value='1'};$('subject-mode').dispatchEvent(new Event('change'));initSubjectCatalog();$('preview-rooming').onclick=previewRooming;$('save-rooming').onclick=()=>saveRooming(false);$('lock-rooming').onclick=()=>{if(confirm('Khóa phương án xếp phòng? Hãy chắc chắn đã kiểm tra danh sách.'))saveRooming(true)};$('export-rooming').onclick=exportRooming;}
 async function boot(){wire();renderSubjects();const config=readConfig();if(!config.url||!config.key){showScreen('setup-screen');return}$('supabase-url').value=config.url;$('supabase-key').value=config.key;try{await connect(config.url,config.key)}catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('login-message'),`Không kết nối được: ${e.message}`,'error')}}
 boot();
