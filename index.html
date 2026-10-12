@@ -60,15 +60,17 @@
         <div class="form-grid">
           <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
           <label>Loại môn<select id="subject-mode"><option value="elective">Môn lựa chọn</option><option value="required">Môn bắt buộc</option></select></label>
-          <label>Phạm vi áp dụng<select id="subject-scope"><option value="class">Theo lớp</option><option value="student">Theo học sinh</option><option value="file">Nạp từ CSV/Excel</option></select></label>
+          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Theo lớp</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option><option value="file">Nạp từ CSV/Excel</option></select></label>
           <label>Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
-          <label>Mã học sinh (khi áp dụng cá nhân)<input id="subject-student-code" placeholder="Ví dụ: HS0001"></label>
+          <label id="subject-student-code-wrap">Mã học sinh<input id="subject-student-code" placeholder="Ví dụ: HS0001"></label>
+          <label id="subject-grade-wrap">Khối áp dụng<select id="subject-grade"><option value="">-- Chọn khối --</option><option value="10">Khối 10</option><option value="11">Khối 11</option><option value="12">Khối 12</option></select></label>
+          <label id="subject-student-list-wrap">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3" placeholder="Nhập mã học sinh, mỗi dòng một mã"></textarea></label>
           <label>Môn thi<select id="subject-code"></select></label>
-          <label>Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
+          <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
           <label>File đăng ký môn<input id="subject-csv" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">CSV môn thi dùng các cột student_code hoặc class_code, subject_code, subject_order. Với môn lựa chọn, mỗi học sinh cần đúng hai môn khác nhau; subject_order=1 là ca 1, subject_order=2 là ca 2. Với môn bắt buộc, subject_order có thể để trống nếu chưa phân ca.</div>
+        <div class="notice notice-info">Nên ưu tiên tải file Excel .xlsx nếu CSV bị lỗi font. CSV môn thi dùng các cột student_code hoặc class_code, subject_code, subject_order. Với môn lựa chọn, mỗi học sinh cần đúng hai môn khác nhau; subject_order=1 là ca 1, subject_order=2 là ca 2. Với môn bắt buộc, subject_order có thể để trống nếu chưa phân ca.</div>
         <div id="subject-message" class="notice hidden"></div>
         <div class="table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ tên</th><th>Lớp</th><th>Mã môn</th><th>Tên môn</th><th>Loại</th><th>Thứ tự</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi và tải danh sách môn.</td></tr></tbody></table></div>
       </section>
