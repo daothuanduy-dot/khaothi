@@ -24,7 +24,15 @@
     .candidate-row-check{width:16px;height:16px}
     @media(max-width:800px){.candidate-filters{grid-template-columns:1fr 1fr}.candidate-modal form{padding:18px}.candidate-modal .form-grid{grid-template-columns:1fr}}
   </style>
-</head>
+<style>
+.candidate-delete-progress{margin:12px 0 16px;padding:14px 16px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px}
+.delete-progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#1e3a8a}
+.delete-progress-track{height:10px;background:#dbeafe;border-radius:999px;overflow:hidden;margin:10px 0}
+.delete-progress-bar{height:100%;background:#2563eb;border-radius:999px;transition:width .2s ease}
+#candidate-delete-progress-detail{margin:0;color:#475569;font-size:.9rem}
+.candidate-delete-progress.done{background:#f0fdf4;border-color:#bbf7d0}.candidate-delete-progress.done .delete-progress-heading{color:#166534}.candidate-delete-progress.done .delete-progress-bar{background:#16a34a}
+.candidate-delete-progress.failed{background:#fff7ed;border-color:#fed7aa}.candidate-delete-progress.failed .delete-progress-heading{color:#9a3412}.candidate-delete-progress.failed .delete-progress-bar{background:#ea580c}
+</style></head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
@@ -83,6 +91,11 @@
           <button id="candidate-bulk-delete" class="btn danger-btn" type="button" disabled>Xóa đã chọn</button>
         </div>
         <div id="candidate-form-message" class="notice hidden"></div>
+        <div id="candidate-delete-progress" class="candidate-delete-progress hidden" role="status" aria-live="polite">
+          <div class="delete-progress-heading"><strong id="candidate-delete-progress-title">Đang chuẩn bị xóa...</strong><span id="candidate-delete-progress-count">0/0</span></div>
+          <div class="delete-progress-track"><div id="candidate-delete-progress-bar" class="delete-progress-bar" style="width:0%"></div></div>
+          <p id="candidate-delete-progress-detail">Vui lòng không đóng hoặc tải lại trang trong khi xử lý.</p>
+        </div>
         <div class="table-wrap"><table><thead><tr><th><input id="candidate-header-check" type="checkbox" aria-label="Chọn tất cả"></th><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th><th>Thao tác</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="9" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
         <dialog id="candidate-modal" class="candidate-modal">
           <form id="candidate-edit-form">

@@ -166,21 +166,105 @@ async function saveCandidate(event){
     resetCandidateForm();message($('candidate-form-message'),id?'Đã cập nhật hồ sơ thí sinh.':'Đã thêm thí sinh mới.','success');await loadCandidates();
   }catch(e){message($('candidate-form-message'),e.message,'error')}
 }
+function setCandidateDeleteProgress({title,count,total,detail,kind='running',visible=true}){
+  const panel=$('candidate-delete-progress');
+  panel.classList.remove('hidden','done','failed');
+  if(!visible){panel.classList.add('hidden');return}
+  if(kind==='done')panel.classList.add('done');
+  if(kind==='failed')panel.classList.add('failed');
+  $('candidate-delete-progress-title').textContent=title;
+  $('candidate-delete-progress-count').textContent=`${count}/${total}`;
+  $('candidate-delete-progress-bar').style.width=`${total?Math.min(100,Math.round(count/total*100)):0}%`;
+  $('candidate-delete-progress-detail').textContent=detail;
+}
 async function deleteSelectedCandidates(){
   const ids=[...(state.selectedCandidateIds||[])];
   if(!ids.length)return;
-  if(!confirm(`Bạn chắc chắn muốn xóa ${ids.length} thí sinh đã chọn khỏi kỳ thi này? Các đăng ký môn liên quan có thể bị xóa theo ràng buộc cơ sở dữ liệu. Thao tác không thể tự hoàn tác.`))return;
   const examId=$('rooming-exam-select').value;
-  // Delete individually to report exact failures; never silently claim every record was deleted.
-  const deleted=[],failed=[];
-  for(const id of ids){
-    const {error}=await state.client.from('exam_candidates').delete().eq('id',id).eq('exam_id',examId);
-    if(error)failed.push({id,error:error.message});else deleted.push(id);
+  if(!examId){message($('candidate-form-message'),'Hãy chọn kỳ thi trước khi xóa.','error');return}
+  if(!confirm(`Bạn sắp xóa ${ids.length} thí sinh khỏi kỳ thi hiện tại. Các đăng ký môn liên quan có thể bị xóa theo ràng buộc cơ sở dữ liệu. Thao tác không thể tự hoàn tác. Bạn có muốn tiếp tục?`))return;
+
+  const button=$('candidate-bulk-delete');
+  button.disabled=true;
+  $('candidate-add-open').disabled=true;
+  const selectedSet=new Set(ids),deleted=new Set(),failed=[];
+  const batchSize=100;
+  const batches=Math.ceil(ids.length/batchSize);
+  setCandidateDeleteProgress({title:'Đang xóa hồ sơ thí sinh...',count:0,total:ids.length,detail:`Đang xử lý ${ids.length} bản ghi theo ${batches} đợt, mỗi đợt tối đa ${batchSize} bản ghi.`});
+  message($('candidate-form-message'),'Đang xóa dữ liệu. Vui lòng chờ thông báo hoàn tất.','info');
+
+  try{
+    for(let offset=0;offset<ids.length;offset+=batchSize){
+      const batch=ids.slice(offset,offset+batchSize);
+      const batchNo=Math.floor(offset/batchSize)+1;
+      setCandidateDeleteProgress({
+        title:`Đang xử lý đợt ${batchNo}/${batches}`,
+        count:deleted.size+failed.length,total:ids.length,
+        detail:`Đã gửi yêu cầu cho ${offset} bản ghi trước đợt này; đang xử lý ${batch.length} bản ghi.`
+      });
+      // Batch delete reduces HTTP requests substantially versus one request per student.
+      const {data,error}=await state.client.from('exam_candidates')
+        .delete().eq('exam_id',examId).in('id',batch).select('id');
+      if(!error){
+        for(const row of (data||[]))deleted.add(row.id);
+        // If RLS filtered rows without an explicit error, they won't appear in returned data.
+        const returned=new Set((data||[]).map(row=>row.id));
+        for(const id of batch){
+          if(returned.has(id))continue;
+          // Check whether the row still exists; this differentiates a no-op from a deleted row.
+          const check=await state.client.from('exam_candidates').select('id').eq('id',id).eq('exam_id',examId).maybeSingle();
+          if(check.error)failed.push({id,error:check.error.message});
+          else if(check.data)failed.push({id,error:'Bản ghi vẫn tồn tại sau lệnh xóa (có thể do RLS hoặc ràng buộc dữ liệu).'});
+          else deleted.add(id);
+        }
+      }else{
+        // A batch can fail because one row is referenced by a rooming plan. Retry individually
+        // so independent records can still be deleted and the failed IDs can be reported.
+        for(let i=0;i<batch.length;i++){
+          const id=batch[i];
+          const {data:one,error:oneError}=await state.client.from('exam_candidates')
+            .delete().eq('id',id).eq('exam_id',examId).select('id');
+          if(oneError)failed.push({id,error:oneError.message});
+          else if(one&&one.length)deleted.add(id);
+          else{
+            const check=await state.client.from('exam_candidates').select('id').eq('id',id).eq('exam_id',examId).maybeSingle();
+            if(check.error)failed.push({id,error:check.error.message});
+            else if(check.data)failed.push({id,error:'Bản ghi vẫn tồn tại sau lệnh xóa.'});
+            else deleted.add(id);
+          }
+          if((i+1)%10===0||i===batch.length-1){
+            setCandidateDeleteProgress({
+              title:`Đang xử lý đợt ${batchNo}/${batches}`,
+              count:deleted.size+failed.length,total:ids.length,
+              detail:`Đợt này gặp ràng buộc; đang thử từng bản ghi để xóa được các bản ghi độc lập. Đã xử lý ${deleted.size+failed.length}/${ids.length}.`
+            });
+          }
+        }
+      }
+      setCandidateDeleteProgress({
+        title:`Đã xử lý ${Math.min(offset+batch.length,ids.length)}/${ids.length} bản ghi`,
+        count:deleted.size+failed.length,total:ids.length,
+        detail:`Xóa thành công ${deleted.size}; chưa xóa được ${failed.length}.`
+      });
+    }
+  }catch(e){
+    failed.push({id:null,error:e?.message||String(e)});
+  }finally{
+    state.selectedCandidateIds=ids.filter(id=>!deleted.has(id));
+    await loadCandidates();
+    button.disabled=!(state.selectedCandidateIds||[]).length;
+    $('candidate-add-open').disabled=false;
   }
-  state.selectedCandidateIds=ids.filter(id=>!deleted.includes(id));
-  await loadCandidates();
-  const msg=`Đã xóa ${deleted.length}/${ids.length} thí sinh.`+(failed.length?` Không xóa được ${failed.length} bản ghi; có thể đang được tham chiếu bởi phương án xếp phòng. Chi tiết: ${failed.slice(0,3).map(x=>x.error).join(' | ')}`:'');
-  message($('candidate-form-message'),msg,failed.length?'error':'success');
+
+  const count=deleted.size+failed.length;
+  if(failed.length===0){
+    setCandidateDeleteProgress({title:'Đã xóa xong!',count:ids.length,total:ids.length,detail:`Xóa thành công ${deleted.size} thí sinh. Danh sách đã được tải lại.`,kind:'done'});
+    message($('candidate-form-message'),`Hoàn tất: đã xóa thành công ${deleted.size}/${ids.length} thí sinh.`, 'success');
+  }else{
+    const examples=failed.slice(0,5).map(x=>`${x.id?`ID ${x.id}: `:''}${x.error}`).join(' | ');
+    setCandidateDeleteProgress({title:'Đã kết thúc nhưng còn bản ghi chưa xóa',count:count,total:ids.length,detail:`Xóa thành công ${deleted.size}; thất bại ${failed.length}. Chi tiết đầu tiên: ${examples}`,kind:'failed'});
+    message($('candidate-form-message'),`Đã xóa ${deleted.size}/${ids.length} thí sinh. Còn ${failed.length} bản ghi chưa xóa. Có thể bị ràng buộc bởi phương án xếp phòng hoặc chính sách RLS. Xem chi tiết tại thanh tiến độ.`, 'error');
+  }
 }
 async function previewRooming(){const examId=$('rooming-exam-select').value;if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi.','error');return}const{data:candidates,error}=await state.client.from('exam_candidates').select('id,sbd,student_code,student_name,class_code').eq('exam_id',examId).order('sbd');if(error){message($('rooming-message'),error.message,'error');return}const{data:regs,error:regError}=await state.client.from('exam_candidate_subjects').select('candidate_id,subject_code,subject_order').eq('exam_id',examId).eq('subject_type','elective').order('subject_order');if(regError){message($('rooming-message'),`Không tải được đăng ký môn. Hãy chạy migration v0.1.2. ${regError.message}`,'error');return}const byCandidate=new Map();for(const r of regs||[]){if(!byCandidate.has(r.candidate_id))byCandidate.set(r.candidate_id,[]);byCandidate.get(r.candidate_id).push(r)}const eligible=(candidates||[]).map(c=>({...c,sbd:c.sbd||c.student_code,elective_subjects:(byCandidate.get(c.id)||[]).sort((a,b)=>a.subject_order-b.subject_order).map(r=>r.subject_code)}));const result=optimizeElectiveRooms(eligible,{capacity:$('room-capacity').value,roomPrefix:$('room-prefix').value,firstRoomNumber:$('first-room-number').value});if(!result.ok){state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;message($('rooming-message'),result.errors.join('\n'),'error');return}state.preview={examId,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value,firstRoomNumber:Number($('first-room-number').value)},result};renderRooming(result);message($('rooming-message'),'Phương án xem trước hợp lệ. SBD chưa được cấp sẽ tạm dùng mã học sinh để nhận diện; cần cấp SBD chính thức trước khi khóa danh sách.','success');$('save-rooming').disabled=false;$('lock-rooming').disabled=true;$('export-rooming').disabled=false}
 function renderRooming(result){$('rooming-summary').innerHTML=[['Thí sinh',result.summary.candidate_count],['Số phòng',result.summary.room_count],['Sức chứa',result.summary.capacity],['Cặp môn',result.summary.pair_count]].map(([l,v])=>`<div class="metric"><span>${l}</span><strong>${v}</strong></div>`).join('');$('rooming-table-body').innerHTML=result.rooms.map(r=>`<tr><td><b>${esc(r.room_code)}</b></td><td>${r.student_count}/${r.capacity}</td><td>${esc(r.ca1_subject_name)}</td><td>${esc(r.ca2_subject_name)}</td><td>${esc(r.sbd_first)} – ${esc(r.sbd_last)}</td></tr>`).join('');$('assignment-table-body').innerHTML=result.assignments.map(a=>`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td></tr>`).join('')}
