@@ -475,10 +475,15 @@ async function applySubject(){
       targets=targets.map(st=>({candidate_id:st.id,subject_code:code,subject_order:order,subject_type:type}));
     }
     if(!targets.length)throw new Error('Không tìm thấy học sinh phù hợp với phạm vi áp dụng.');
-    const payload=targets.map(t=>({...t,exam_id:examId}));
+    const payloadMap=new Map();
+    for(const t of targets){
+      const normalizedCode=String(t.subject_code||'').trim().toUpperCase();
+      payloadMap.set(`${t.candidate_id}|${normalizedCode}`,{...t,subject_code:normalizedCode,exam_id:examId});
+    }
+    const payload=[...payloadMap.values()];
     const {error}=await state.client.from('exam_candidate_subjects').upsert(payload,{onConflict:'exam_id,candidate_id,subject_code'});
     if(error)throw error;
-    message($('subject-message'),`Đã áp dụng ${code} (${type==='required'?'môn bắt buộc':'môn lựa chọn'}) cho ${payload.length} lượt đăng ký.`, 'success');
+    message($('subject-message'),`Đã gửi áp dụng ${code} (${type==='required'?'môn bắt buộc':'môn lựa chọn'}) cho ${payload.length} học sinh duy nhất. Hãy đối chiếu số liệu trong bảng thống kê bên dưới.`, 'success');
     await loadSubjectRegistrations();
   }catch(e){message($('subject-message'),e.message,'error')}
 }
@@ -505,8 +510,10 @@ async function loadSubjectRegistrations(){
   const summary=new Map();
   for(const r of regs){
     const code=String(r.subject_code||'').trim().toUpperCase();
-    const type=r.subject_type==='required'?'required':'elective';
-    const order=type==='elective'?(r.subject_order??''):'';
+    // TOAN and VAN are compulsory subjects; legacy rows may contain inconsistent type/order values.
+    const isCompulsory=['TOAN','VAN'].includes(code)||r.subject_type==='required';
+    const type=isCompulsory?'required':'elective';
+    const order=isCompulsory?'':(r.subject_order??'');
     const key=[code,type,String(order)].join('|');
     if(!summary.has(key))summary.set(key,{code,type,order,students:new Set()});
     if(r.candidate_id!==null&&r.candidate_id!==undefined)summary.get(key).students.add(String(r.candidate_id));
