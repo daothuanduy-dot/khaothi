@@ -32,6 +32,16 @@
 #candidate-delete-progress-detail{margin:0;color:#475569;font-size:.9rem}
 .candidate-delete-progress.done{background:#f0fdf4;border-color:#bbf7d0}.candidate-delete-progress.done .delete-progress-heading{color:#166534}.candidate-delete-progress.done .delete-progress-bar{background:#16a34a}
 .candidate-delete-progress.failed{background:#fff7ed;border-color:#fed7aa}.candidate-delete-progress.failed .delete-progress-heading{color:#9a3412}.candidate-delete-progress.failed .delete-progress-bar{background:#ea580c}
+</style><style>
+.picker-panel{border:1px solid #d7e0ee;border-radius:12px;padding:12px;min-width:0}
+.picker-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.picker-heading>div{display:flex;gap:6px}
+.btn-small{padding:6px 10px;font-size:13px}
+.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;max-height:260px;overflow:auto}
+.picker-option{display:flex;align-items:flex-start;gap:8px;border:1px solid #e2e8f0;border-radius:8px;padding:9px 10px;font-weight:500;min-width:0}
+.picker-option input{margin-top:3px;flex:0 0 auto}
+.picker-option span{overflow-wrap:anywhere}
+.picker-empty{color:#64748b;padding:10px}
 </style></head>
 <body>
   <header class="topbar">
@@ -116,21 +126,24 @@
       </section>
 
       <section class="tab-panel hidden" id="tab-subjects">
-        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình môn thi theo từng kỳ thi, độc lập với hồ sơ học sinh và SBD.</p></div><button id="download-subject-template" class="btn btn-light">Tải CSV môn thi mẫu</button></div>
+        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình môn thi theo từng kỳ thi, độc lập với hồ sơ học sinh và SBD.</p></div><button id="download-subject-template" class="btn btn-light">Tải Excel môn thi mẫu</button></div>
         <div class="form-grid">
           <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
           <label>Loại môn<select id="subject-mode"><option value="elective">Môn lựa chọn</option><option value="required">Môn bắt buộc</option></select></label>
-          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Theo lớp</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option><option value="file">Nạp từ CSV/Excel</option></select></label>
-          <label>Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
+          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option><option value="file">Nạp từ Excel</option></select></label>
+          <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
+          <div id="subject-class-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách lớp</strong><div><button id="subject-classes-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-classes-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-class-picker" class="checkbox-grid"></div></div>
+          <label id="subject-student-class-wrap" class="hidden">Chọn lớp<select id="subject-student-class"><option value="">-- Chọn lớp --</option></select></label>
+          <div id="subject-student-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách học sinh trong lớp</strong><div><button id="subject-students-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-students-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-student-picker" class="checkbox-grid"></div></div>
           <label id="subject-student-code-wrap">Mã học sinh<input id="subject-student-code" placeholder="Ví dụ: HS0001"></label>
           <label id="subject-grade-wrap">Khối áp dụng<select id="subject-grade"><option value="">-- Chọn khối --</option><option value="10">Khối 10</option><option value="11">Khối 11</option><option value="12">Khối 12</option></select></label>
-          <label id="subject-student-list-wrap">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3" placeholder="Nhập mã học sinh, mỗi dòng một mã"></textarea></label>
+          <label id="subject-student-list-wrap" class="hidden">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3"></textarea></label>
           <label>Môn thi<select id="subject-code"></select></label>
           <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
           <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">Với dữ liệu tiếng Việt, ưu tiên lưu Excel .xlsx hoặc CSV UTF-8. Nếu CSV mở bằng Excel bị lỗi font, hãy nhập qua Excel .xlsx hoặc xuất CSV UTF-8. File đăng ký môn dùng các cột student_code hoặc class_code, subject_code, subject_order. Với môn lựa chọn, subject_order=1 là ca 1, subject_order=2 là ca 2.</div>
+        <div class="notice notice-info">Có thể chọn nhiều lớp hoặc nhiều học sinh bằng checkbox. Khi chọn học sinh, hãy chọn lớp trước để danh sách được lọc đúng lớp. Ưu tiên dùng file Excel .xlsx để nhập hàng loạt.</div>
         <div id="subject-message" class="notice hidden"></div>
         <div class="table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ tên</th><th>Lớp</th><th>Mã môn</th><th>Tên môn</th><th>Loại</th><th>Thứ tự</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi và tải danh sách môn.</td></tr></tbody></table></div>
       </section>
