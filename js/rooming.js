@@ -1,12 +1,13 @@
 export const SUBJECTS = [
-  {code:'SU',name:'Lịch sử'}, {code:'DIA',name:'Địa lí'}, {code:'GDKTPL',name:'Giáo dục kinh tế và pháp luật'},
-  {code:'LY',name:'Vật lí'}, {code:'HOA',name:'Hóa học'}, {code:'SINH',name:'Sinh học'}, {code:'TIN',name:'Tin học'}
+   {code:'SU',name:'Lịch sử'}, {code:'DIA',name:'Địa lí'}, {code:'GDKTPL',name:'Giáo dục kinh tế và pháp luật'},
+  {code:'LY',name:'Vật lí'}, {code:'HOA',name:'Hóa học'}, {code:'SINH',name:'Sinh học'}, {code:'TIN',name:'Tin học'}, {code:'ANH',name:'Tiếng Anh'}
 ];
 const subjectMap = new Map(SUBJECTS.map(s=>[s.code,s.name]));
 const norm = v => String(v??'').trim().toLocaleUpperCase('vi-VN');
 const textCmp = (a,b) => String(a??'').localeCompare(String(b??''),'vi',{sensitivity:'base',numeric:true});
 // Preserve registration order: elective_1 is ca 1 and elective_2 is ca 2.
-const pairKey = pair => pair.join('|');
+const canonicalPair = pair => [...pair].sort((a,b)=>textCmp(subjectMap.get(a)||a,subjectMap.get(b)||b)||textCmp(a,b));
+const pairKey = pair => canonicalPair(pair).join('|');
 
 export function optimizeElectiveRooms(candidates,{capacity=24,roomPrefix='P',firstRoomNumber=1}={}){
   capacity=Number(capacity); firstRoomNumber=Number(firstRoomNumber); roomPrefix=String(roomPrefix||'P').trim();
@@ -31,7 +32,7 @@ export function optimizeElectiveRooms(candidates,{capacity=24,roomPrefix='P',fir
   const ordered=[...groups.values()].map(g=>g.sort((a,b)=>textCmp(a.sbd,b.sbd)||textCmp(a.student_name,b.student_name))).sort(pairOrder);
   const rooms=[],assignments=[];let roomNo=firstRoomNumber;
   for(const group of ordered){
-    const pair=[...group[0].elective_subjects];
+    const pair=canonicalPair(group[0].elective_subjects);
     for(let i=0;i<group.length;i+=capacity){
       const batch=group.slice(i,i+capacity), room_code=`${roomPrefix}${String(roomNo).padStart(2,'0')}`;
       const room={room_number:roomNo,room_code,capacity,student_count:batch.length,ca1_subject_code:pair[0],ca1_subject_name:subjectMap.get(pair[0]),ca2_subject_code:pair[1],ca2_subject_name:subjectMap.get(pair[1]),sbd_first:batch[0].sbd,sbd_last:batch[batch.length-1].sbd};

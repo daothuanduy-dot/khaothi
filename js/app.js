@@ -345,8 +345,53 @@ async function saveRooming(lock=false){if(!state.preview){message($('rooming-mes
 function exportRooming(){if(!state.preview)return;const rows=[['SBD','Họ tên','Lớp','Phòng','Ca 1','Ca 2'],...state.preview.result.assignments.map(a=>[a.sbd,a.student_name,a.class_code,a.room_code,subjectName(a.ca1_subject_code),subjectName(a.ca2_subject_code)])];const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download(csv,`phan-phong-${state.preview.examId}.csv`,'text/csv;charset=utf-8')}
 function download(text,name,type){const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 function downloadTemplate(){downloadExcelTemplate()}
-function downloadSubjectTemplate(){download('student_code,class_code,subject_code,subject_order,subject_type\r\nHS0001,,HOA,1,elective\r\nHS0001,,LY,2,elective\r\n,12A1,TOAN,,required\r\n','mau-dang-ky-mon-thi.csv','text/csv;charset=utf-8')}
+function downloadSubjectTemplate(){
+  if(!window.XLSX){message($('subject-message'),'Không tải được thư viện Excel. Hãy kiểm tra kết nối Internet.','error');return}
+  const rows=[
+    ['Mã DD Bộ GD&ĐT','Họ tên','Môn 1','Môn 2'],
+    ['3156124098','Lưu Minh An','Tiếng Anh','Vật lí'],
+    ['3151505467','Bùi Ngọc Anh','Vật lí','Tiếng Anh'],
+    ['3168060544','Đào Phương Anh','Lịch sử','Địa lí']
+  ];
+  const ws=window.XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:22},{wch:28},{wch:22},{wch:22}];
+  const wb=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(wb,ws,'Chon mon');
+  window.XLSX.writeFile(wb,'mau-chon-mon-lua-chon.xlsx');
+}
 function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('')}
+function normalizeSubjectChoiceRows(rows){
+  const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
+  const aliases={
+    student_code:['student_code','ma dd bo gd&dt','ma dd bo gd dt','ma dinh danh','ma hoc sinh','ma dd','ma hoc sinh bo gd&dt'],
+    student_name:['ho ten','ho va ten','student_name'],
+    subject1:['mon 1','mon1','mon thu nhat','mon lua chon 1'],
+    subject2:['mon 2','mon2','mon thu hai','mon lua chon 2']
+  };
+  const find=(row,names)=>{for(const [k,v] of Object.entries(row)){const key=cleanKey(k);if(names.some(n=>cleanKey(n)===key))return String(v??'').trim()}return ''};
+  const codeByName=new Map();
+  for(const item of [{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS]){
+    codeByName.set(cleanKey(item.code),item.code);
+    codeByName.set(cleanKey(item.name),item.code);
+  }
+  for(const [alias,code] of Object.entries({'anh':'ANH','tieng anh':'ANH','english':'ANH','ly':'LY','vat li':'LY','vat ly':'LY','hoa':'HOA','hoa hoc':'HOA','su':'SU','lich su':'SU','dia':'DIA','dia li':'DIA','dia ly':'DIA','sinh':'SINH','sinh hoc':'SINH','tin':'TIN','tin hoc':'TIN','gdktpl':'GDKTPL','giao duc kinh te va phap luat':'GDKTPL'}))codeByName.set(cleanKey(alias),code);
+  const result=[];
+  for(const [i,row] of rows.entries()){
+    const studentCode=find(row,aliases.student_code)||String(row.student_code??'').trim();
+    const studentName=find(row,aliases.student_name)||String(row.student_name??'').trim();
+    const s1=find(row,aliases.subject1)||String(row.subject1??'').trim();
+    const s2=find(row,aliases.subject2)||String(row.subject2??'').trim();
+    if(s1||s2){
+      if(!studentCode)throw new Error(`Dòng ${i+2}: thiếu Mã DD Bộ GD&ĐT.`);
+      if(!s1||!s2)throw new Error(`Dòng ${i+2}: cần nhập đủ Môn 1 và Môn 2.`);
+      const c1=codeByName.get(cleanKey(s1))||String(s1).trim().toUpperCase();
+      const c2=codeByName.get(cleanKey(s2))||String(s2).trim().toUpperCase();
+      if(c1===c2)throw new Error(`Dòng ${i+2}: Môn 1 và Môn 2 không được trùng nhau.`);
+      result.push({student_code:studentCode,student_name:studentName,subject_code:c1,subject_order:1,subject_type:'elective'});
+      result.push({student_code:studentCode,student_name:studentName,subject_code:c2,subject_order:2,subject_type:'elective'});
+    }else result.push(row);
+  }
+  return result;
+}
 async function applySubject(){
   const examId=$('subject-exam-select').value;
   if(!examId){message($('subject-message'),'Hãy chọn kỳ thi.','error');return}
