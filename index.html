@@ -42,11 +42,12 @@
 .picker-option input{margin-top:3px;flex:0 0 auto}
 .picker-option span{overflow-wrap:anywhere}
 .picker-empty{color:#64748b;padding:10px}
+ .version-pill{font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8;border:1px solid #bfdbfe}
 </style></head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.19</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -145,7 +146,7 @@
         </div>
         <div class="notice notice-info">Có thể chọn nhiều lớp hoặc nhiều học sinh bằng checkbox. Khi chọn học sinh, hãy chọn lớp trước để danh sách được lọc đúng lớp. Ưu tiên dùng file Excel .xlsx để nhập hàng loạt.</div>
         <div id="subject-message" class="notice hidden"></div>
-        <div class="table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ tên</th><th>Lớp</th><th>Mã môn</th><th>Tên môn</th><th>Loại</th><th>Thứ tự</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi và tải danh sách môn.</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
       </section>
 
       <section class="tab-panel hidden" id="tab-rooming">
@@ -170,8 +171,8 @@
         <div class="notice">Mã môn: SU – Lịch sử; DIA – Địa lí; GDKTPL – Giáo dục kinh tế và pháp luật; LY – Vật lí; HOA – Hóa học; SINH – Sinh học; TIN – Tin học. SBD 6 hoặc 8 chữ số và quy tắc tiền tố khối sẽ được cấu hình trong phần quản lý SBD của phiên bản tiếp theo.</div>
       </section>
     </section>
-    <footer><span>Khảo thí trực tuyến · Phiên bản v0.1.2</span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.19 · build 2026-10-13</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/app.js?v=0.1.19"></script>
 </body>
 </html>
