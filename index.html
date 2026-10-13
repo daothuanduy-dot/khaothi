@@ -142,10 +142,10 @@
           <label id="subject-student-list-wrap" class="hidden">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3"></textarea></label>
           <label>Môn thi<select id="subject-code"></select></label>
           <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
-          <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+          <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
+        <div class="notice notice-info">Muốn nhập file Excel, bạn có thể chọn tệp tại đây; hệ thống sẽ tự chuyển Phạm vi áp dụng sang “Nạp từ Excel”. Hỗ trợ .xlsx và .csv UTF-8. Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
         <div id="subject-message" class="notice hidden"></div>
         <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th><th>Thao tác</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
       </section>
@@ -191,6 +191,6 @@
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
 </style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.21 · build 2026-10-13</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.23"></script>
+  <script type="module" src="./js/app.js?v=0.1.24"></script>
 </body>
 </html>
