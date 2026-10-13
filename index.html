@@ -47,7 +47,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.20</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.21</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -130,7 +130,8 @@
         <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình môn thi theo từng kỳ thi, độc lập với hồ sơ học sinh và SBD.</p></div><button id="download-subject-template" class="btn btn-light">Tải Excel môn thi mẫu</button></div>
         <div class="form-grid">
           <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-          <label>Loại môn<select id="subject-mode"><option value="elective">Môn lựa chọn</option><option value="required">Môn bắt buộc</option></select></label>
+          <label>Hình thức kỳ thi<select id="subject-config-kind"><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn theo lớp/học sinh</option></select></label>
+          <label>Loại môn<select id="subject-mode"><option value="required">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option></select></label>
           <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option><option value="file">Nạp từ Excel</option></select></label>
           <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
           <div id="subject-class-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách lớp</strong><div><button id="subject-classes-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-classes-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-class-picker" class="checkbox-grid"></div></div>
@@ -144,9 +145,9 @@
           <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">Có thể chọn nhiều lớp hoặc nhiều học sinh bằng checkbox. Khi chọn học sinh, hãy chọn lớp trước để danh sách được lọc đúng lớp. Ưu tiên dùng file Excel .xlsx để nhập hàng loạt.</div>
+        <div class="notice notice-info">Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
         <div id="subject-message" class="notice hidden"></div>
-        <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th><th>Thao tác</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
       </section>
 
       <section class="tab-panel hidden" id="tab-rooming">
@@ -171,8 +172,25 @@
         <div class="notice">Mã môn: SU – Lịch sử; DIA – Địa lí; GDKTPL – Giáo dục kinh tế và pháp luật; LY – Vật lí; HOA – Hóa học; SINH – Sinh học; TIN – Tin học. SBD 6 hoặc 8 chữ số và quy tắc tiền tố khối sẽ được cấu hình trong phần quản lý SBD của phiên bản tiếp theo.</div>
       </section>
     </section>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.20 · build 2026-10-13</span></span><span>GitHub Pages + Supabase</span></footer>
+<dialog id="subject-manage-dialog" class="modal-dialog">
+  <div class="modal-header"><div><h3 id="subject-manage-title">Quản lý học sinh theo môn</h3><p id="subject-manage-subtitle">Thêm, chuyển môn hoặc xóa đăng ký.</p></div><button id="subject-manage-close" class="btn btn-light" type="button">Đóng</button></div>
+  <div class="form-grid">
+    <label>Thao tác<select id="subject-manage-action"><option value="remove">Xóa đăng ký môn đã chọn</option><option value="move">Chuyển học sinh sang môn khác</option></select></label>
+    <label id="subject-manage-target-wrap" class="hidden">Môn đích<select id="subject-manage-target"></select></label>
+  </div>
+  <div class="picker-panel"><div class="picker-heading"><strong>Học sinh đã đăng ký môn này</strong><div><button id="subject-manage-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-manage-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-manage-current" class="checkbox-grid"></div></div>
+  <div class="picker-panel" style="margin-top:12px"><div class="picker-heading"><strong>Thêm học sinh chưa đăng ký môn này</strong><div><button id="subject-manage-add-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-manage-add-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-manage-available" class="checkbox-grid"></div></div>
+  <div id="subject-manage-message" class="notice hidden"></div>
+  <div class="modal-actions"><button id="subject-manage-save" class="btn btn-primary" type="button">Lưu thay đổi</button></div>
+</dialog>
+<style>
+#subject-manage-dialog{width:min(1000px,94vw);max-height:90vh;overflow:auto;border:1px solid #d7e0ee;border-radius:16px;padding:20px}
+#subject-manage-dialog::backdrop{background:rgba(15,23,42,.45)}
+#subject-manage-dialog .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+#subject-manage-dialog .modal-header h3{margin:0 0 6px}
+#subject-manage-dialog .modal-header p{margin:0;color:#64748b}
+</style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.21 · build 2026-10-13</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.20"></script>
+  <script type="module" src="./js/app.js?v=0.1.21"></script>
 </body>
 </html>
