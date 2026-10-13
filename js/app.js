@@ -500,10 +500,20 @@ async function loadSubjectRegistrations(){
     if(thead)thead.innerHTML='<tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th></tr>';
   }
   if(!examId){message($('subject-message'),'Hãy chọn kỳ thi.','error');body.innerHTML='';return}
-  const {data:regs,error}=await state.client.from('exam_candidate_subjects')
-    .select('candidate_id,subject_code,subject_type,subject_order')
-    .eq('exam_id',examId).order('subject_code');
-  if(error){message($('subject-message'),`Không tải được thống kê môn: ${error.message}`,'error');return}
+  // Supabase/PostgREST can cap each response at 1,000 rows. Fetch all pages
+  // so 533 TOAN + 533 VAN registrations are not truncated to 1,000 total.
+  let regs=[];
+  const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data:page,error}=await state.client.from('exam_candidate_subjects')
+      .select('candidate_id,subject_code,subject_type,subject_order')
+      .eq('exam_id',examId).order('subject_code').order('candidate_id')
+      .range(offset,offset+pageSize-1);
+    if(error){message($('subject-message'),`Không tải được thống kê môn: ${error.message}`,'error');return}
+    const batch=page||[];
+    regs.push(...batch);
+    if(batch.length<pageSize)break;
+  }
   body.innerHTML='';
   if(!regs||!regs.length){
     body.innerHTML='<tr><td colspan="5" class="empty">Chưa có đăng ký môn cho kỳ thi này.</td></tr>';
