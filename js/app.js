@@ -1,5 +1,5 @@
 import {optimizeElectiveRooms,SUBJECTS} from './rooming.js';
-const APP_VERSION='v0.1.27';
+const APP_VERSION='v0.1.30';
 const APP_BUILD='2026-10-14';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null};
@@ -408,35 +408,55 @@ function canonicalSubjectCode(value){
 }
 function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('')}
 function normalizeSubjectChoiceRows(rows){
-  const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
+  const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
   const aliases={
-    student_code:['student_code','ma dd bo gd&dt','ma dd bo gd dt','ma dinh danh','ma hoc sinh','ma dd','ma hoc sinh bo gd&dt'],
-    student_name:['ho ten','ho va ten','student_name'],
-    subject1:['mon 1','mon1','mon thu nhat','mon lua chon 1'],
-    subject2:['mon 2','mon2','mon thu hai','mon lua chon 2']
+    student_code:['studentcode','studentid','madinhdanh','maddbogddt','madd','mahs','mahocsinh','maddbogddt'],
+    student_name:['studentname','hoten','hovaten','fullname'],
+    subject1:['mon1','monthi1','monluachon1','subject1'],
+    subject2:['mon2','monthi2','monluachon2','subject2'],
+    subject_code:['subjectcode','mamon','monthi'],
+    subject_order:['subjectorder','thutu','cathi'],
+    subject_type:['subjecttype','loaimon'],
+    class_code:['classcode','lop','malop']
   };
-  const find=(row,names)=>{for(const [k,v] of Object.entries(row)){const key=cleanKey(k);if(names.some(n=>cleanKey(n)===key))return String(v??'').trim()}return ''};
-  const codeByName=new Map();
-  for(const item of [{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS]){
-    codeByName.set(cleanKey(item.code),item.code);
-    codeByName.set(cleanKey(item.name),item.code);
-  }
-  for(const [alias,code] of Object.entries({'anh':'ANH','tieng anh':'ANH','english':'ANH','ly':'LY','vat li':'LY','vat ly':'LY','hoa':'HOA','hoa hoc':'HOA','su':'SU','lich su':'SU','dia':'DIA','dia li':'DIA','dia ly':'DIA','sinh':'SINH','sinh hoc':'SINH','tin':'TIN','tin hoc':'TIN','gdktpl':'GDKTPL','giao duc kinh te va phap luat':'GDKTPL'}))codeByName.set(cleanKey(alias),code);
+  const get=(row,names)=>{
+    for(const [k,v] of Object.entries(row||{})) if(names.includes(cleanKey(k)) && String(v??'').trim()) return String(v).trim();
+    return '';
+  };
   const result=[];
   for(const [i,row] of rows.entries()){
-    const studentCode=find(row,aliases.student_code)||String(row.student_code??'').trim();
-    const studentName=find(row,aliases.student_name)||String(row.student_name??'').trim();
-    const s1=find(row,aliases.subject1)||String(row.subject1??'').trim();
-    const s2=find(row,aliases.subject2)||String(row.subject2??'').trim();
+    const studentCode=get(row,aliases.student_code)||String(row.student_code??'').trim();
+    const studentName=get(row,aliases.student_name)||String(row.student_name??'').trim();
+    const s1=get(row,aliases.subject1)||String(row.subject1??'').trim();
+    const s2=get(row,aliases.subject2)||String(row.subject2??'').trim();
     if(s1||s2){
-      if(!studentCode)throw new Error(`Dòng ${i+2}: thiếu Mã DD Bộ GD&ĐT.`);
-      if(!s1||!s2)throw new Error(`Dòng ${i+2}: cần nhập đủ Môn 1 và Môn 2.`);
-      const c1=codeByName.get(cleanKey(s1))||String(s1).trim().toUpperCase();
-      const c2=codeByName.get(cleanKey(s2))||String(s2).trim().toUpperCase();
-      if(c1===c2)throw new Error(`Dòng ${i+2}: Môn 1 và Môn 2 không được trùng nhau.`);
+      if(!studentCode) throw new Error(`Dòng ${i+2}: thiếu Mã DD Bộ GD&ĐT.`);
+      if(!s1||!s2) throw new Error(`Dòng ${i+2}: cần nhập đủ Môn 1 và Môn 2.`);
+      const c1=canonicalSubjectCode(s1), c2=canonicalSubjectCode(s2);
+      if(!c1) throw new Error(`Dòng ${i+2}: không nhận diện được môn 1 "${s1}".`);
+      if(!c2) throw new Error(`Dòng ${i+2}: không nhận diện được môn 2 "${s2}".`);
+      if(c1===c2) throw new Error(`Dòng ${i+2}: Môn 1 và Môn 2 không được trùng nhau.`);
       result.push({student_code:studentCode,student_name:studentName,subject_code:c1,subject_order:1,subject_type:'elective'});
       result.push({student_code:studentCode,student_name:studentName,subject_code:c2,subject_order:2,subject_type:'elective'});
-    }else result.push(row);
+      continue;
+    }
+    // Generic row format: one registration per row.
+    const subjectCode=get(row,aliases.subject_code)||String(row.subject_code??'').trim();
+    if(subjectCode){
+      const normalized=canonicalSubjectCode(subjectCode);
+      if(!normalized) throw new Error(`Dòng ${i+2}: mã/tên môn "${subjectCode}" không thuộc danh mục được phép.`);
+      result.push({
+        student_code:studentCode,
+        student_name:studentName,
+        class_code:get(row,aliases.class_code)||String(row.class_code??'').trim(),
+        subject_code:normalized,
+        subject_order:get(row,aliases.subject_order)||String(row.subject_order??'').trim(),
+        subject_type:get(row,aliases.subject_type)||String(row.subject_type??'').trim()
+      });
+      continue;
+    }
+    throw new Error(`Dòng ${i+2}: không nhận diện được cột Môn 1/Môn 2 hoặc subject_code. Hãy dùng đúng file Excel mẫu.`);
   }
   return result;
 }
@@ -469,10 +489,20 @@ async function applySubject(){
   if(!examId){message($('subject-message'),'Hãy chọn kỳ thi.','error');return}
   const scope=$('subject-scope').value;
   const type=$('subject-mode').value;
-  const code=$('subject-code').value;
-  const order=type==='elective'?Number($('subject-order').value):null;
+  const selectedCode=$('subject-code').value;
+  const selectedOrder=type==='elective'?Number($('subject-order').value):null;
   try{
     let targets=[];
+    let sourceStudentCount=0;
+    const {data:studentsData,error:studentsError}=await state.client.from('exam_candidates')
+      .select('id,student_code,student_name,grade_code,class_code').eq('exam_id',examId);
+    if(studentsError) throw new Error(`Không tải được hồ sơ thí sinh của kỳ thi: ${studentsError.message}`);
+    const students=studentsData||[];
+    const byCode=new Map();
+    for(const st of students){
+      const k=normalizeStudentCode(st.student_code);
+      if(k){if(byCode.has(k))throw new Error(`CSDL có mã học sinh trùng "${k}" trong kỳ thi. Cần xử lý trùng trước khi nhập.`);byCode.set(k,st)}
+    }
     if(scope==='file'){
       const f=$('subject-csv').files[0];
       if(!f)throw new Error('Hãy chọn file Excel .xlsx hoặc CSV .csv đăng ký môn.');
@@ -481,113 +511,136 @@ async function applySubject(){
       if(!rawRows.length)throw new Error('File không có dữ liệu.');
       const rows=normalizeSubjectChoiceRows(rawRows);
       if(!rows.length)throw new Error('Không tìm thấy dòng đăng ký hợp lệ trong file.');
-      const normHeader=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/[^a-z0-9]/g,'');
-      const get=(row,aliases)=>{for(const [k,v] of Object.entries(row)){if(aliases.includes(normHeader(k))&&String(v??'').trim())return String(v).trim()}return ''};
-      const codeByName=value=>{
-        const code=canonicalSubjectCode(value);
-        if(!code)throw new Error(`Tên/mã môn "${String(value||'').trim()}" không khớp danh mục môn thi trong hệ thống. Hãy dùng đúng tên môn hoặc mã môn chuẩn.`);
-        return code;
-      };
-      const {data:students,error}=await state.client.from('exam_candidates').select('id,student_code,student_name,grade_code,class_code').eq('exam_id',examId);
-      if(error)throw error;
-      const byCode=new Map((students||[]).map(st=>[normalizeStudentCode(st.student_code),st]));
+      const seenPairs=new Set();
+      const matchedStudentCodes=new Set();
       for(const [i,r] of rows.entries()){
-        const studentCode=normalizeStudentCode(get(r,['studentcode','studentid','madinhdanh','maddbogddt','madd','mahs','student_code']));
-        const classCode=get(r,['classcode','lop','malop','class_code']);
-        const studentName=get(r,['studentname','hoten','hovaten','fullname']);
-        // Official template layout: student code, full name, subject 1, subject 2.
-        const oneSubject=get(r,['subjectcode','mamon','monthi']);
-        const rowTypeRaw=get(r,['subjecttype','loaimon']);
-        const rowType=normHeader(rowTypeRaw)==='batbuoc'||normHeader(rowTypeRaw)==='required'?'required':'elective';
-        const rowOrderRaw=get(r,['subjectorder','thutu','cathi']);
+        const studentCode=normalizeStudentCode(r.student_code);
+        const classCode=String(r.class_code||'').trim();
+        const studentName=String(r.student_name||'').trim();
         let student=studentCode?byCode.get(studentCode):null;
-        if(!student&&studentName){
-          const nameKey=studentName.trim().toLocaleLowerCase('vi-VN');
-          const matches=(students||[]).filter(st=>String(st.student_name||'').trim().toLocaleLowerCase('vi-VN')===nameKey);
-          if(matches.length===1)student=matches[0];
-          else if(matches.length>1)throw new Error(`Dòng ${i+2}: mã "${studentCode}" không khớp CSDL và tên "${studentName}" trùng ở ${matches.length} học sinh. Cần đối chiếu lại mã định danh.`);
+        if(!student && studentName){
+          const nameMatches=students.filter(st=>String(st.student_name||'').trim().toLocaleLowerCase('vi-VN')===studentName.toLocaleLowerCase('vi-VN'));
+          if(nameMatches.length===1)student=nameMatches[0];
+          else if(nameMatches.length>1)throw new Error(`Dòng ${i+2}: họ tên "${studentName}" trùng ở nhiều hồ sơ; cần đối chiếu mã định danh.`);
         }
-        if(!student)throw new Error(`Dòng ${i+2}: không tìm thấy học sinh theo mã "${studentCode||'(trống)'}"${studentName?` hoặc họ tên "${studentName}"`:''}. Kiểm tra mã định danh trong Excel có khớp exam_candidates.student_code hay không.`);
-        const rowSubject=codeByName(oneSubject||code);
-        const rowOrder=rowType==='elective'?Number(rowOrderRaw||order):null;
-        if(!studentCode&&!classCode)throw new Error(`Dòng ${i+2}: cần mã học sinh hoặc mã lớp. Nếu dùng mẫu có cột Môn 1/Môn 2, hãy điền mã định danh học sinh.`);
-        if(!rowSubject)throw new Error(`Dòng ${i+2}: thiếu mã môn.`);
+        if(!student && !studentCode && classCode){
+          const classMatches=students.filter(st=>String(st.class_code||'').trim().toUpperCase()===classCode.toUpperCase());
+          if(!classMatches.length)throw new Error(`Dòng ${i+2}: không tìm thấy lớp "${classCode}" trong kỳ thi.`);
+          const rowSubject=canonicalSubjectCode(r.subject_code||selectedCode);
+          if(!rowSubject)throw new Error(`Dòng ${i+2}: mã/tên môn không hợp lệ.`);
+          const rowType=String(r.subject_type||type).trim().toLowerCase()==='required'?'required':'elective';
+          const rowOrder=rowType==='elective'?Number(r.subject_order||selectedOrder):null;
+          if(rowType==='elective'&&![1,2].includes(rowOrder))throw new Error(`Dòng ${i+2}: môn lựa chọn cần thứ tự ca 1 hoặc 2.`);
+          for(const st of classMatches){
+            const pair=`${st.id}|${rowSubject}|${rowType}|${rowOrder??''}`;
+            if(!seenPairs.has(pair)){targets.push({candidate_id:st.id,subject_code:rowSubject,subject_order:rowOrder,subject_type:rowType});seenPairs.add(pair)}
+          }
+          continue;
+        }
+        if(!student)throw new Error(`Dòng ${i+2}: không tìm thấy học sinh theo mã "${studentCode||'(trống)'}"${studentName?` hoặc họ tên "${studentName}"`:''}. Mã trong Excel phải khớp exam_candidates.student_code.`);
+        if(studentCode && normalizeStudentCode(student.student_code)!==studentCode)throw new Error(`Dòng ${i+2}: mã định danh không khớp hồ sơ.`);
+        const rowSubject=canonicalSubjectCode(r.subject_code||selectedCode);
+        if(!rowSubject)throw new Error(`Dòng ${i+2}: mã/tên môn "${r.subject_code||selectedCode}" không thuộc danh mục được phép.`);
+        const rawType=String(r.subject_type||type).trim().toLowerCase();
+        const rowType=['required','batbuoc','mandatory'].includes(rawType)?'required':'elective';
+        const rowOrder=rowType==='elective'?Number(r.subject_order||selectedOrder):null;
         if(rowType==='elective'&&![1,2].includes(rowOrder))throw new Error(`Dòng ${i+2}: môn lựa chọn cần thứ tự ca 1 hoặc 2.`);
-        const matched=studentCode?((byCode.has(studentCode))?[byCode.get(studentCode)]:[]):(students||[]).filter(st=>String(st.class_code||'').trim().toUpperCase()===classCode.toUpperCase());
-        if(!matched.length)throw new Error(`Dòng ${i+2}: không tìm thấy học sinh/lớp "${studentCode||classCode}".`);
-        targets.push(...matched.map(st=>({candidate_id:st.id,subject_code:rowSubject,subject_order:rowOrder,subject_type:rowType})));
+        if(rowType==='required'&&rowOrder!==null)throw new Error(`Dòng ${i+2}: môn bắt buộc không được gán thứ tự ca lựa chọn.`);
+        const pair=`${student.id}|${rowSubject}|${rowType}|${rowOrder??''}`;
+        if(seenPairs.has(pair))throw new Error(`Dòng ${i+2}: đăng ký trùng ${rowSubject} cho học sinh ${studentCode||student.student_code}.`);
+        seenPairs.add(pair);
+        matchedStudentCodes.add(String(student.id));
+        targets.push({candidate_id:student.id,subject_code:rowSubject,subject_order:rowOrder,subject_type:rowType});
       }
+      sourceStudentCount=matchedStudentCodes.size || new Set(targets.map(t=>t.candidate_id)).size;
     }else{
-      const {data:students,error}=await state.client.from('exam_candidates').select('id,student_code,grade_code,class_code').eq('exam_id',examId);
-      if(error)throw error;
       if(scope==='grade'){
         const grade=$('subject-grade').value;
         if(!grade)throw new Error('Hãy chọn khối áp dụng.');
-        targets=(students||[]).filter(st=>String(st.grade_code||'')===grade);
+        targets=students.filter(st=>String(st.grade_code||'')===grade);
       }else if(scope==='class'){
         const selectedClasses=[...document.querySelectorAll('.subject-class-check:checked')].map(el=>el.value);
         if(!selectedClasses.length)throw new Error('Hãy chọn ít nhất một lớp bằng checkbox.');
         const classSet=new Set(selectedClasses.map(c=>c.toUpperCase()));
-        targets=(students||[]).filter(st=>classSet.has(String(st.class_code||'').trim().toUpperCase()));
+        targets=students.filter(st=>classSet.has(String(st.class_code||'').trim().toUpperCase()));
       }else if(scope==='class_students'){
         const classCode=$('subject-student-class').value;
         if(!classCode)throw new Error('Hãy chọn lớp trước.');
         const ids=[...document.querySelectorAll('.subject-student-check:checked')].map(el=>String(el.value));
         if(!ids.length)throw new Error('Hãy chọn ít nhất một học sinh bằng checkbox.');
-        const inClass=(students||[]).filter(st=>String(st.class_code||'').trim()===classCode);
-        const byId=new Map(inClass.map(st=>[String(st.id),st]));
+        const byId=new Map(students.filter(st=>String(st.class_code||'').trim()===classCode).map(st=>[String(st.id),st]));
         const missing=ids.filter(id=>!byId.has(id));
         if(missing.length)throw new Error('Một số học sinh được chọn không thuộc lớp đã chọn. Hãy tải lại danh sách.');
         targets=ids.map(id=>byId.get(id));
       }else if(scope==='student'){
-        const studentCode=$('subject-student-code').value.trim();
+        const studentCode=normalizeStudentCode($('subject-student-code').value);
         if(!studentCode)throw new Error('Hãy nhập mã học sinh.');
-        targets=(students||[]).filter(st=>st.student_code===studentCode);
-      }
-      targets=targets.map(st=>({candidate_id:st.id,subject_code:code,subject_order:order,subject_type:type}));
+        const st=byCode.get(studentCode);targets=st?[st]:[];
+      }else throw new Error('Phạm vi áp dụng không hợp lệ.');
+      sourceStudentCount=targets.length;
+      targets=targets.map(st=>({candidate_id:st.id,subject_code:selectedCode,subject_order:selectedOrder,subject_type:type}));
     }
     if(!targets.length)throw new Error('Không tìm thấy học sinh phù hợp với phạm vi áp dụng.');
+    const allowed=new Set(['TOAN','VAN','ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN']);
+    for(const t of targets){
+      t.subject_code=canonicalSubjectCode(t.subject_code)||String(t.subject_code||'').trim().toUpperCase();
+      if(!allowed.has(t.subject_code))throw new Error(`Mã môn "${t.subject_code}" không nằm trong danh mục CSDL cho phép.`);
+      if(!['required','elective'].includes(t.subject_type))throw new Error(`Loại môn không hợp lệ: ${t.subject_type}.`);
+      if(t.subject_type==='elective'&&![1,2].includes(Number(t.subject_order)))throw new Error(`Môn ${t.subject_code}: thứ tự ca phải là 1 hoặc 2.`);
+      if(t.subject_type==='required')t.subject_order=null;
+    }
     const payloadMap=new Map();
     for(const t of targets){
-      const normalizedCode=String(t.subject_code||'').trim().toUpperCase();
-      payloadMap.set(`${t.candidate_id}|${normalizedCode}`,{...t,subject_code:normalizedCode,exam_id:examId});
+      const key=`${t.candidate_id}|${t.subject_code}`;
+      if(payloadMap.has(key)){
+        const previous=payloadMap.get(key);
+        if(previous.subject_type!==t.subject_type||previous.subject_order!==t.subject_order)throw new Error(`Học sinh có đăng ký xung đột môn ${t.subject_code} ở nhiều loại/ca.`);
+        continue;
+      }
+      payloadMap.set(key,{...t,exam_id:examId});
     }
     const payload=[...payloadMap.values()];
-    message($('subject-message'),`Đã đối chiếu ${payload.length} lượt đăng ký. Đang ghi dữ liệu lên Supabase...`,'info');
+    const electivePayload=payload.filter(x=>x.subject_type==='elective');
+    if(scope==='file'&&!electivePayload.length)throw new Error('File đã đọc nhưng không tạo ra đăng ký môn lựa chọn nào. Hãy kiểm tra cột Môn 1/Môn 2 và giá trị trong file.');
+    message($('subject-message'),`Đã đối chiếu ${payload.length} lượt đăng ký của ${sourceStudentCount} học sinh. Đang ghi dữ liệu lên Supabase...`,'info');
     const batchSize=100;
     for(let offset=0;offset<payload.length;offset+=batchSize){
       const batch=payload.slice(offset,offset+batchSize);
       const {error}=await state.client.from('exam_candidate_subjects').upsert(batch,{onConflict:'exam_id,candidate_id,subject_code'});
-      if(error)throw new Error(`Lỗi khi ghi lô ${Math.floor(offset/batchSize)+1} (đã gửi ${offset}/${payload.length} lượt): ${error.message}`);
+      if(error)throw new Error(`Supabase từ chối lô ${Math.floor(offset/batchSize)+1} (đã gửi ${offset}/${payload.length} lượt). ${error.code||''} ${error.message||''} ${error.details||''} ${error.hint||''}`.trim());
       message($('subject-message'),`Đang ghi đăng ký môn: ${Math.min(offset+batch.length,payload.length)}/${payload.length} lượt...`,'info');
     }
-    const uniqueCodes=[...new Set(payload.map(x=>x.subject_code))];
-    const electivePayload=payload.filter(x=>x.subject_type==='elective');
     const electiveCodes=[...new Set(electivePayload.map(x=>x.subject_code))];
-    const persistedByCode={};
-    const expectedByCode={};
+    const persistedByCode={},expectedByCode={};
     for(const subjectCode of electiveCodes){
-      const ids=[...new Set(electivePayload.filter(x=>x.subject_code===subjectCode).map(x=>x.candidate_id))];
-      expectedByCode[subjectCode]=ids.length;
-      const persistedIds=new Set();
-      for(let offset=0;offset<ids.length;offset+=100){
-        const {data,error:verifyError}=await state.client.from('exam_candidate_subjects')
-          .select('candidate_id').eq('exam_id',examId).eq('subject_code',subjectCode)
-          .in('candidate_id',ids.slice(offset,offset+100));
-        if(verifyError)throw new Error(`Không xác minh được môn ${subjectCode} trên CSDL: ${verifyError.message}`);
-        for(const row of data||[])persistedIds.add(String(row.candidate_id));
+      const records=electivePayload.filter(x=>x.subject_code===subjectCode);
+      const expectedKeys=new Set(records.map(x=>`${x.candidate_id}|${x.subject_order}`));
+      expectedByCode[subjectCode]=expectedKeys.size;
+      const persistedKeys=new Set();
+      for(const orderValue of [1,2]){
+        const orderRecords=records.filter(x=>Number(x.subject_order)===orderValue);
+        for(let offset=0;offset<orderRecords.length;offset+=100){
+          const batch=orderRecords.slice(offset,offset+100);
+          const ids=[...new Set(batch.map(x=>x.candidate_id))];
+          const {data,error:verifyError}=await state.client.from('exam_candidate_subjects')
+            .select('candidate_id,subject_code,subject_type,subject_order')
+            .eq('exam_id',examId).eq('subject_code',subjectCode).eq('subject_type','elective')
+            .eq('subject_order',orderValue).in('candidate_id',ids);
+          if(verifyError)throw new Error(`Không xác minh được môn ${subjectCode}, ca ${orderValue} trên CSDL: ${verifyError.message}`);
+          for(const row of data||[])persistedKeys.add(`${row.candidate_id}|${row.subject_order}`);
+        }
       }
-      persistedByCode[subjectCode]=persistedIds.size;
+      persistedByCode[subjectCode]=[...expectedKeys].filter(k=>persistedKeys.has(k)).length;
     }
     await loadSubjectRegistrations();
-    const verificationLines=electiveCodes.map(c=>`${subjectName(c)} (${c}): file có ${expectedByCode[c]}, CSDL xác minh được ${persistedByCode[c]}`);
+    const verificationLines=electiveCodes.map(c=>`${subjectName(c)} (${c}): dự kiến ${expectedByCode[c]}, xác minh ${persistedByCode[c]}`);
     const mismatch=electiveCodes.some(c=>persistedByCode[c]!==expectedByCode[c]);
     if(mismatch){
-      message($('subject-message'),`Dữ liệu chưa khớp hoàn toàn sau khi ghi. ${verificationLines.join('; ')}. Kiểm tra lại ràng buộc mã môn, quyền RLS và kỳ thi đang chọn.`,'error');
+      message($('subject-message'),`ĐÃ GHI NHƯNG XÁC MINH KHÔNG KHỚP. ${verificationLines.join('; ')}. Không nhập lại ngay; kiểm tra dữ liệu và lỗi Supabase trước.`,'error');
     }else{
-      message($('subject-message'),`Xác minh Supabase hoàn tất: đã kiểm tra ${sourceStudentCount} học sinh và ${electivePayload.length} lượt đăng ký lựa chọn. ${verificationLines.join('; ')}.`,'success');
+      message($('subject-message'),`THÀNH CÔNG: đã xác minh ${sourceStudentCount} học sinh và ${electivePayload.length} lượt đăng ký lựa chọn trên Supabase. ${verificationLines.join('; ')}.`,'success');
     }
-  }catch(e){message($('subject-message'),e.message,'error')}
+  }catch(e){message($('subject-message'),`Không hoàn tất nhập môn: ${e?.message||String(e)}`,'error')}
 }
 async function loadSubjectRegistrations(){
   const examId=$('subject-exam-select').value;
