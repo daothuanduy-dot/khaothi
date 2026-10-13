@@ -562,16 +562,31 @@ async function applySubject(){
       message($('subject-message'),`Đang ghi đăng ký môn: ${Math.min(offset+batch.length,payload.length)}/${payload.length} lượt...`,'info');
     }
     const uniqueCodes=[...new Set(payload.map(x=>x.subject_code))];
+    const electivePayload=payload.filter(x=>x.subject_type==='elective');
+    const electiveCodes=[...new Set(electivePayload.map(x=>x.subject_code))];
     const persistedByCode={};
-    for(const subjectCode of uniqueCodes){
-      const {count,error:verifyError}=await state.client.from('exam_candidate_subjects')
-        .select('candidate_id',{count:'exact',head:true})
-        .eq('exam_id',examId).eq('subject_code',subjectCode);
-      if(verifyError)throw new Error(`Đã gửi dữ liệu nhưng không xác minh được môn ${subjectCode} trên CSDL: ${verifyError.message}`);
-      persistedByCode[subjectCode]=count??0;
+    const expectedByCode={};
+    for(const subjectCode of electiveCodes){
+      const ids=[...new Set(electivePayload.filter(x=>x.subject_code===subjectCode).map(x=>x.candidate_id))];
+      expectedByCode[subjectCode]=ids.length;
+      const persistedIds=new Set();
+      for(let offset=0;offset<ids.length;offset+=100){
+        const {data,error:verifyError}=await state.client.from('exam_candidate_subjects')
+          .select('candidate_id').eq('exam_id',examId).eq('subject_code',subjectCode)
+          .in('candidate_id',ids.slice(offset,offset+100));
+        if(verifyError)throw new Error(`Không xác minh được môn ${subjectCode} trên CSDL: ${verifyError.message}`);
+        for(const row of data||[])persistedIds.add(String(row.candidate_id));
+      }
+      persistedByCode[subjectCode]=persistedIds.size;
     }
     await loadSubjectRegistrations();
-    message($('subject-message'),`Đã lưu và kiểm tra trên Supabase. ${uniqueCodes.map(c=>`${subjectName(c)} (${c}): ${persistedByCode[c]} lượt đăng ký`).join('; ')}.`, 'success');
+    const verificationLines=electiveCodes.map(c=>`${subjectName(c)} (${c}): file có ${expectedByCode[c]}, CSDL xác minh được ${persistedByCode[c]}`);
+    const mismatch=electiveCodes.some(c=>persistedByCode[c]!==expectedByCode[c]);
+    if(mismatch){
+      message($('subject-message'),`Dữ liệu chưa khớp hoàn toàn sau khi ghi. ${verificationLines.join('; ')}. Kiểm tra lại ràng buộc mã môn, quyền RLS và kỳ thi đang chọn.`,'error');
+    }else{
+      message($('subject-message'),`Xác minh Supabase hoàn tất: đã kiểm tra ${sourceStudentCount} học sinh và ${electivePayload.length} lượt đăng ký lựa chọn. ${verificationLines.join('; ')}.`,'success');
+    }
   }catch(e){message($('subject-message'),e.message,'error')}
 }
 async function loadSubjectRegistrations(){
