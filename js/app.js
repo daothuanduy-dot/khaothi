@@ -1,6 +1,6 @@
 import {optimizeElectiveRooms,SUBJECTS} from './rooming.js';
-const APP_VERSION='v0.1.23';
-const APP_BUILD='2026-10-13';
+const APP_VERSION='v0.1.27';
+const APP_BUILD='2026-10-14';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -378,6 +378,34 @@ function downloadSubjectTemplate(){
   const wb=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(wb,ws,'Chon mon');
   window.XLSX.writeFile(wb,'mau-chon-mon-lua-chon.xlsx');
 }
+function normalizeStudentCode(value){
+  let s=String(value??'').replace(/[\u200B-\u200D\uFEFF\u00A0]/g,' ').trim();
+  if(/^\d+\.0+$/.test(s))s=s.replace(/\.0+$/,'');
+  return s;
+}
+function normalizeSubjectLabel(value){
+  return String(value??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
+}
+function canonicalSubjectCode(value){
+  const key=normalizeSubjectLabel(value);
+  const aliases={
+    toan:'TOAN',toanhoc:'TOAN',van:'VAN',nguvan:'VAN',nguvanhoc:'VAN',
+    anh:'ANH',tienganh:'ANH',english:'ANH',
+    ly:'LY',vatli:'LY',vatly:'LY',vatlyhoc:'LY',physics:'LY',
+    hoa:'HOA',hoahoc:'HOA',chemistry:'HOA',
+    su:'SU',lichsu:'SU',history:'SU',
+    dia:'DIA',diali:'DIA',dialy:'DIA',geography:'DIA',
+    sinh:'SINH',sinhhoc:'SINH',biology:'SINH',
+    tin:'TIN',tinhoc:'TIN',informatics:'TIN',
+    gdktpl:'GDKTPL',giaoduckinhtephapluat:'GDKTPL'
+  };
+  const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];
+  for(const item of all){
+    if(key===normalizeSubjectLabel(item.code)||key===normalizeSubjectLabel(item.name))return item.code;
+  }
+  return aliases[key]||'';
+}
 function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('')}
 function normalizeSubjectChoiceRows(rows){
   const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
@@ -448,46 +476,38 @@ async function applySubject(){
     if(scope==='file'){
       const f=$('subject-csv').files[0];
       if(!f)throw new Error('Hãy chọn file Excel .xlsx hoặc CSV .csv đăng ký môn.');
-      const rows=await parseUploadFile(f);
-      if(!rows.length)throw new Error('File không có dữ liệu.');
+      message($('subject-message'),`Đang đọc file ${f.name}...`,'info');
+      const rawRows=await parseUploadFile(f);
+      if(!rawRows.length)throw new Error('File không có dữ liệu.');
+      const rows=normalizeSubjectChoiceRows(rawRows);
+      if(!rows.length)throw new Error('Không tìm thấy dòng đăng ký hợp lệ trong file.');
       const normHeader=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/[^a-z0-9]/g,'');
       const get=(row,aliases)=>{for(const [k,v] of Object.entries(row)){if(aliases.includes(normHeader(k))&&String(v??'').trim())return String(v).trim()}return ''};
       const codeByName=value=>{
-        const raw=String(value||'').trim();
-        if(!raw)return '';
-        const normalized=normHeader(raw).toUpperCase();
-        const known=[{code:'TOAN',names:['toan','toan hoc']},{code:'VAN',names:['van','ngu van','ngu van hoc']},...SUBJECTS.map(x=>({code:x.code,names:[normHeader(x.name).toUpperCase(),normHeader(x.code).toUpperCase()]}))];
-        const found=known.find(x=>x.code===normalized||x.names.includes(normalized));
-        return found?.code||raw.toUpperCase();
+        const code=canonicalSubjectCode(value);
+        if(!code)throw new Error(`Tên/mã môn "${String(value||'').trim()}" không khớp danh mục môn thi trong hệ thống. Hãy dùng đúng tên môn hoặc mã môn chuẩn.`);
+        return code;
       };
       const {data:students,error}=await state.client.from('exam_candidates').select('id,student_code,student_name,grade_code,class_code').eq('exam_id',examId);
       if(error)throw error;
-      const byCode=new Map((students||[]).map(st=>[String(st.student_code||'').trim(),st]));
+      const byCode=new Map((students||[]).map(st=>[normalizeStudentCode(st.student_code),st]));
       for(const [i,r] of rows.entries()){
-        const studentCode=get(r,['studentcode','studentid','madinhdanh','maddbogddt','madd','mahs','student_code']);
+        const studentCode=normalizeStudentCode(get(r,['studentcode','studentid','madinhdanh','maddbogddt','madd','mahs','student_code']));
         const classCode=get(r,['classcode','lop','malop','class_code']);
         const studentName=get(r,['studentname','hoten','hovaten','fullname']);
         // Official template layout: student code, full name, subject 1, subject 2.
-        const firstChoice=get(r,['mon1','monchon1','subject1','elective1','subjectcode1']);
-        const secondChoice=get(r,['mon2','monchon2','subject2','elective2','subjectcode2']);
         const oneSubject=get(r,['subjectcode','mamon','monthi']);
         const rowTypeRaw=get(r,['subjecttype','loaimon']);
         const rowType=normHeader(rowTypeRaw)==='batbuoc'||normHeader(rowTypeRaw)==='required'?'required':'elective';
         const rowOrderRaw=get(r,['subjectorder','thutu','cathi']);
         let student=studentCode?byCode.get(studentCode):null;
         if(!student&&studentName){
-          const matches=(students||[]).filter(st=>String(st.student_name||'').trim().toLocaleLowerCase('vi')===studentName.toLocaleLowerCase('vi'));
+          const nameKey=studentName.trim().toLocaleLowerCase('vi-VN');
+          const matches=(students||[]).filter(st=>String(st.student_name||'').trim().toLocaleLowerCase('vi-VN')===nameKey);
           if(matches.length===1)student=matches[0];
+          else if(matches.length>1)throw new Error(`Dòng ${i+2}: mã "${studentCode}" không khớp CSDL và tên "${studentName}" trùng ở ${matches.length} học sinh. Cần đối chiếu lại mã định danh.`);
         }
-        if(firstChoice||secondChoice){
-          if(!student)throw new Error(`Dòng ${i+2}: không tìm thấy duy nhất học sinh theo mã định danh "${studentCode||'(trống)'}"${studentName?` / họ tên "${studentName}"`:''}. Hãy kiểm tra mã định danh trong Excel có khớp hồ sơ thí sinh.`);
-          for(const [rawSubject,subjectOrder] of [[firstChoice,1],[secondChoice,2]]){
-            if(!rawSubject)continue;
-            const subjectCode=codeByName(rawSubject);
-            targets.push({candidate_id:student.id,subject_code:subjectCode,subject_order:subjectOrder,subject_type:'elective'});
-          }
-          continue;
-        }
+        if(!student)throw new Error(`Dòng ${i+2}: không tìm thấy học sinh theo mã "${studentCode||'(trống)'}"${studentName?` hoặc họ tên "${studentName}"`:''}. Kiểm tra mã định danh trong Excel có khớp exam_candidates.student_code hay không.`);
         const rowSubject=codeByName(oneSubject||code);
         const rowOrder=rowType==='elective'?Number(rowOrderRaw||order):null;
         if(!studentCode&&!classCode)throw new Error(`Dòng ${i+2}: cần mã học sinh hoặc mã lớp. Nếu dùng mẫu có cột Môn 1/Môn 2, hãy điền mã định danh học sinh.`);
@@ -533,10 +553,25 @@ async function applySubject(){
       payloadMap.set(`${t.candidate_id}|${normalizedCode}`,{...t,subject_code:normalizedCode,exam_id:examId});
     }
     const payload=[...payloadMap.values()];
-    const {error}=await state.client.from('exam_candidate_subjects').upsert(payload,{onConflict:'exam_id,candidate_id,subject_code'});
-    if(error)throw error;
-    message($('subject-message'),`Đã gửi áp dụng ${code} (${type==='required'?'môn bắt buộc':'môn lựa chọn'}) cho ${payload.length} học sinh duy nhất. Hãy đối chiếu số liệu trong bảng thống kê bên dưới.`, 'success');
+    message($('subject-message'),`Đã đối chiếu ${payload.length} lượt đăng ký. Đang ghi dữ liệu lên Supabase...`,'info');
+    const batchSize=100;
+    for(let offset=0;offset<payload.length;offset+=batchSize){
+      const batch=payload.slice(offset,offset+batchSize);
+      const {error}=await state.client.from('exam_candidate_subjects').upsert(batch,{onConflict:'exam_id,candidate_id,subject_code'});
+      if(error)throw new Error(`Lỗi khi ghi lô ${Math.floor(offset/batchSize)+1} (đã gửi ${offset}/${payload.length} lượt): ${error.message}`);
+      message($('subject-message'),`Đang ghi đăng ký môn: ${Math.min(offset+batch.length,payload.length)}/${payload.length} lượt...`,'info');
+    }
+    const uniqueCodes=[...new Set(payload.map(x=>x.subject_code))];
+    const persistedByCode={};
+    for(const subjectCode of uniqueCodes){
+      const {count,error:verifyError}=await state.client.from('exam_candidate_subjects')
+        .select('candidate_id',{count:'exact',head:true})
+        .eq('exam_id',examId).eq('subject_code',subjectCode);
+      if(verifyError)throw new Error(`Đã gửi dữ liệu nhưng không xác minh được môn ${subjectCode} trên CSDL: ${verifyError.message}`);
+      persistedByCode[subjectCode]=count??0;
+    }
     await loadSubjectRegistrations();
+    message($('subject-message'),`Đã lưu và kiểm tra trên Supabase. ${uniqueCodes.map(c=>`${subjectName(c)} (${c}): ${persistedByCode[c]} lượt đăng ký`).join('; ')}.`, 'success');
   }catch(e){message($('subject-message'),e.message,'error')}
 }
 async function loadSubjectRegistrations(){
@@ -565,7 +600,9 @@ async function loadSubjectRegistrations(){
   }
   body.innerHTML='';
   if(!regs||!regs.length){
-    body.innerHTML='<tr><td colspan="6" class="empty">Chưa có đăng ký môn cho kỳ thi này.</td></tr>';
+    const catalog=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];
+    body.innerHTML=catalog.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>—</td><td>—</td><td><strong>0</strong></td><td>—</td></tr>`).join('');
+    message($('subject-message'),'Đã truy vấn Supabase thành công nhưng kỳ thi này chưa có bản ghi đăng ký môn nào. Các môn hiển thị số 0.','info');
     return;
   }
   // Summarize by subject/type/order and count unique candidates, not raw rows.
@@ -580,14 +617,20 @@ async function loadSubjectRegistrations(){
     if(!summary.has(key))summary.set(key,{code,type,order,students:new Set()});
     if(r.candidate_id!==null&&r.candidate_id!==undefined)summary.get(key).students.add(String(r.candidate_id));
   }
-  const rows=[...summary.values()].sort((a,b)=>a.code.localeCompare(b.code,'vi')||a.type.localeCompare(b.type)||Number(a.order||0)-Number(b.order||0));
+  const rows=[...summary.values()];
+  const present=new Set(rows.map(r=>r.code));
+  for(const item of [{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS]){
+    if(!present.has(item.code))rows.push({code:item.code,type:'',order:'',students:new Set()});
+  }
+  rows.sort((a,b)=>a.code.localeCompare(b.code,'vi')||a.type.localeCompare(b.type)||Number(a.order||0)-Number(b.order||0));
   for(const r of rows){
     const name=subjectName(r.code)||({TOAN:'Toán',VAN:'Ngữ văn'}[r.code]||r.code);
-    body.insertAdjacentHTML('beforeend',`<tr><td>${esc(r.code)}</td><td>${esc(name)}</td><td>${r.type==='required'?'Bắt buộc':'Lựa chọn'}</td><td>${r.order===''?'—':esc(r.order)}</td><td><strong>${r.students.size.toLocaleString('vi-VN')}</strong></td><td><button type="button" class="btn btn-light btn-small subject-manage-open" data-code="${esc(r.code)}" data-type="${esc(r.type)}" data-order="${esc(r.order)}">Sửa / Xóa</button></td></tr>`);
+    body.insertAdjacentHTML('beforeend',`<tr><td>${esc(r.code)}</td><td>${esc(name)}</td><td>${r.type==='required'?'Bắt buộc':r.type==='elective'?'Lựa chọn':'—'}</td><td>${r.order===''?'—':esc(r.order)}</td><td><strong>${r.students.size.toLocaleString('vi-VN')}</strong></td><td><button type="button" class="btn btn-light btn-small subject-manage-open" data-code="${esc(r.code)}" data-type="${esc(r.type||"elective")}" data-order="${esc(r.order)}">Sửa / Xóa</button></td></tr>`);
   }
   body.querySelectorAll('.subject-manage-open').forEach(btn=>btn.onclick=()=>openSubjectManager({
     examId,code:btn.dataset.code,type:btn.dataset.type,order:btn.dataset.order
   }));
+  message($('subject-message'),`Đã tải ${regs.length} bản ghi đăng ký từ Supabase cho kỳ thi đang chọn. Số lượng trong bảng là số học sinh duy nhất theo môn/ca.`, 'success');
 
 }
 let subjectManageContext=null;
@@ -701,6 +744,11 @@ function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDe
     await loadExams();
     return;
   }
-});$('rooming-exam-select').onchange=()=>{state.selectedExam=$('rooming-exam-select').value;state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;loadCandidates()};$('download-csv-template').addEventListener('click',downloadExcelTemplate);$('import-form').addEventListener('submit',importCsv);$('candidate-edit-form').addEventListener('submit',saveCandidate);$('candidate-add-open').onclick=()=>openCandidateModal();$('candidate-cancel-edit').onclick=resetCandidateForm;$('candidate-modal-close').onclick=resetCandidateForm;$('candidate-search').addEventListener('input',renderCandidateTable);$('candidate-grade-filter').onchange=()=>{populateCandidateClassFilter();renderCandidateTable()};$('candidate-class-filter').onchange=renderCandidateTable;$('candidate-clear-filters').onclick=()=>{$('candidate-grade-filter').value='';populateCandidateClassFilter();$('candidate-class-filter').value='';$('candidate-search').value='';renderCandidateTable()};$('candidate-table-body').addEventListener('click',e=>{const edit=e.target.closest('[data-candidate-edit]');if(edit)openCandidateModal(edit.dataset.candidateEdit)});$('candidate-table-body').addEventListener('change',e=>{const box=e.target.closest('[data-candidate-check]');if(box)updateCandidateSelection(box.dataset.candidateCheck,box.checked)});const selectVisible=checked=>{const ids=getFilteredCandidates().map(c=>c.id);const s=new Set(state.selectedCandidateIds||[]);ids.forEach(id=>checked?s.add(id):s.delete(id));state.selectedCandidateIds=[...s];renderCandidateTable()};$('candidate-select-all').onchange=e=>selectVisible(e.target.checked);$('candidate-header-check').onchange=e=>selectVisible(e.target.checked);$('candidate-bulk-delete').onclick=deleteSelectedCandidates;$('download-subject-template').onclick=downloadSubjectTemplate;$('subject-manage-close').onclick=()=>{$('subject-manage-dialog').close();subjectManageContext=null};$('subject-manage-action').onchange=()=>{$('subject-manage-target-wrap').classList.toggle('hidden',$('subject-manage-action').value!=='move')};$('subject-manage-select-all').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=true);$('subject-manage-clear').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=false);$('subject-manage-add-all').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=true);$('subject-manage-add-clear').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=false);$('subject-manage-save').onclick=saveSubjectManager;$('subject-config-kind').onchange=async()=>{const choice=$('subject-config-kind').value==='choice';$('subject-mode').value=choice?'elective':'required';$('subject-mode').disabled=!choice;$('subject-order-wrap').classList.toggle('hidden',!choice);if(!choice&&['class_students','student'].includes($('subject-scope').value))$('subject-scope').value='class';$('subject-scope').dispatchEvent(new Event('change'));const examId=$('subject-exam-select').value;if(examId&&state.client){const{error}=await state.client.from('exam_sessions').update({exam_mode:choice?'choice':'default'}).eq('id',examId);if(error)message($('subject-message'),`Không lưu được hình thức kỳ thi: ${error.message}. Hãy chạy migration v0.1.21.`, 'error');else{const e=state.exams.find(x=>x.id===examId);if(e)e.exam_mode=choice?'choice':'default';message($('subject-message'),`Đã lưu hình thức kỳ thi: ${choice?'Kỳ thi lựa chọn':'Kỳ thi mặc định'}.`,'success')}}};$('subject-mode').onchange=()=>{$('subject-order-wrap').classList.toggle('hidden',$('subject-mode').value!=='elective')};$('subject-config-kind').dispatchEvent(new Event('change'));$('subject-mode').dispatchEvent(new Event('change'));$('apply-subject').onclick=applySubject;$('load-subject-registrations').onclick=async()=>{const b=$('load-subject-registrations');b.disabled=true;const oldText=b.textContent;b.textContent='Đang tải...';try{await loadSubjectRegistrations()}catch(e){message($('subject-message'),`Không tải được danh sách đăng ký môn: ${e.message}`,'error')}finally{b.disabled=false;b.textContent=oldText}};$('subject-exam-select').onchange=()=>{syncSubjectExamMode();loadSubjectRegistrations()};$('subject-scope').onchange=()=>{const scope=$('subject-scope').value;$('subject-class-code').disabled=!['class','class_students'].includes(scope);$('subject-student-code').disabled=scope!=='student';$('subject-csv').disabled=false;$('subject-grade').disabled=scope!=='grade';$('subject-student-list').disabled=scope!=='class_students';$('subject-class-code-wrap').classList.add('hidden');$('subject-class-picker-wrap').classList.toggle('hidden',scope!=='class');$('subject-student-class-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-picker-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-code-wrap').classList.toggle('hidden',scope!=='student');$('subject-grade-wrap').classList.toggle('hidden',scope!=='grade');$('subject-student-list-wrap').classList.add('hidden');if(['class','class_students'].includes(scope)&&state.client)loadSubjectPickerCandidates();};$('subject-scope').dispatchEvent(new Event('change'));$('subject-student-class').onchange=renderSubjectStudentPicker;$('subject-exam-select').addEventListener('change',()=>{if(['class','class_students'].includes($('subject-scope').value))loadSubjectPickerCandidates()});$('subject-classes-select-all').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=true);$('subject-classes-clear').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=false);$('subject-students-select-all').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=true);$('subject-students-clear').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=false);$('subject-mode').onchange=()=>{const elective=$('subject-mode').value==='elective';$('subject-order-wrap').classList.toggle('hidden',!elective);if(!elective)$('subject-order').value='1'};$('subject-mode').dispatchEvent(new Event('change'));initSubjectCatalog();$('preview-rooming').onclick=previewRooming;$('save-rooming').onclick=()=>saveRooming(false);$('lock-rooming').onclick=()=>{if(confirm('Khóa phương án xếp phòng? Hãy chắc chắn đã kiểm tra danh sách.'))saveRooming(true)};$('export-rooming').onclick=exportRooming;}
+});$('rooming-exam-select').onchange=()=>{state.selectedExam=$('rooming-exam-select').value;state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;loadCandidates()};$('download-csv-template').addEventListener('click',downloadExcelTemplate);$('import-form').addEventListener('submit',importCsv);$('candidate-edit-form').addEventListener('submit',saveCandidate);$('candidate-add-open').onclick=()=>openCandidateModal();$('candidate-cancel-edit').onclick=resetCandidateForm;$('candidate-modal-close').onclick=resetCandidateForm;$('candidate-search').addEventListener('input',renderCandidateTable);$('candidate-grade-filter').onchange=()=>{populateCandidateClassFilter();renderCandidateTable()};$('candidate-class-filter').onchange=renderCandidateTable;$('candidate-clear-filters').onclick=()=>{$('candidate-grade-filter').value='';populateCandidateClassFilter();$('candidate-class-filter').value='';$('candidate-search').value='';renderCandidateTable()};$('candidate-table-body').addEventListener('click',e=>{const edit=e.target.closest('[data-candidate-edit]');if(edit)openCandidateModal(edit.dataset.candidateEdit)});$('candidate-table-body').addEventListener('change',e=>{const box=e.target.closest('[data-candidate-check]');if(box)updateCandidateSelection(box.dataset.candidateCheck,box.checked)});const selectVisible=checked=>{const ids=getFilteredCandidates().map(c=>c.id);const s=new Set(state.selectedCandidateIds||[]);ids.forEach(id=>checked?s.add(id):s.delete(id));state.selectedCandidateIds=[...s];renderCandidateTable()};$('candidate-select-all').onchange=e=>selectVisible(e.target.checked);$('candidate-header-check').onchange=e=>selectVisible(e.target.checked);$('candidate-bulk-delete').onclick=deleteSelectedCandidates;$('download-subject-template').onclick=downloadSubjectTemplate;$('subject-manage-close').onclick=()=>{$('subject-manage-dialog').close();subjectManageContext=null};$('subject-manage-action').onchange=()=>{$('subject-manage-target-wrap').classList.toggle('hidden',$('subject-manage-action').value!=='move')};$('subject-manage-select-all').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=true);$('subject-manage-clear').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=false);$('subject-manage-add-all').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=true);$('subject-manage-add-clear').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=false);$('subject-manage-save').onclick=saveSubjectManager;$('subject-config-kind').onchange=async()=>{const choice=$('subject-config-kind').value==='choice';$('subject-mode').value=choice?'elective':'required';$('subject-mode').disabled=!choice;$('subject-order-wrap').classList.toggle('hidden',!choice);if(!choice&&['class_students','student'].includes($('subject-scope').value))$('subject-scope').value='class';$('subject-scope').dispatchEvent(new Event('change'));const examId=$('subject-exam-select').value;if(examId&&state.client){const{error}=await state.client.from('exam_sessions').update({exam_mode:choice?'choice':'default'}).eq('id',examId);if(error)message($('subject-message'),`Không lưu được hình thức kỳ thi: ${error.message}. Hãy chạy migration v0.1.21.`, 'error');else{const e=state.exams.find(x=>x.id===examId);if(e)e.exam_mode=choice?'choice':'default';message($('subject-message'),`Đã lưu hình thức kỳ thi: ${choice?'Kỳ thi lựa chọn':'Kỳ thi mặc định'}.`,'success')}}};$('subject-mode').onchange=()=>{$('subject-order-wrap').classList.toggle('hidden',$('subject-mode').value!=='elective')};$('subject-config-kind').dispatchEvent(new Event('change'));$('subject-mode').dispatchEvent(new Event('change'));$('apply-subject').onclick=async()=>{
+  const b=$('apply-subject');const old=b.textContent;
+  if(b.dataset.busy==='1')return;
+  b.dataset.busy='1';b.disabled=true;b.textContent='Đang xử lý...';
+  try{await applySubject()}finally{b.dataset.busy='0';b.disabled=false;b.textContent=old}
+};$('load-subject-registrations').onclick=async()=>{const b=$('load-subject-registrations');b.disabled=true;const oldText=b.textContent;b.textContent='Đang tải...';try{await loadSubjectRegistrations()}catch(e){message($('subject-message'),`Không tải được danh sách đăng ký môn: ${e.message}`,'error')}finally{b.disabled=false;b.textContent=oldText}};$('subject-exam-select').onchange=()=>{syncSubjectExamMode();loadSubjectRegistrations()};$('subject-scope').onchange=()=>{const scope=$('subject-scope').value;$('subject-class-code').disabled=!['class','class_students'].includes(scope);$('subject-student-code').disabled=scope!=='student';$('subject-csv').disabled=false;$('subject-grade').disabled=scope!=='grade';$('subject-student-list').disabled=scope!=='class_students';$('subject-class-code-wrap').classList.add('hidden');$('subject-class-picker-wrap').classList.toggle('hidden',scope!=='class');$('subject-student-class-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-picker-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-code-wrap').classList.toggle('hidden',scope!=='student');$('subject-grade-wrap').classList.toggle('hidden',scope!=='grade');$('subject-student-list-wrap').classList.add('hidden');if(['class','class_students'].includes(scope)&&state.client)loadSubjectPickerCandidates();};$('subject-scope').dispatchEvent(new Event('change'));$('subject-student-class').onchange=renderSubjectStudentPicker;$('subject-exam-select').addEventListener('change',()=>{if(['class','class_students'].includes($('subject-scope').value))loadSubjectPickerCandidates()});$('subject-classes-select-all').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=true);$('subject-classes-clear').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=false);$('subject-students-select-all').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=true);$('subject-students-clear').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=false);$('subject-mode').onchange=()=>{const elective=$('subject-mode').value==='elective';$('subject-order-wrap').classList.toggle('hidden',!elective);if(!elective)$('subject-order').value='1'};$('subject-mode').dispatchEvent(new Event('change'));initSubjectCatalog();$('preview-rooming').onclick=previewRooming;$('save-rooming').onclick=()=>saveRooming(false);$('lock-rooming').onclick=()=>{if(confirm('Khóa phương án xếp phòng? Hãy chắc chắn đã kiểm tra danh sách.'))saveRooming(true)};$('export-rooming').onclick=exportRooming;}
 async function boot(){wire();renderSubjects();const config=readConfig();if(!config.url||!config.key){showScreen('setup-screen');return}$('supabase-url').value=config.url;$('supabase-key').value=config.key;try{await connect(config.url,config.key)}catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('login-message'),`Không kết nối được: ${e.message}`,'error')}}
 boot();
