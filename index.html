@@ -43,11 +43,26 @@
 .picker-option span{overflow-wrap:anywhere}
 .picker-empty{color:#64748b;padding:10px}
  .version-pill{font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8;border:1px solid #bfdbfe}
-</style></head>
+</style>
+<style>
+.subject-roster-panel,.overage-panel,.roster-stat-panel{margin-top:20px;padding:18px;border:1px solid #dce4f1;border-radius:16px;background:#fff}
+.roster-filters{grid-template-columns:minmax(140px,1fr) minmax(160px,1fr) minmax(200px,1.5fr) auto}
+.roster-checkbox{display:flex!important;align-items:center;gap:8px;min-height:42px}.roster-checkbox input{width:auto}
+.roster-summary,.roster-stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.roster-summary .metric,.roster-stat-card{border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.roster-summary .metric span,.roster-stat-card span{font-size:13px;color:#64748b}.roster-summary .metric strong,.roster-stat-card strong{font-size:22px;color:#0f172a}
+.roster-table-wrap{max-height:560px;overflow:auto}.roster-table-wrap thead th{position:sticky;top:0;background:#f1f5f9;z-index:1}
+.roster-table-wrap select{min-width:130px;max-width:180px;padding:7px;border:1px solid #cbd5e1;border-radius:8px;background:white}
+.roster-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:12px}.roster-footer>div{display:flex;gap:8px;align-items:center}
+.roster-stats-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.roster-stat-card .stat-bar{height:7px;border-radius:99px;background:#dbeafe;overflow:hidden}.roster-stat-card .stat-bar i{display:block;height:100%;background:#2563eb}
+.roster-dirty{background:#fff7ed!important;border-color:#fdba74!important}.overage-tag{display:inline-block;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;padding:3px 7px;border-radius:99px;font-size:12px;font-weight:700}
+@media(max-width:850px){.roster-filters,.overage-filters{grid-template-columns:1fr 1fr}.roster-summary{grid-template-columns:1fr}.roster-table-wrap{overflow-x:auto}.roster-table-wrap table{min-width:850px}}
+</style>
+</head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.30</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.31</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -145,7 +160,36 @@
           <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">Muốn nhập file Excel, bạn có thể chọn tệp tại đây; hệ thống sẽ tự chuyển Phạm vi áp dụng sang “Nạp từ Excel”. Hỗ trợ .xlsx và .csv UTF-8. Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
+        <div class="notice notice-info">Muốn nhập file Excel, bạn có thể chọn tệp tại đây; hệ thống sẽ tự chuyển Phạm vi áp dụng sang “Nạp từ Excel”. Hỗ trợ .xlsx và .csv UTF-8. Cột Môn 1/Môn 2 bắt buộc dùng mã môn (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không nhập tên môn; tải mẫu Excel để dùng đúng định dạng. Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
+        <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
+          <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
+          <div class="candidate-filters roster-filters">
+            <label>Khối<select id="roster-grade"><option value="">-- Chọn khối --</option></select></label>
+            <label>Lớp<select id="roster-class" disabled><option value="">-- Chọn lớp --</option></select></label>
+            <label>Tìm học sinh<input id="roster-search" type="search" placeholder="Mã học sinh hoặc họ tên"></label>
+            <label class="roster-checkbox"><input id="roster-show-overage" type="checkbox"> Hiện học sinh vượt cấp</label>
+          </div>
+          <div class="roster-summary" id="roster-summary"><div class="metric"><span>Học sinh trong lớp</span><strong>—</strong></div><div class="metric"><span>Đủ 2 môn</span><strong>—</strong></div><div class="metric"><span>Chưa đủ môn</span><strong>—</strong></div></div>
+          <div class="table-wrap roster-table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp gốc</th><th>Môn 1</th><th>Môn 2</th><th>Diện</th><th></th></tr></thead><tbody id="roster-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi, khối và lớp.</td></tr></tbody></table></div>
+          <div class="roster-footer"><span id="roster-page-info">Chưa có dữ liệu</span><div><button class="btn btn-light btn-small" id="roster-prev" type="button">Trước</button><button class="btn btn-light btn-small" id="roster-next" type="button">Tiếp</button><button class="btn btn-primary" id="roster-save-all" type="button">Lưu các thay đổi</button></div></div>
+          <div id="roster-message" class="notice hidden"></div>
+        </section>
+        <section class="panel overage-panel">
+          <div class="section-heading"><div><h3>Thêm học sinh vượt cấp</h3><p>Chọn học sinh từ khối/lớp khác trong danh sách thí sinh của kỳ thi hiện tại. Không tạo hồ sơ học sinh trùng.</p></div></div>
+          <div class="candidate-filters overage-filters">
+            <label>Khối đang học<select id="overage-grade"><option value="">-- Chọn khối --</option></select></label>
+            <label>Lớp đang học<select id="overage-class" disabled><option value="">-- Chọn lớp --</option></select></label>
+            <label>Học sinh<select id="overage-student" disabled><option value="">-- Chọn học sinh --</option></select></label>
+            <button id="overage-add" class="btn btn-primary" type="button">Đánh dấu vượt cấp</button>
+          </div>
+          <div id="overage-message" class="notice hidden"></div>
+        </section>
+        <section class="panel roster-stat-panel">
+          <div class="section-heading"><div><h3>Thống kê lựa chọn môn</h3><p>Số học sinh duy nhất đã đăng ký mỗi môn; bộ lọc lớp được áp dụng nếu chọn lớp.</p></div><button id="roster-stats-refresh" class="btn btn-light" type="button">Cập nhật thống kê</button></div>
+          <div class="candidate-filters"><label>Phạm vi thống kê<select id="roster-stats-scope"><option value="grade">Theo khối</option><option value="class">Theo lớp</option><option value="all">Toàn kỳ thi</option></select></label><label>Khối thống kê<select id="roster-stats-grade"><option value="">-- Chọn khối --</option></select></label><label>Lớp thống kê<select id="roster-stats-class"><option value="">Tất cả lớp trong khối</option></select></label></div>
+          <div id="roster-stats-cards" class="roster-stats-grid"></div>
+          <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Môn 1</th><th>Môn 2</th><th>Tổng lượt chọn</th></tr></thead><tbody id="roster-stats-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và cập nhật thống kê.</td></tr></tbody></table></div>
+        </section>
         <div id="subject-message" class="notice hidden"></div>
         <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th><th>Thao tác</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
       </section>
@@ -189,7 +233,7 @@
 #subject-manage-dialog .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
-</style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.30 · build 2026-10-14</span></span><span>GitHub Pages + Supabase</span></footer>
+</style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.31 · build 2026-10-14</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <script type="module" src="./js/app.js?v=0.1.30"></script>
 </body>
