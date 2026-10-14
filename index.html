@@ -215,6 +215,9 @@
           <label>Loại phương án<select id="room-plan-type"><option value="elective">Môn lựa chọn</option><option value="mandatory">Môn bắt buộc</option></select></label>
           <label id="mandatory-subject-wrap" class="hidden">Môn bắt buộc<select id="mandatory-subject"><option value="TOAN">Toán</option><option value="VAN">Ngữ văn</option></select></label>
           <label>Sắp xếp thí sinh<select id="room-sort-mode"><option value="abc">ABC theo họ tên</option><option value="previous">Theo kết quả kỳ thi trước</option></select></label>
+          <label>Độ dài số báo danh<select id="sbd-length"><option value="6">6 chữ số</option><option value="8">8 chữ số</option></select></label>
+          <label>Số chữ số tiền tố<select id="sbd-prefix-length"><option value="2">2 chữ số đầu</option><option value="3">3 chữ số đầu</option></select></label>
+          <label>Tiền tố SBD (chỉ số)<input id="sbd-prefix" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="3" value="01" required></label>
           <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
           <label>Sức chứa phòng (tối đa 25)<input id="room-capacity" type="number" min="1" max="25" value="24" required></label>
           <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
@@ -224,7 +227,7 @@
         <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
         <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số</th><th>Ca 1 / Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="6" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
         <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách chi tiết theo SBD.</p></div><div class="form-actions">
-            <button id="assign-sbd-rooming" class="btn btn-secondary" type="button" disabled>Sắp xếp SBD theo phòng</button>
+            <button id="assign-sbd-rooming" class="btn btn-secondary" type="button" disabled>Đánh số SBD và lưu CSDL</button>
             <button id="export-rooming" class="btn btn-light" disabled>Xuất Excel</button>
             <button id="print-rooming-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button>
           </div></div>
@@ -255,8 +258,8 @@
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.40 · build 2026-10-14-rooming-exports</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.41 · build 2026-10-14-sbd-generator</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.40"></script>
+  <script type="module" src="./js/app.js?v=0.1.41"></script>
 </body>
 </html>
