@@ -434,3 +434,74 @@ export function optimizeMandatoryRooms(candidates, options={}) {
  return {ok:true,rooms,assignments,summary:{candidate_count:assignments.length,room_count:rooms.length,capacity,
   subject_count:1,full_rooms:rooms.filter(r=>r.student_count===capacity).length,partial_rooms:rooms.filter(r=>r.student_count<capacity).length}};
 }
+
+export function restoreRoomingPlan(rooms, assignments, candidates, options={}) {
+  if(!Array.isArray(rooms)||!rooms.length||!Array.isArray(assignments)||!assignments.length||
+    !Array.isArray(candidates))
+    return {ok:false,errors:['Hồ sơ phân phòng đã lưu thiếu danh sách phòng, phân công hoặc thí sinh.']};
+  const candidateById=new Map(candidates.map(candidate=>[
+    String(candidate.id??candidate.candidate_id),candidate
+  ]));
+  if(candidateById.size!==candidates.length)
+    return {ok:false,errors:['Danh sách thí sinh dùng để khôi phục có mã bị trùng.']};
+  const roomsByCode=new Map();
+  for(const room of rooms){
+    const code=String(room?.room_code||'');
+    const count=Number(room?.student_count),capacity=Number(room?.capacity);
+    if(!code||roomsByCode.has(code)||!Number.isInteger(count)||count<1||
+      !Number.isInteger(capacity)||capacity<1||count>capacity)
+      return {ok:false,errors:['Hồ sơ phân phòng có mã phòng hoặc sĩ số không hợp lệ.']};
+    roomsByCode.set(code,{...room,room_code:code,capacity});
+  }
+  const assignedIds=new Set(),normalizedAssignments=[];
+  for(const stored of assignments){
+    const candidateId=String(stored?.candidate_id||'');
+    const roomCode=String(stored?.room_code||'');
+    const candidate=candidateById.get(candidateId)|| (options.allowMissingCandidates?{}:null);
+    if(!candidate||assignedIds.has(candidateId)||!roomsByCode.has(roomCode))
+      return {ok:false,errors:['Hồ sơ có thí sinh trùng, không thuộc kỳ thi đang chọn hoặc phòng không tồn tại.']};
+    assignedIds.add(candidateId);
+    normalizedAssignments.push({
+      ...candidate,...stored,
+      candidate_id:candidateId,
+      room_code:roomCode,
+      sbd:String(stored.sbd||candidate.sbd||''),
+      student_name:String(stored.student_name||candidate.student_name||''),
+      class_code:String(stored.class_code||candidate.class_code||''),
+      subject_code:stored.subject_code||options.subjectCode||null
+    });
+  }
+  const normalizedRooms=[...roomsByCode.values()].map(room=>{
+    const members=normalizedAssignments.filter(assignment=>assignment.room_code===room.room_code);
+    if(members.length!==Number(room.student_count))return null;
+    const sbds=members.map(assignment=>assignment.sbd).filter(Boolean)
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const ca1=[...new Set(members.map(assignment=>assignment.ca1_subject_code).filter(Boolean))].sort();
+    const ca2=[...new Set(members.map(assignment=>assignment.ca2_subject_code).filter(Boolean))].sort();
+    return {
+      ...room,
+      student_count:members.length,
+      ca1_subject_codes:Array.isArray(room.ca1_subject_codes)?room.ca1_subject_codes:ca1,
+      ca2_subject_codes:Array.isArray(room.ca2_subject_codes)?room.ca2_subject_codes:ca2,
+      sbd_first:sbds[0]||'',
+      sbd_last:sbds[sbds.length-1]||'',
+      candidate_ids:members.map(assignment=>assignment.candidate_id)
+    };
+  });
+  if(normalizedRooms.some(room=>!room))
+    return {ok:false,errors:['Sĩ số khai báo trong hồ sơ không khớp số phân công đã lưu.']};
+  const capacity=Number(options.capacity)||Number(normalizedRooms[0].capacity);
+  return {ok:true,result:{
+    rooms:normalizedRooms,
+    assignments:normalizedAssignments,
+    summary:{
+      candidate_count:normalizedAssignments.length,
+      room_count:normalizedRooms.length,
+      capacity,
+      subject_count:options.planType==='mandatory'?normalizedRooms.length:
+        normalizedRooms.reduce((sum,room)=>sum+room.ca1_subject_codes.length+room.ca2_subject_codes.length,0),
+      full_rooms:normalizedRooms.filter(room=>room.student_count===room.capacity).length,
+      partial_rooms:normalizedRooms.filter(room=>room.student_count<room.capacity).length
+    }
+  }};
+}
