@@ -1,5 +1,5 @@
 import {optimizeElectiveRooms,SUBJECTS} from './rooming.js';
-const APP_VERSION='v0.1.31';
+const APP_VERSION='v0.1.32';
 const APP_BUILD='2026-10-14';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
@@ -406,7 +406,7 @@ function canonicalSubjectCode(value){
   }
   return aliases[key]||'';
 }
-function importSubjectCode(value){const code=String(value??'').trim().toUpperCase();return ['ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
+function importSubjectCode(value){const raw=String(value??'').trim().toUpperCase().replace(/[.\s_-]+/g,'');const code=raw==='KTPL'?'GDKTPL':raw;return ['ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
 function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('')}
 function normalizeSubjectChoiceRows(rows){
   const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD')
@@ -783,6 +783,98 @@ async function loadRosterData(){
  const grades=rosterGrades();fillSelect('roster-grade',grades,'-- Chọn khối --',$('roster-grade').value);fillSelect('overage-grade',grades,'-- Chọn khối --',$('overage-grade').value);fillSelect('roster-stats-grade',grades,'-- Chọn khối --',$('roster-stats-grade').value);
  syncRosterClassFilters();syncOverageClassFilters();renderRosterTable();renderRosterStats();message($('roster-message'),`Đã tải ${candidates.length.toLocaleString('vi-VN')} học sinh và ${regs.length.toLocaleString('vi-VN')} lượt đăng ký môn.`, 'success');
 }
+
+async function importRosterElectivesFromExcel(){
+  const examId=rosterExamId(),file=$('roster-excel-file').files?.[0];
+  if(!examId){message($('roster-message'),'Hãy chọn kỳ thi trước khi nạp Excel.','error');return}
+  if(!file){message($('roster-message'),'Hãy chọn file Excel/CSV cần nạp.','error');return}
+  const btn=$('roster-import-btn');btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra...';
+  try{
+    if(!state.rosterCandidates.length || state.rosterCandidates.some(c=>!Object.prototype.hasOwnProperty.call(c,'id'))) await loadRosterData();
+    const rawRows=await parseUploadFile(file);
+    const parsed=normalizeSubjectChoiceRows(rawRows);
+    if(!parsed.length)throw new Error('File không có dòng đăng ký môn hợp lệ.');
+    const candidateByCode=new Map();
+    for(const c of state.rosterCandidates){
+      const code=normalizeStudentCode(c.student_code);
+      if(!code)continue;
+      if(candidateByCode.has(code))throw new Error(`Mã học sinh ${code} bị trùng trong danh sách thí sinh của kỳ thi; cần xử lý trùng trước khi import.`);
+      candidateByCode.set(code,c);
+    }
+    const seen=new Set(),mapped=[],missing=[];
+    for(let i=0;i<parsed.length;i++){
+      const r=parsed[i],code=normalizeStudentCode(r.student_code);
+      if(!code)throw new Error(`Dòng Excel ${i+2}: thiếu mã học sinh.`);
+      const rowKey=`${code}|${Number(r.subject_order)}`;
+      if(seen.has(rowKey))throw new Error(`Dòng Excel ${i+2}: mã học sinh ${code} bị lặp Môn ${r.subject_order}.`);
+      seen.add(rowKey);
+      const c=candidateByCode.get(code);
+      if(!c){missing.push({line:i+2,code,name:r.student_name||''});continue}
+      const m1=importSubjectCode(r.subject_code);
+      // normalizeSubjectChoiceRows emits two records per student, preserving the subject_order.
+      mapped.push({candidate:c,code,subject_code:m1,subject_order:Number(r.subject_order)});
+    }
+    if(missing.length){
+      const sample=missing.slice(0,8).map(x=>`dòng ${x.line}: ${x.code}${x.name?` (${x.name})`:''}`).join('; ');
+      throw new Error(`${missing.length} mã học sinh trong Excel không có trong kỳ thi đang chọn. Chưa ghi dữ liệu để tránh nhập thiếu/sai. Ví dụ: ${sample}${missing.length>8?'…':''}. Hãy nhập danh sách thí sinh của kỳ thi hoặc sửa mã trước.`);
+    }
+    const byCandidate=new Map();
+    for(const r of mapped){
+      if(!r.subject_code||![1,2].includes(r.subject_order))throw new Error(`Dữ liệu môn không hợp lệ ở mã học sinh ${r.code}.`);
+      const k=String(r.candidate.id);if(!byCandidate.has(k))byCandidate.set(k,{candidate:r.candidate,m1:'',m2:''});
+      const item=byCandidate.get(k),slot=r.subject_order===1?'m1':'m2';
+      if(item[slot])throw new Error(`Mã học sinh ${r.code} có nhiều giá trị cho Môn ${r.subject_order}.`);
+      item[slot]=r.subject_code;
+    }
+    const invalidRows=[],invalidCodes=new Set();
+    for(const [id,item] of byCandidate){
+      if(!item.m1||!item.m2){invalidRows.push(`${item.candidate.student_code}: chưa đủ hai môn`);invalidCodes.add(id)}
+      else if(item.m1===item.m2){invalidRows.push(`${item.candidate.student_code} (${item.candidate.student_name}): trùng môn ${item.m1}`);invalidCodes.add(id)}
+    }
+    const validCandidates=[...byCandidate.entries()].filter(([id])=>!invalidCodes.has(id));
+    if(!validCandidates.length)throw new Error(`Không có học sinh nào đủ điều kiện nhập. ${invalidRows.slice(0,12).join('; ')}. Mỗi học sinh phải có hai mã môn khác nhau.`);
+    const payload=[];
+    for(const [id,item] of validCandidates){
+      payload.push({exam_id:examId,candidate_id:id,subject_code:item.m1,subject_type:'elective',subject_order:1});
+      payload.push({exam_id:examId,candidate_id:id,subject_code:item.m2,subject_type:'elective',subject_order:2});
+    }
+    message($('roster-message'),`Đã kiểm tra ${byCandidate.size} học sinh, ${payload.length} lượt môn. Đang lưu vào Supabase...`,'info');
+    for(let offset=0;offset<payload.length;offset+=100){
+      const batch=payload.slice(offset,offset+100);
+      const {error}=await state.client.from('exam_candidate_subjects').upsert(batch,{onConflict:'exam_id,candidate_id,subject_code'});
+      if(error)throw new Error(`Supabase từ chối dữ liệu ở lô ${Math.floor(offset/100)+1}: ${error.message}${error.details?` (${error.details})`:''}`);
+      message($('roster-message'),`Đang lưu môn lựa chọn ${Math.min(offset+batch.length,payload.length)}/${payload.length}...`,'info');
+    }
+    // Remove old elective subjects no longer present for each imported student, preserving required subjects.
+    let deleted=0;
+    for(const [id,item] of validCandidates){
+      const keep=new Set([item.m1,item.m2]);
+      const oldRows=state.rosterRegs.filter(r=>String(r.candidate_id)===id&&r.subject_type==='elective'&&!['TOAN','VAN'].includes(String(r.subject_code).toUpperCase()));
+      for(const oldRow of oldRows){
+        if(keep.has(String(oldRow.subject_code).toUpperCase()))continue;
+        const {error}=await state.client.from('exam_candidate_subjects').delete().eq('exam_id',examId).eq('candidate_id',id).eq('subject_code',oldRow.subject_code).eq('subject_type','elective');
+        if(error)throw new Error(`Đã ghi môn mới nhưng chưa xóa được môn cũ ${oldRow.subject_code} của mã ${item.candidate.student_code}: ${error.message}. Tải lại danh sách và kiểm tra dữ liệu.`);
+        deleted++;
+      }
+    }
+    await loadRosterData();
+    await loadSubjectRegistrations();
+    const counts={};for(const p of payload)counts[p.subject_code]=(counts[p.subject_code]||0)+1;
+    const summary=Object.entries(counts).sort((a,b)=>a[0].localeCompare(b[0])).map(([code,n])=>`${code}: ${n}`).join(', ');
+    const warning=invalidRows.length?` CẦN BỔ SUNG THỦ CÔNG ${invalidRows.length} học sinh do thiếu/trùng môn: ${invalidRows.slice(0,10).join('; ')}${invalidRows.length>10?'…':''}. Các dòng này được giữ nguyên, không bị ghi đè.`:'';
+    message($('roster-message'),`NẠP THÀNH CÔNG: ${validCandidates.length} học sinh, ${payload.length} lượt đăng ký đã được lưu và tải xác minh lại từ Supabase. ${deleted} đăng ký cũ không còn trong file đã được loại bỏ. Thống kê theo mã môn: ${summary}.${warning}`,invalidRows.length?'error':'success');
+    $('roster-excel-file').value='';
+  }catch(e){message($('roster-message'),`Không nạp được Excel: ${e?.message||String(e)}`,'error')}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+function downloadRosterExcelTemplate(){
+  if(!window.XLSX){message($('roster-message'),'Không tải được thư viện Excel.','error');return}
+  const rows=[['Mã DD Bộ GD&ĐT','Họ tên','Môn 1','Môn 2'],['3153467643','Phạm Hoàng An','HOA','SINH'],['3156126154','Tạ Ngọc Song An','ANH','LY']];
+  const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:22},{wch:28},{wch:14},{wch:14}];window.XLSX.utils.book_append_sheet(wb,ws,'Mon lua chon');
+  window.XLSX.writeFile(wb,'Mau_nap_mon_lua_chon.xlsx');
+}
+
 function syncRosterClassFilters(){const g=$('roster-grade').value;fillSelect('roster-class',rosterClassCodes(g),'-- Chọn lớp --',$('roster-class').value);$('roster-class').disabled=!g}
 function syncOverageClassFilters(){const g=$('overage-grade').value;fillSelect('overage-class',rosterClassCodes(g),'-- Chọn lớp --',$('overage-class').value);$('overage-class').disabled=!g;syncOverageStudents()}
 function syncOverageStudents(){const grade=$('overage-grade').value,cls=$('overage-class').value;const list=state.rosterCandidates.filter(c=>String(c.grade_code)===grade&&String(c.class_code)===cls&&!c.is_overage);const sel=$('overage-student'),old=sel.value;sel.innerHTML='<option value="">-- Chọn học sinh --</option>'+list.map(c=>`<option value="${esc(c.id)}">${esc(c.student_code)} — ${esc(c.student_name)}</option>`).join('');if(list.some(c=>String(c.id)===old))sel.value=old;sel.disabled=!grade||!cls||!list.length}
@@ -860,7 +952,7 @@ function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDe
   b.dataset.busy='1';b.disabled=true;b.textContent='Đang xử lý...';
   try{await applySubject()}finally{b.dataset.busy='0';b.disabled=false;b.textContent=old}
 };$('load-subject-registrations').onclick=async()=>{const b=$('load-subject-registrations');b.disabled=true;const oldText=b.textContent;b.textContent='Đang tải...';try{await loadSubjectRegistrations()}catch(e){message($('subject-message'),`Không tải được danh sách đăng ký môn: ${e.message}`,'error')}finally{b.disabled=false;b.textContent=oldText}};$('subject-exam-select').onchange=()=>{syncSubjectExamMode();loadSubjectRegistrations();loadRosterData()};$('subject-scope').onchange=()=>{const scope=$('subject-scope').value;$('subject-class-code').disabled=!['class','class_students'].includes(scope);$('subject-student-code').disabled=scope!=='student';$('subject-csv').disabled=false;$('subject-grade').disabled=scope!=='grade';$('subject-student-list').disabled=scope!=='class_students';$('subject-class-code-wrap').classList.add('hidden');$('subject-class-picker-wrap').classList.toggle('hidden',scope!=='class');$('subject-student-class-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-picker-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-code-wrap').classList.toggle('hidden',scope!=='student');$('subject-grade-wrap').classList.toggle('hidden',scope!=='grade');$('subject-student-list-wrap').classList.add('hidden');if(['class','class_students'].includes(scope)&&state.client)loadSubjectPickerCandidates();};$('subject-scope').dispatchEvent(new Event('change'));$('subject-student-class').onchange=renderSubjectStudentPicker;$('subject-exam-select').addEventListener('change',()=>{if(['class','class_students'].includes($('subject-scope').value))loadSubjectPickerCandidates()});$('subject-classes-select-all').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=true);$('subject-classes-clear').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=false);$('subject-students-select-all').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=true);$('subject-students-clear').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=false);$('subject-mode').onchange=()=>{const elective=$('subject-mode').value==='elective';$('subject-order-wrap').classList.toggle('hidden',!elective);if(!elective)$('subject-order').value='1'};$('subject-mode').dispatchEvent(new Event('change'));initSubjectCatalog();$('preview-rooming').onclick=previewRooming;$('save-rooming').onclick=()=>saveRooming(false);$('lock-rooming').onclick=()=>{if(confirm('Khóa phương án xếp phòng? Hãy chắc chắn đã kiểm tra danh sách.'))saveRooming(true)};$('export-rooming').onclick=exportRooming;
-  $('roster-reload').onclick=loadRosterData;$('roster-grade').onchange=()=>{syncRosterClassFilters();state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-class').onchange=()=>{state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-search').oninput=()=>{state.rosterPage=0;renderRosterTable()};$('roster-show-overage').onchange=renderRosterTable;$('roster-prev').onclick=()=>{state.rosterPage=Math.max(0,state.rosterPage-1);renderRosterTable()};$('roster-next').onclick=()=>{state.rosterPage++;renderRosterTable()};$('roster-table-body').addEventListener('change',e=>{if(e.target.matches('[data-roster-subject]')){const tr=e.target.closest('tr'),sels=[...tr.querySelectorAll('[data-roster-subject]')];const id=String(tr.dataset.candidateId);state.rosterDirty.set(id,{m1:sels[0].value,m2:sels[1].value});tr.classList.add('roster-dirty');renderRosterTable();}});$('roster-table-body').addEventListener('click',async e=>{const btn=e.target.closest('[data-roster-save]');if(btn){btn.disabled=true;const ok=await saveRosterStudent(btn.dataset.rosterSave);if(ok){renderRosterTable();renderRosterStats();message($('roster-message'),'Đã lưu môn lựa chọn cho học sinh.','success')}btn.disabled=false}});$('roster-save-all').onclick=saveRosterAll;$('overage-grade').onchange=syncOverageClassFilters;$('overage-class').onchange=syncOverageStudents;$('overage-add').onclick=addOverageStudent;$('roster-stats-refresh').onclick=renderRosterStats;$('roster-stats-scope').onchange=()=>{if($('roster-stats-scope').value==='all'){$('roster-stats-grade').disabled=true;$('roster-stats-class').disabled=true}else{$('roster-stats-grade').disabled=false;$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class'||!$('roster-stats-grade').value}renderRosterStats()};$('roster-stats-grade').onchange=()=>{syncRosterStatsClass();$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class';renderRosterStats()};$('roster-stats-class').onchange=renderRosterStats;
+  $('roster-import-btn').onclick=importRosterElectivesFromExcel;$('roster-template-btn').onclick=downloadRosterExcelTemplate;$('roster-reload').onclick=loadRosterData;$('roster-grade').onchange=()=>{syncRosterClassFilters();state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-class').onchange=()=>{state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-search').oninput=()=>{state.rosterPage=0;renderRosterTable()};$('roster-show-overage').onchange=renderRosterTable;$('roster-prev').onclick=()=>{state.rosterPage=Math.max(0,state.rosterPage-1);renderRosterTable()};$('roster-next').onclick=()=>{state.rosterPage++;renderRosterTable()};$('roster-table-body').addEventListener('change',e=>{if(e.target.matches('[data-roster-subject]')){const tr=e.target.closest('tr'),sels=[...tr.querySelectorAll('[data-roster-subject]')];const id=String(tr.dataset.candidateId);state.rosterDirty.set(id,{m1:sels[0].value,m2:sels[1].value});tr.classList.add('roster-dirty');renderRosterTable();}});$('roster-table-body').addEventListener('click',async e=>{const btn=e.target.closest('[data-roster-save]');if(btn){btn.disabled=true;const ok=await saveRosterStudent(btn.dataset.rosterSave);if(ok){renderRosterTable();renderRosterStats();message($('roster-message'),'Đã lưu môn lựa chọn cho học sinh.','success')}btn.disabled=false}});$('roster-save-all').onclick=saveRosterAll;$('overage-grade').onchange=syncOverageClassFilters;$('overage-class').onchange=syncOverageStudents;$('overage-add').onclick=addOverageStudent;$('roster-stats-refresh').onclick=renderRosterStats;$('roster-stats-scope').onchange=()=>{if($('roster-stats-scope').value==='all'){$('roster-stats-grade').disabled=true;$('roster-stats-class').disabled=true}else{$('roster-stats-grade').disabled=false;$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class'||!$('roster-stats-grade').value}renderRosterStats()};$('roster-stats-grade').onchange=()=>{syncRosterStatsClass();$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class';renderRosterStats()};$('roster-stats-class').onchange=renderRosterStats;
 }
 async function boot(){wire();renderSubjects();const config=readConfig();if(!config.url||!config.key){showScreen('setup-screen');return}$('supabase-url').value=config.url;$('supabase-key').value=config.key;try{await connect(config.url,config.key)}catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('login-message'),`Không kết nối được: ${e.message}`,'error')}}
 boot();
