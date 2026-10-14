@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+import { assignElectiveCandidateToRoom, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
 
 test('elective rooming assigns every candidate once, respects capacity, and keeps the two sessions disjoint', () => {
   const candidates = [
@@ -51,4 +51,30 @@ test('invalid elective registrations fail without creating a plan', () => {
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join(' '), /hai môn khác nhau/i);
+});
+
+test('manual room allocation flips candidate sessions when needed and rejects a cross-session collision', () => {
+  const currentAssignments = [
+    { candidate_id: '1', ca1_subject_code: 'LY', ca2_subject_code: 'ANH' }
+  ];
+  const movable = {
+    id: '2',
+    sbd: '310002',
+    elective_subjects: ['ANH', 'LY']
+  };
+
+  const compatible = assignElectiveCandidateToRoom(movable, currentAssignments, 'P01');
+  assert.equal(compatible.candidate_id, '2');
+  assert.equal(compatible.room_code, 'P01');
+  assert.equal(compatible.ca1_subject_code, 'LY');
+  assert.equal(compatible.ca2_subject_code, 'ANH');
+
+  const blocked = assignElectiveCandidateToRoom({
+    id: '3',
+    elective_subjects: ['ANH', 'SU']
+  }, [
+    { ca1_subject_code: 'ANH', ca2_subject_code: 'LY' },
+    { ca1_subject_code: 'SU', ca2_subject_code: 'DIA' }
+  ], 'P01');
+  assert.equal(blocked, null);
 });

@@ -65,7 +65,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.35</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.46</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -90,167 +90,21 @@
     </section>
 
     <section id="app-screen" class="hidden">
-      <div class="welcome-row"><div><div class="eyebrow">BẢNG ĐIỀU KHIỂN</div><h1>Quản lý kỳ thi</h1><p>Quản lý kỳ thi, đăng ký môn lựa chọn và phương án xếp phòng.</p></div><button id="reload-exams" class="btn btn-light">Làm mới</button></div>
+      <div class="welcome-row"><div><div class="eyebrow">BẢNG ĐIỀU KHIỂN</div><h1 id="app-title">Quản lý kỳ thi</h1><p>Quản lý kỳ thi, đăng ký môn lựa chọn và phương án xếp phòng.</p></div><button id="reload-exams" class="btn btn-light">Làm mới</button></div>
       <nav class="tabs" aria-label="Chức năng"><button class="tab active" data-tab="exams">Kỳ thi</button><button class="tab" data-tab="candidates">Hồ sơ thí sinh</button><button class="tab" data-tab="subjects">Môn thi</button><button class="tab" data-tab="sbd">Quản lý SBD</button><button class="tab" data-tab="rooming">Xếp phòng thi</button><button class="tab" data-tab="settings">Cấu hình</button></nav>
       <div id="global-message" class="notice hidden"></div>
 
-      <section class="tab-panel" id="tab-exams">
-        <div class="section-heading"><div><h2>Danh sách kỳ thi</h2><p>Tạo kỳ thi mới hoặc chọn kỳ thi để quản lý.</p></div></div>
-        <form id="create-exam-form" class="inline-form"><label>Tên kỳ thi<input id="new-exam-name" required placeholder="Ví dụ: Khảo sát chất lượng lần 1"></label><label>Năm học<input id="new-exam-year" required placeholder="2026-2027"></label><label>Loại kỳ thi<select id="new-exam-mode" required><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn lựa chọn</option></select></label><button class="btn btn-primary" type="submit">+ Tạo kỳ thi</button></form>
-        <div class="table-wrap"><table><thead><tr><th>Tên kỳ thi</th><th>Năm học</th><th>Loại kỳ thi</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead><tbody id="exam-table-body"><tr><td colspan="6" class="empty">Chưa tải dữ liệu.</td></tr></tbody></table></div>
-      </section>
+            <div class="tab-module" id="module-exams" data-module="exams"></div>
 
-      <section class="tab-panel hidden" id="tab-candidates">
-        <div class="section-heading"><div><h2>Hồ sơ thí sinh</h2><p>Nhập hồ sơ học sinh độc lập với số báo danh và môn thi. Có thể cập nhật danh sách nhiều lần.</p></div><button id="download-csv-template" class="btn btn-light" type="button">Tải Excel mẫu (.xlsx)</button></div>
-        <div class="notice notice-info">Các cột gồm: student_code, student_name, date_of_birth, gender, ethnicity, grade_code, class_code. Không cần SBD và không cần khai báo môn thi ở bước này. Ưu tiên dùng Excel (.xlsx) để giữ nguyên tiếng Việt và số 0 đầu; có thể nhập CSV mã hóa UTF-8. Trong Excel, tất cả cột cần nhập nên ở dạng Text; ngày sinh nhập dạng văn bản dd/mm/yyyy (ví dụ 24/08/2009). Nếu mã định danh hoặc ngày sinh là ô số/ngày của Excel, hệ thống sẽ báo lỗi để tránh mất số 0 đầu hoặc đảo ngày tháng.</div>
-        <form id="import-form" class="inline-form"><label>File danh sách học sinh<input id="candidate-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label><button class="btn btn-primary" type="submit">Kiểm tra và nhập hồ sơ</button></form>
-        <div id="import-preview" class="table-wrap"></div>
-        <div class="section-heading subheading candidate-toolbar">
-          <div><h3>Học sinh trong kỳ thi đang chọn</h3><p>Quản lý hồ sơ theo khối, lớp; SBD và môn thi được thiết lập ở các bước riêng.</p></div>
-          <button id="candidate-add-open" class="btn btn-primary" type="button">+ Thêm mới</button>
-        </div>
-        <div class="candidate-filters">
-          <label>Khối<select id="candidate-grade-filter"><option value="">Tất cả các khối</option></select></label>
-          <label>Lớp<select id="candidate-class-filter"><option value="">Tất cả các lớp</option></select></label>
-          <label class="search-label">Tìm kiếm<input id="candidate-search" type="search" placeholder="Mã định danh hoặc họ tên"></label>
-          <button id="candidate-clear-filters" class="btn btn-light" type="button">Xóa lọc</button>
-        </div>
-        <div class="candidate-bulk-toolbar">
-          <label class="select-all-label"><input id="candidate-select-all" type="checkbox"> Chọn tất cả trong danh sách đang lọc</label>
-          <span id="candidate-selected-count">Đã chọn 0 thí sinh</span>
-          <button id="candidate-bulk-delete" class="btn danger-btn" type="button" disabled>Xóa đã chọn</button>
-        </div>
-        <div id="candidate-form-message" class="notice hidden"></div>
-        <div id="candidate-delete-progress" class="candidate-delete-progress hidden" role="status" aria-live="polite">
-          <div class="delete-progress-heading"><strong id="candidate-delete-progress-title">Đang chuẩn bị xóa...</strong><span id="candidate-delete-progress-count">0/0</span></div>
-          <div class="delete-progress-track"><div id="candidate-delete-progress-bar" class="delete-progress-bar" style="width:0%"></div></div>
-          <p id="candidate-delete-progress-detail">Vui lòng không đóng hoặc tải lại trang trong khi xử lý.</p>
-        </div>
-        <div class="table-wrap"><table><thead><tr><th><input id="candidate-header-check" type="checkbox" aria-label="Chọn tất cả"></th><th>Mã định danh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th><th>Thao tác</th></tr></thead><tbody id="candidate-table-body"><tr><td colspan="9" class="empty">Chọn kỳ thi để xem danh sách.</td></tr></tbody></table></div>
-        <dialog id="candidate-modal" class="candidate-modal">
-          <form id="candidate-edit-form">
-            <div class="modal-heading"><div><h3 id="candidate-form-title">Thêm thí sinh</h3><p>Nhập hồ sơ học sinh. Không cần nhập SBD hoặc môn thi tại đây.</p></div><button id="candidate-modal-close" class="modal-close" type="button" aria-label="Đóng">×</button></div>
-            <input id="candidate-edit-id" type="hidden">
-            <div class="form-grid">
-              <label>Mã định danh<input id="candidate-edit-code" required maxlength="100" placeholder="Mã học sinh / mã định danh"></label>
-              <label>Họ và tên<input id="candidate-edit-name" required maxlength="200" placeholder="Họ và tên đầy đủ"></label>
-              <label>Khối<select id="candidate-edit-grade" required><option value="">-- Chọn khối --</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select></label>
-              <label>Lớp<input id="candidate-edit-class" required maxlength="50" placeholder="Ví dụ: 12A1"></label>
-              <label>Ngày sinh<input id="candidate-edit-dob" type="date"></label>
-              <label>Giới tính<select id="candidate-edit-gender"><option value="">-- Chọn --</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
-              <label>Dân tộc<input id="candidate-edit-ethnicity" maxlength="100" placeholder="Ví dụ: Kinh"></label>
-            </div>
-            <div class="modal-actions"><button id="candidate-cancel-edit" class="btn btn-light" type="button">Hủy</button><button id="candidate-save" class="btn btn-primary" type="submit">Lưu thí sinh</button></div>
-          </form>
-        </dialog>
-      </section>
+            <div class="tab-module" id="module-candidates" data-module="candidates"></div>
 
-      <section class="tab-panel hidden" id="tab-subjects">
-        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình danh mục môn thi và quản lý đăng ký đã có. Để nhập danh sách môn lựa chọn từ Excel, chỉ sử dụng mục “Quản lý môn lựa chọn theo lớp” bên dưới.</p></div></div>
-        <div class="form-grid">
-          <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-          <label>Hình thức kỳ thi<select id="subject-config-kind" disabled><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn theo lớp/học sinh</option></select></label><div id="subject-mode-note" class="notice notice-info" style="grid-column:1/-1">Chọn kỳ thi để tải đúng hình thức cấu hình môn.</div>
-          <label>Loại môn<select id="subject-mode"><option value="required">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option></select></label>
-          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option></select></label>
-          <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
-          <div id="subject-class-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách lớp</strong><div><button id="subject-classes-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-classes-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-class-picker" class="checkbox-grid"></div></div>
-          <label id="subject-student-class-wrap" class="hidden">Chọn lớp<select id="subject-student-class"><option value="">-- Chọn lớp --</option></select></label>
-          <div id="subject-student-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách học sinh trong lớp</strong><div><button id="subject-students-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-students-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-student-picker" class="checkbox-grid"></div></div>
-          <label id="subject-student-code-wrap">Mã học sinh<input id="subject-student-code" placeholder="Ví dụ: HS0001"></label>
-          <label id="subject-grade-wrap">Khối áp dụng<select id="subject-grade"><option value="">-- Chọn khối --</option><option value="10">Khối 10</option><option value="11">Khối 11</option><option value="12">Khối 12</option></select></label>
-          <label id="subject-student-list-wrap" class="hidden">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3"></textarea></label>
-          <label>Môn thi<select id="subject-code"></select></label>
-          <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
-          <div class="hidden" aria-hidden="true"><input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"><button id="download-subject-template" type="button"></button></div>
-          <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
-        </div>
-        <div class="notice notice-info">Lưu ý: nhập danh sách môn lựa chọn từ Excel tại duy nhất mục “Quản lý môn lựa chọn theo lớp” bên dưới. Khu vực này chỉ dùng để cấu hình môn thi hoặc quản lý đăng ký từng môn, tránh nhập trùng qua nhiều luồng.</div>
-        <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
-          <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
-          <div class="roster-import-box">
-            <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; Môn 1/Môn 2 phải là mã môn như ANH, LY, HOA, SINH.</span></label>
-            <div class="roster-import-controls">
-              <input id="roster-excel-file" type="file" accept=".xlsx,.csv">
-              <button id="roster-import-btn" type="button" class="btn btn-primary">Nạp Excel vào danh sách</button>
-              <button id="roster-template-btn" type="button" class="btn btn-light">Tải mẫu Excel</button>
-            </div>
-            <p class="help-text">Hệ thống đối chiếu theo mã học sinh với kỳ thi đang chọn, kiểm tra toàn bộ file trước khi ghi và báo rõ các dòng không khớp.</p>
-          </div>
-          <div class="candidate-filters roster-filters">
-            <label>Khối<select id="roster-grade"><option value="">-- Chọn khối --</option></select></label>
-            <label>Lớp<select id="roster-class" disabled><option value="">-- Chọn lớp --</option></select></label>
-            <label>Tìm học sinh<input id="roster-search" type="search" placeholder="Mã học sinh hoặc họ tên"></label>
-            <label class="roster-checkbox"><input id="roster-show-overage" type="checkbox"> Hiện học sinh vượt cấp</label>
-          </div>
-          <div class="roster-summary" id="roster-summary"><div class="metric"><span>Học sinh trong lớp</span><strong>—</strong></div><div class="metric"><span>Đủ 2 môn</span><strong>—</strong></div><div class="metric"><span>Chưa đủ môn</span><strong>—</strong></div></div>
-          <div class="table-wrap roster-table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp gốc</th><th>Môn 1</th><th>Môn 2</th><th>Diện</th><th></th></tr></thead><tbody id="roster-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi, khối và lớp.</td></tr></tbody></table></div>
-          <div class="roster-footer"><span id="roster-page-info">Chưa có dữ liệu</span><div><button class="btn btn-light btn-small" id="roster-print-btn" type="button">In danh sách lớp</button><button class="btn btn-light btn-small" id="roster-prev" type="button">Trước</button><button class="btn btn-light btn-small" id="roster-next" type="button">Tiếp</button><button class="btn btn-primary" id="roster-save-all" type="button">Lưu các thay đổi</button></div></div>
-          <div id="roster-message" class="notice hidden"></div>
-        </section>
-        <section class="panel overage-panel">
-          <div class="section-heading"><div><h3>Thêm học sinh vượt cấp</h3><p>Chọn học sinh từ khối/lớp khác trong danh sách thí sinh của kỳ thi hiện tại. Không tạo hồ sơ học sinh trùng.</p></div></div>
-          <div class="candidate-filters overage-filters">
-            <label>Khối đang học<select id="overage-grade"><option value="">-- Chọn khối --</option></select></label>
-            <label>Lớp đang học<select id="overage-class" disabled><option value="">-- Chọn lớp --</option></select></label>
-            <label>Học sinh<select id="overage-student" disabled><option value="">-- Chọn học sinh --</option></select></label>
-            <button id="overage-add" class="btn btn-primary" type="button">Đánh dấu vượt cấp</button>
-          </div>
-          <div id="overage-message" class="notice hidden"></div>
-        </section>
-        <section class="panel roster-stat-panel">
-          <div class="section-heading"><div><h3>Thống kê lựa chọn môn</h3><p>Số học sinh duy nhất đã đăng ký mỗi môn; bộ lọc lớp được áp dụng nếu chọn lớp.</p></div><button id="roster-stats-refresh" class="btn btn-light" type="button">Cập nhật thống kê</button></div>
-          <div class="candidate-filters"><label>Phạm vi thống kê<select id="roster-stats-scope"><option value="grade">Theo khối</option><option value="class">Theo lớp</option><option value="all">Toàn kỳ thi</option></select></label><label>Khối thống kê<select id="roster-stats-grade"><option value="">-- Chọn khối --</option></select></label><label>Lớp thống kê<select id="roster-stats-class"><option value="">Tất cả lớp trong khối</option></select></label></div>
-          <div id="roster-stats-cards" class="roster-stats-grid"></div>
-          <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Môn 1</th><th>Môn 2</th><th>Tổng lượt chọn</th></tr></thead><tbody id="roster-stats-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và cập nhật thống kê.</td></tr></tbody></table></div>
-        </section>
-        <div id="subject-message" class="notice hidden"></div>
-        <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th><th>Thao tác</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
-      </section>
+            <div class="tab-module" id="module-subjects" data-module="subjects"></div>
 
-      <section class="tab-panel hidden" id="tab-sbd">
-        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p>Cấp SBD độc lập với việc xếp phòng. Mỗi thí sinh có một SBD duy nhất trong kỳ thi; thay đổi phương án hoặc sức chứa phòng không làm thay đổi SBD đã cấp.</p></div></div>
-        <div class="panel">
-          <div class="form-grid">
-            <label>Kỳ thi<select id="sbd-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-            <label>Quy tắc sắp xếp<select id="room-sort-mode"><option value="abc">Theo Tên, đệm, họ</option><option value="previous">Theo kết quả kỳ thi trước</option></select></label>
-            <label>Độ dài số báo danh<select id="sbd-length"><option value="6">6 chữ số</option><option value="8">8 chữ số</option></select></label>
-            <label>Số chữ số tiền tố<select id="sbd-prefix-length"><option value="2">2 chữ số đầu</option><option value="3">3 chữ số đầu</option></select></label>
-            <label>Tiền tố SBD (chỉ số)<input id="sbd-prefix" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="3" value="31" required></label>
-            <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
-            <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button></div>
-          </div>
-          <div id="sbd-message" class="notice hidden"></div>
-          <p class="muted">Ví dụ: SBD 6 chữ số, tiền tố 31 sẽ tạo 310001, 310002…; SBD 8 chữ số, tiền tố 31 sẽ tạo 31000001, 31000002…</p>
-        </div>
-      </section>
+            <div class="tab-module" id="module-sbd" data-module="sbd"></div>
 
-      <section class="tab-panel hidden" id="tab-rooming">
-        <div class="section-heading"><div><h2>Xếp phòng thi</h2><p>Xếp phòng môn bắt buộc và môn lựa chọn độc lập. Mỗi phòng có thể tổ chức nhiều môn trong một ca; hệ thống ưu tiên đủ sĩ số và giảm số môn, đồng thời không để một môn xuất hiện ở cả hai ca.</p></div></div>
-        <div class="notice notice-info"><b>Quy trình:</b> Cấp SBD trước, sau đó mới tạo phương án xếp phòng. SBD được lưu theo từng thí sinh trong kỳ thi và không thay đổi khi xếp lại phòng. <b>Quy tắc môn:</b> Chế độ môn bắt buộc xếp Toán hoặc Ngữ văn thành phương án riêng. Chế độ môn lựa chọn cho phép nhiều môn trong mỗi ca, nhưng tập môn Ca 1 và Ca 2 của một phòng không được giao nhau. Học sinh đăng ký Anh–Lý và Lý–Anh có thể được đổi thứ tự để ghép phòng.</div>
-        <div class="form-grid rooming-controls">
-          <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-          <label>Loại phương án<select id="room-plan-type"><option value="elective">Môn lựa chọn</option><option value="mandatory">Môn bắt buộc</option></select></label>
-          <label id="mandatory-subject-wrap" class="hidden">Môn bắt buộc<select id="mandatory-subject"><option value="TOAN">Toán</option><option value="VAN">Ngữ văn</option></select></label>
-          <label>Sức chứa phòng (tối đa 25)<input id="room-capacity" type="number" min="1" max="25" value="24" required></label>
-          <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
-          <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
-<div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phương án</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Khóa phương án</button></div>
-        </div>
-        <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
-        <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số</th><th>Ca 1 / Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="6" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
-        <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách thí sinh theo SBD đã cấp; xếp phòng không cấp lại SBD.</p></div><div class="form-actions">
-            
-            <button id="export-rooming" class="btn btn-light" disabled>Xuất Excel</button>
-            <button id="print-rooming-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button>
-          </div></div>
-        <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1 / Môn thi</th><th>Ca 2</th></tr></thead><tbody id="assignment-table-body"><tr><td colspan="6" class="empty">Chưa có phân công.</td></tr></tbody></table></div>
-      </section>
+            <div class="tab-module" id="module-rooming" data-module="rooming"></div>
 
-      <section class="tab-panel hidden" id="tab-settings">
-        <div class="section-heading"><div><h2>Cấu hình kỳ thi</h2><p>Các môn bắt buộc có lịch cứng; bảy môn lựa chọn dùng mã thống nhất.</p></div></div>
-        <div class="subject-grid" id="subject-catalog"></div>
-        <div class="notice">Mã môn: SU – Lịch sử; DIA – Địa lí; GDKTPL – Giáo dục kinh tế và pháp luật; LY – Vật lí; HOA – Hóa học; SINH – Sinh học; TIN – Tin học. Quản lý số báo danh được thực hiện riêng tại tab “Quản lý SBD”; xếp phòng sử dụng SBD đã cấp và không tự đánh lại số.</div>
-      </section>
+            <div class="tab-module" id="module-settings" data-module="settings"></div>
     </section>
 <dialog id="subject-manage-dialog" class="modal-dialog">
   <div class="modal-header"><div><h3 id="subject-manage-title">Quản lý học sinh theo môn</h3><p id="subject-manage-subtitle">Thêm, chuyển môn hoặc xóa đăng ký.</p></div><button id="subject-manage-close" class="btn btn-light" type="button">Đóng</button></div>
@@ -269,9 +123,16 @@
 #subject-manage-dialog .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
+.room-editor-dialog{width:min(960px,94vw);max-height:90vh;overflow:auto}
+.room-editor-dialog form{padding:24px}
+.room-editor-columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.room-editor-columns section{display:flex;flex-direction:column;gap:8px;min-width:0}
+.room-editor-columns select{width:100%;min-height:260px;border:1px solid #cbd5e1;border-radius:10px;padding:8px}
+.room-editor-columns option{padding:5px}
+@media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.43 · build 2026-10-14-sbd-tab-fix</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.46 · build 2026-10-14-exam-modules</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.43"></script>
+  <script type="module" src="./js/app.js?v=0.1.46"></script>
 </body>
 </html>

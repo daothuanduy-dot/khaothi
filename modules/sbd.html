@@ -1,0 +1,16 @@
+<section class="tab-panel hidden" id="tab-sbd">
+        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p>Cấp SBD độc lập với việc xếp phòng. Mỗi thí sinh có một SBD duy nhất trong kỳ thi; thay đổi phương án hoặc sức chứa phòng không làm thay đổi SBD đã cấp.</p></div></div>
+        <div class="panel">
+          <div class="form-grid">
+            <label>Kỳ thi<select id="sbd-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
+            <label>Quy tắc sắp xếp<select id="room-sort-mode"><option value="abc">Theo Tên, đệm, họ</option><option value="previous">Theo kết quả kỳ thi trước</option></select></label>
+            <label>Độ dài số báo danh<select id="sbd-length"><option value="6">6 chữ số</option><option value="8">8 chữ số</option></select></label>
+            <label>Số chữ số tiền tố<select id="sbd-prefix-length"><option value="2">2 chữ số đầu</option><option value="3">3 chữ số đầu</option></select></label>
+            <label>Tiền tố SBD (chỉ số)<input id="sbd-prefix" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="3" value="31" required></label>
+            <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
+            <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button></div>
+          </div>
+          <div id="sbd-message" class="notice hidden"></div>
+          <p class="muted">Ví dụ: SBD 6 chữ số, tiền tố 31 sẽ tạo 310001, 310002…; SBD 8 chữ số, tiền tố 31 sẽ tạo 31000001, 31000002…</p>
+        </div>
+      </section>

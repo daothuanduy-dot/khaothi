@@ -1,0 +1,61 @@
+<section class="tab-panel hidden" id="tab-subjects">
+        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình danh mục môn thi và quản lý đăng ký đã có. Để nhập danh sách môn lựa chọn từ Excel, chỉ sử dụng mục “Quản lý môn lựa chọn theo lớp” bên dưới.</p></div></div>
+        <div class="form-grid">
+          <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
+          <label>Hình thức kỳ thi<select id="subject-config-kind" disabled><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn theo lớp/học sinh</option></select></label><div id="subject-mode-note" class="notice notice-info" style="grid-column:1/-1">Chọn kỳ thi để tải đúng hình thức cấu hình môn.</div>
+          <label>Loại môn<select id="subject-mode"><option value="required">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option></select></label>
+          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option></select></label>
+          <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
+          <div id="subject-class-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách lớp</strong><div><button id="subject-classes-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-classes-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-class-picker" class="checkbox-grid"></div></div>
+          <label id="subject-student-class-wrap" class="hidden">Chọn lớp<select id="subject-student-class"><option value="">-- Chọn lớp --</option></select></label>
+          <div id="subject-student-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách học sinh trong lớp</strong><div><button id="subject-students-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-students-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-student-picker" class="checkbox-grid"></div></div>
+          <label id="subject-student-code-wrap">Mã học sinh<input id="subject-student-code" placeholder="Ví dụ: HS0001"></label>
+          <label id="subject-grade-wrap">Khối áp dụng<select id="subject-grade"><option value="">-- Chọn khối --</option><option value="10">Khối 10</option><option value="11">Khối 11</option><option value="12">Khối 12</option></select></label>
+          <label id="subject-student-list-wrap" class="hidden">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3"></textarea></label>
+          <label>Môn thi<select id="subject-code"></select></label>
+          <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
+          <div class="hidden" aria-hidden="true"><input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"><button id="download-subject-template" type="button"></button></div>
+          <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
+        </div>
+        <div class="notice notice-info">Lưu ý: nhập danh sách môn lựa chọn từ Excel tại duy nhất mục “Quản lý môn lựa chọn theo lớp” bên dưới. Khu vực này chỉ dùng để cấu hình môn thi hoặc quản lý đăng ký từng môn, tránh nhập trùng qua nhiều luồng.</div>
+        <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
+          <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
+          <div class="roster-import-box">
+            <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; Môn 1/Môn 2 phải là mã môn như ANH, LY, HOA, SINH.</span></label>
+            <div class="roster-import-controls">
+              <input id="roster-excel-file" type="file" accept=".xlsx,.csv">
+              <button id="roster-import-btn" type="button" class="btn btn-primary">Nạp Excel vào danh sách</button>
+              <button id="roster-template-btn" type="button" class="btn btn-light">Tải mẫu Excel</button>
+            </div>
+            <p class="help-text">Hệ thống đối chiếu theo mã học sinh với kỳ thi đang chọn, kiểm tra toàn bộ file trước khi ghi và báo rõ các dòng không khớp.</p>
+          </div>
+          <div class="candidate-filters roster-filters">
+            <label>Khối<select id="roster-grade"><option value="">-- Chọn khối --</option></select></label>
+            <label>Lớp<select id="roster-class" disabled><option value="">-- Chọn lớp --</option></select></label>
+            <label>Tìm học sinh<input id="roster-search" type="search" placeholder="Mã học sinh hoặc họ tên"></label>
+            <label class="roster-checkbox"><input id="roster-show-overage" type="checkbox"> Hiện học sinh vượt cấp</label>
+          </div>
+          <div class="roster-summary" id="roster-summary"><div class="metric"><span>Học sinh trong lớp</span><strong>—</strong></div><div class="metric"><span>Đủ 2 môn</span><strong>—</strong></div><div class="metric"><span>Chưa đủ môn</span><strong>—</strong></div></div>
+          <div class="table-wrap roster-table-wrap"><table><thead><tr><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp gốc</th><th>Môn 1</th><th>Môn 2</th><th>Diện</th><th></th></tr></thead><tbody id="roster-table-body"><tr><td colspan="7" class="empty">Chọn kỳ thi, khối và lớp.</td></tr></tbody></table></div>
+          <div class="roster-footer"><span id="roster-page-info">Chưa có dữ liệu</span><div><button class="btn btn-light btn-small" id="roster-print-btn" type="button">In danh sách lớp</button><button class="btn btn-light btn-small" id="roster-prev" type="button">Trước</button><button class="btn btn-light btn-small" id="roster-next" type="button">Tiếp</button><button class="btn btn-primary" id="roster-save-all" type="button">Lưu các thay đổi</button></div></div>
+          <div id="roster-message" class="notice hidden"></div>
+        </section>
+        <section class="panel overage-panel">
+          <div class="section-heading"><div><h3>Thêm học sinh vượt cấp</h3><p>Chọn học sinh từ khối/lớp khác trong danh sách thí sinh của kỳ thi hiện tại. Không tạo hồ sơ học sinh trùng.</p></div></div>
+          <div class="candidate-filters overage-filters">
+            <label>Khối đang học<select id="overage-grade"><option value="">-- Chọn khối --</option></select></label>
+            <label>Lớp đang học<select id="overage-class" disabled><option value="">-- Chọn lớp --</option></select></label>
+            <label>Học sinh<select id="overage-student" disabled><option value="">-- Chọn học sinh --</option></select></label>
+            <button id="overage-add" class="btn btn-primary" type="button">Đánh dấu vượt cấp</button>
+          </div>
+          <div id="overage-message" class="notice hidden"></div>
+        </section>
+        <section class="panel roster-stat-panel">
+          <div class="section-heading"><div><h3>Thống kê lựa chọn môn</h3><p>Số học sinh duy nhất đã đăng ký mỗi môn; bộ lọc lớp được áp dụng nếu chọn lớp.</p></div><button id="roster-stats-refresh" class="btn btn-light" type="button">Cập nhật thống kê</button></div>
+          <div class="candidate-filters"><label>Phạm vi thống kê<select id="roster-stats-scope"><option value="grade">Theo khối</option><option value="class">Theo lớp</option><option value="all">Toàn kỳ thi</option></select></label><label>Khối thống kê<select id="roster-stats-grade"><option value="">-- Chọn khối --</option></select></label><label>Lớp thống kê<select id="roster-stats-class"><option value="">Tất cả lớp trong khối</option></select></label></div>
+          <div id="roster-stats-cards" class="roster-stats-grid"></div>
+          <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Môn 1</th><th>Môn 2</th><th>Tổng lượt chọn</th></tr></thead><tbody id="roster-stats-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và cập nhật thống kê.</td></tr></tbody></table></div>
+        </section>
+        <div id="subject-message" class="notice hidden"></div>
+        <div class="table-wrap"><table><thead><tr><th>Mã môn</th><th>Tên môn</th><th>Loại môn</th><th>Thứ tự ca</th><th>Số học sinh đã áp dụng</th><th>Thao tác</th></tr></thead><tbody id="subject-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và tải thống kê môn.</td></tr></tbody></table></div>
+      </section>
