@@ -1,6 +1,6 @@
 <section class="tab-panel hidden" id="tab-rooming">
         <div class="section-heading"><div><h2>Xếp phòng thi</h2><p>Xếp phòng môn bắt buộc và môn lựa chọn độc lập. Mỗi phòng có thể tổ chức nhiều môn trong một ca; hệ thống ưu tiên đủ sĩ số và giảm số môn, đồng thời không để một môn xuất hiện ở cả hai ca.</p></div></div>
-        <div class="notice notice-info"><b>Quy trình:</b> Cấp SBD trước, sau đó mới tạo phương án xếp phòng. SBD được lưu theo từng thí sinh trong kỳ thi và không thay đổi khi xếp lại phòng. <b>Quy tắc môn:</b> Chế độ môn bắt buộc xếp Toán hoặc Ngữ văn thành phương án riêng. Chế độ môn lựa chọn cho phép nhiều môn trong mỗi ca, nhưng tập môn Ca 1 và Ca 2 của một phòng không được giao nhau. Học sinh đăng ký Anh–Lý và Lý–Anh có thể được đổi thứ tự để ghép phòng.</div>
+        <div class="notice notice-info"><b>Quy trình:</b> Cấp SBD trước, sau đó lập phương án sĩ số. Số thí sinh đủ điều kiện sẽ được chia thành các phòng; điều chỉnh sĩ số phòng thì phòng cân đối tự thay đổi để giữ nguyên tổng số. Chọn “Lưu phân bổ phòng” để hệ thống xếp thí sinh theo sĩ số đã chốt và lưu phương án. Với môn bắt buộc, danh sách thí sinh giống nhau giữa các môn; tên môn không lặp lại trong bảng. Môn lựa chọn vẫn phải bảo đảm môn ở Ca 1 không trùng môn ở Ca 2 trong cùng phòng.</div>
         <div class="form-grid rooming-controls">
           <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
           <label>Loại phương án<select id="room-plan-type"><option value="elective">Môn lựa chọn</option><option value="mandatory">Môn bắt buộc</option></select></label>
@@ -8,26 +8,16 @@
           <label>Sức chứa phòng (tối đa 25)<input id="room-capacity" type="number" min="1" max="25" value="24" required></label>
           <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
           <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
-<div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phân bổ phòng</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Phân phòng chính thức</button></div>
+<div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Xem trước phương án phòng</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phân bổ (xếp thí sinh)</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Phân phòng chính thức</button></div>
         </div>
-        <div class="notice notice-info">Có thể điều chỉnh từng phòng bằng nút “Điều chỉnh”: thêm thí sinh chưa xếp hoặc đưa thí sinh khỏi phòng. Lưu phân bổ trước khi chốt phân phòng chính thức. Chỉ khi đã chốt mới được xuất/in danh sách.</div>
+        <div class="notice notice-info">Xem trước sẽ hiển thị số phòng và sĩ số dự kiến. Khi tăng hoặc giảm sĩ số một phòng, sĩ số phòng cân đối sẽ tự thay đổi để tổng không đổi. Sau khi kiểm tra phương án, bấm “Lưu phân bổ (xếp thí sinh)” để xếp danh sách vào phòng và lưu; chỉ sau khi phân phòng chính thức mới được xuất/in danh sách.</div>
         <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
-        <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số</th><th>Ca 1 / Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th><th></th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="7" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
+        <div class="section-heading subheading"><div><h3>Phương án sĩ số phòng</h3><p id="room-plan-status">Chưa lập phương án phòng.</p></div><button id="add-room-plan" class="btn btn-light" type="button" disabled>+ Thêm phòng</button></div>
+        <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến</th><th>Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="7" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
         <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách thí sinh theo SBD đã cấp; xếp phòng không cấp lại SBD.</p></div><div class="form-actions">
             
             <button id="export-rooming" class="btn btn-light" disabled>Xuất Excel</button>
             <button id="print-rooming-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button>
           </div></div>
         <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1 / Môn thi</th><th>Ca 2</th></tr></thead><tbody id="assignment-table-body"><tr><td colspan="6" class="empty">Chưa có phân công.</td></tr></tbody></table></div>
-        <dialog id="room-editor-dialog" class="candidate-modal room-editor-dialog">
-          <form method="dialog" id="room-editor-form">
-            <div class="modal-heading"><div><h3 id="room-editor-title">Điều chỉnh phòng</h3><p id="room-editor-subtitle">Thêm hoặc đưa thí sinh khỏi phòng.</p></div><button id="room-editor-close" class="modal-close" type="button" aria-label="Đóng">×</button></div>
-            <div class="room-editor-columns">
-              <section><div class="picker-heading"><strong>Thí sinh trong phòng</strong></div><select id="room-editor-assigned" multiple size="12" aria-label="Thí sinh đang ở trong phòng"></select><button id="room-editor-remove" class="btn btn-light" type="button">Đưa khỏi phòng</button></section>
-              <section><div class="picker-heading"><strong>Thí sinh chưa xếp phòng</strong></div><select id="room-editor-available" multiple size="12" aria-label="Thí sinh chưa được phân phòng"></select><button id="room-editor-add" class="btn btn-primary" type="button">Thêm vào phòng</button></section>
-            </div>
-            <div id="room-editor-message" class="notice hidden" role="status" aria-live="polite"></div>
-            <div class="modal-actions"><button id="room-editor-save" class="btn btn-primary" type="button">Lưu điều chỉnh phòng</button></div>
-          </form>
-        </dialog>
       </section>

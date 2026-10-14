@@ -1,8 +1,10 @@
 const TAB_MODULES = ['exams', 'candidates', 'subjects', 'sbd', 'rooming', 'settings'];
+const MODULE_VERSION = '0.1.49';
 
 export async function loadTabModules() {
   const modules = await Promise.all(TAB_MODULES.map(async name => {
-    const response = await fetch(new URL(`../modules/${name}.html`, import.meta.url), {
+    const moduleUrl = new URL(`../modules/${name}.html?v=${MODULE_VERSION}`, import.meta.url);
+    const response = await fetch(moduleUrl, {
       cache: 'no-cache'
     });
     if (!response.ok) {

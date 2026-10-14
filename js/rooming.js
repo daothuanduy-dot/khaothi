@@ -80,6 +80,28 @@ function rebalanceSuggestedAssignments(candidates, roomPlan, suggestedAssignment
     (rooms.get(roomCode)?.students.length||0)!==count))return null;
   return [...targetCounts.keys()].flatMap(roomCode=>rooms.get(roomCode).students);
 }
+export function adjustRoomPlanCount(roomPlan, roomCode, requestedCount) {
+  if(!Array.isArray(roomPlan)||roomPlan.length<2)
+    return {ok:false,errors:['Cần ít nhất hai phòng để điều chỉnh sĩ số mà vẫn giữ nguyên tổng số thí sinh.']};
+  const index=roomPlan.findIndex(room=>room.room_code===roomCode);
+  const count=Number(requestedCount);
+  if(index<0||!Number.isInteger(count))
+    return {ok:false,errors:['Phòng hoặc sĩ số điều chỉnh không hợp lệ.']};
+  const room=roomPlan[index],current=Number(room.student_count);
+  const roomCapacity=Number(room.capacity);
+  if(!Number.isInteger(current)||!Number.isInteger(roomCapacity)||count<1||count>roomCapacity)
+    return {ok:false,errors:[`Sĩ số phòng phải từ 1 đến ${roomCapacity||'sức chứa phòng'}.`]};
+  const otherIndex=index===roomPlan.length-1?index-1:roomPlan.length-1;
+  const other=roomPlan[otherIndex],otherCurrent=Number(other.student_count);
+  const otherCapacity=Number(other.capacity);
+  const adjustedOther=otherCurrent-(count-current);
+  if(adjustedOther<1||adjustedOther>otherCapacity)
+    return {ok:false,errors:[`Không thể cân đối với phòng ${other.room_code}: sĩ số phải từ 1 đến ${otherCapacity}.`]};
+  const rooms=roomPlan.map((item,itemIndex)=>itemIndex===index
+    ?{...item,student_count:count}
+    :itemIndex===otherIndex?{...item,student_count:adjustedOther}:{...item});
+  return {ok:true,rooms};
+}
 export function allocateCandidatesToRoomPlan(candidates, roomPlan, options={}) {
   if(!Array.isArray(candidates)||!candidates.length)return {ok:false,errors:['Không có thí sinh đủ điều kiện.']};
   if(!Array.isArray(roomPlan)||!roomPlan.length)return {ok:false,errors:['Phương án chưa có phòng.']};
