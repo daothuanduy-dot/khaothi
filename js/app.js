@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.50';
-import {loadTabModules} from './module-loader.js?v=0.1.50';
-const APP_VERSION='v0.1.50';
-const APP_BUILD='2026-10-15-elective-room-review';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.51';
+import {loadTabModules} from './module-loader.js?v=0.1.51';
+const APP_VERSION='v0.1.51';
+const APP_BUILD='2026-10-15-elective-subject-groups';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;

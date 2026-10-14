@@ -27,3 +27,15 @@ test('exam creation and selection do not force navigation to the subjects tab', 
   assert.match(app, /notifyExamSelected\(exam\)/);
   assert.match(app, /function updateSelectedExamTitle\(\)/);
 });
+
+test('rooming preview leads to save-and-assign without a separate assignment button', async () => {
+  const rooming = await readFile(new URL('../modules/rooming.html', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+
+  assert.match(rooming, /Xem trước phương án phòng/);
+  assert.match(rooming, /Lưu phân bổ \(xếp thí sinh\)/);
+  assert.match(rooming, /môn của từng thí sinh/);
+  assert.doesNotMatch(rooming, /id="assign-rooming"/);
+  assert.match(app, /if\(!state\.preview\.assignmentsCreated&&!assignRoomingCandidates\(\)\)return/);
+  assert.doesNotMatch(app, /result\.assignments=\[\]/);
+});

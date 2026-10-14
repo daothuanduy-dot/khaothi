@@ -1,6 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assignElectiveCandidateToRoom, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+
+test('changing any room count offsets the balancing room and preserves the planned total', () => {
+  const plan = [
+    { room_code: 'P01', student_count: 4, capacity: 5 },
+    { room_code: 'P02', student_count: 3, capacity: 5 },
+    { room_code: 'P03', student_count: 3, capacity: 5 }
+  ];
+
+  const increase = adjustRoomPlanCount(plan, 'P01', 5);
+  assert.equal(increase.ok, true);
+  assert.deepEqual(increase.rooms.map(room => room.student_count), [5, 3, 2]);
+
+  const decrease = adjustRoomPlanCount(plan, 'P02', 2);
+  assert.equal(decrease.ok, true);
+  assert.deepEqual(decrease.rooms.map(room => room.student_count), [4, 2, 4]);
+
+  const adjustLast = adjustRoomPlanCount(plan, 'P03', 4);
+  assert.equal(adjustLast.ok, true);
+  assert.deepEqual(adjustLast.rooms.map(room => room.student_count), [4, 2, 4]);
+  assert.equal(adjustLast.rooms.reduce((sum, room) => sum + room.student_count, 0), 10);
+
+  const blocked = adjustRoomPlanCount(plan, 'P01', 7);
+  assert.equal(blocked.ok, false);
+  assert.deepEqual(plan.map(room => room.student_count), [4, 3, 3]);
+});
 
 test('elective rooming assigns every candidate once, respects capacity, and keeps the two sessions disjoint', () => {
   const candidates = [
@@ -77,4 +102,123 @@ test('manual room allocation flips candidate sessions when needed and rejects a 
     { ca1_subject_code: 'SU', ca2_subject_code: 'DIA' }
   ], 'P01');
   assert.equal(blocked, null);
+});
+
+test('candidate assignment happens only against room quotas that exactly match the roster', () => {
+  const candidates = [
+    { id: '1', sbd: '310001', elective_subjects: ['ANH', 'LY'] },
+    { id: '2', sbd: '310002', elective_subjects: ['LY', 'ANH'] },
+    { id: '3', sbd: '310003', elective_subjects: ['HOA', 'SINH'] },
+    { id: '4', sbd: '310004', elective_subjects: ['SINH', 'HOA'] },
+    { id: '5', sbd: '310005', elective_subjects: ['SU', 'DIA'] }
+  ];
+  const initial = optimizeElectiveRooms(candidates, { capacity: 3, roomPrefix: 'P', firstRoomNumber: 1 });
+  const plan = initial.rooms.map(room => ({
+    room_code: room.room_code,
+    room_number: room.room_number,
+    student_count: room.student_count,
+    capacity: room.capacity
+  }));
+  const allocated = allocateCandidatesToRoomPlan(candidates, plan, {
+    capacity: 3,
+    planType: 'elective'
+  });
+
+  assert.equal(allocated.ok, true, allocated.errors?.join('; '));
+  assert.deepEqual(allocated.rooms.map(room => room.student_count), plan.map(room => room.student_count));
+  assert.equal(allocated.assignments.length, candidates.length);
+  for (const room of allocated.rooms) {
+    assert.equal(room.ca1_subject_codes.some(code => room.ca2_subject_codes.includes(code)), false);
+  }
+
+  const adjustedPlan = plan.map(room => ({ ...room }));
+  adjustedPlan[0].student_count -= 1;
+  adjustedPlan.at(-1).student_count += 1;
+  const rebalanced = allocateCandidatesToRoomPlan(candidates, adjustedPlan, {
+    capacity: 3,
+    planType: 'elective',
+    suggestedAssignments: initial.assignments
+  });
+  assert.equal(rebalanced.ok, true, rebalanced.errors?.join('; '));
+  assert.deepEqual(rebalanced.rooms.map(room => room.student_count), adjustedPlan.map(room => room.student_count));
+
+  const incomplete = allocateCandidatesToRoomPlan(candidates, plan.slice(0, 1), {
+    capacity: 3,
+    planType: 'elective'
+  });
+  assert.equal(incomplete.ok, false);
+  assert.match(incomplete.errors.join(' '), /tổng sĩ số dự kiến/i);
+});
+
+test('elective allocation rebalances a 533-candidate plan of seventeen 24-seat and five 25-seat rooms', () => {
+  const subjects = ['ANH', 'SU', 'DIA', 'LY', 'HOA', 'SINH', 'TIN', 'KTPL', 'GDKTPL'];
+  let seed = 20261015;
+  const randomValue = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  const randomIndex = () => Math.floor(randomValue() * subjects.length);
+  const randomDifferentIndex = first => {
+    const value = Math.floor(randomValue() * (subjects.length - 1));
+    return value >= first ? value + 1 : value;
+  };
+  const candidates = Array.from({ length: 533 }, (_, index) => {
+    const first = randomIndex();
+    const second = randomDifferentIndex(first);
+    return {
+      id: String(index + 1),
+      sbd: String(100001 + index),
+      student_name: `Candidate ${index + 1}`,
+      elective_subjects: [subjects[first], subjects[second]]
+    };
+  });
+  const initial = optimizeElectiveRooms(candidates, {
+    capacity: 25,
+    roomPrefix: 'P',
+    firstRoomNumber: 1,
+    sortMode: 'sbd'
+  });
+  assert.equal(initial.ok, true);
+  assert.equal(initial.rooms.length, 22);
+  assert.ok(initial.summary.subject_count <= 90,
+    `Expected grouped rooms to reduce total room-subject occurrences, got ${initial.summary.subject_count}.`);
+
+  const plan = Array.from({ length: 22 }, (_, index) => ({
+    room_code: `P${String(index + 1).padStart(2, '0')}`,
+    room_number: index + 1,
+    student_count: index < 17 ? 24 : 25,
+    capacity: 25
+  }));
+  const allocated = allocateCandidatesToRoomPlan(candidates, plan, {
+    capacity: 25,
+    planType: 'elective',
+    suggestedAssignments: initial.assignments
+  });
+
+  assert.equal(allocated.ok, true, allocated.errors?.join('; '));
+  assert.equal(allocated.assignments.length, candidates.length);
+  assert.equal(new Set(allocated.assignments.map(row => row.candidate_id)).size, candidates.length);
+  assert.deepEqual(allocated.rooms.map(room => room.student_count),
+    [...Array(17).fill(24), ...Array(5).fill(25)]);
+  assert.ok(allocated.summary.subject_count <= 90,
+    `Expected adjusted rooms to keep subject counts low, got ${allocated.summary.subject_count}.`);
+  for (const room of allocated.rooms) {
+    assert.equal(room.ca1_subject_codes.some(code => room.ca2_subject_codes.includes(code)), false);
+    assert.equal(room.candidate_ids.length, room.student_count);
+  }
+});
+
+test('mandatory candidates are assigned in the confirmed room-count sequence', () => {
+  const candidates = Array.from({ length: 5 }, (_, index) => ({
+    id: String(index + 1),
+    sbd: `31000${index + 1}`
+  }));
+  const allocated = allocateCandidatesToRoomPlan(candidates, [
+    { room_code: 'M01', room_number: 1, student_count: 2, capacity: 3 },
+    { room_code: 'M02', room_number: 2, student_count: 3, capacity: 3 }
+  ], { capacity: 3, planType: 'mandatory', subjectCode: 'TOAN' });
+
+  assert.equal(allocated.ok, true);
+  assert.deepEqual(allocated.rooms.map(room => room.student_count), [2, 3]);
+  assert.deepEqual(allocated.assignments.map(row => row.room_code), ['M01', 'M01', 'M02', 'M02', 'M02']);
 });

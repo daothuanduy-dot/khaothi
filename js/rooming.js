@@ -71,6 +71,71 @@ function orientRoomAssignments(assignments, candidateById) {
     return {...assignment,ca1_subject_code:ca1,ca2_subject_code:ca2};
   });
 }
+function allocateElectiveBySubjectGroups(candidates, roomPlan, tieSeed=0) {
+  const candidateById=new Map(candidates.map(candidate=>[
+    String(candidate.id??candidate.candidate_id),candidate
+  ]));
+  if(candidateById.size!==candidates.length)return null;
+  const grouped=new Map();
+  for(const candidate of candidates){
+    const pair=[...candidate.elective_subjects].sort(),key=pair.join('|');
+    if(!grouped.has(key))grouped.set(key,{pair,students:[],offset:0});
+    grouped.get(key).students.push(candidate);
+  }
+  const rank=key=>{
+    let value=(2166136261^tieSeed)>>>0;
+    for(const character of key)value=Math.imul(value^character.charCodeAt(0),16777619)>>>0;
+    return value;
+  };
+  const groups=[...grouped.values()].sort((a,b)=>
+    rank(a.pair.join('|'))-rank(b.pair.join('|')));
+  const rooms=roomPlan.map(room=>({...room,students:[],ca1:new Set(),ca2:new Set()}));
+  for(const room of rooms){
+    const target=Number(room.student_count);
+    while(room.students.length<target){
+      let best=null;
+      const available=target-room.students.length;
+      for(const group of groups){
+        const remaining=group.students.length-group.offset;
+        if(!remaining)continue;
+        const take=Math.min(remaining,available);
+        const proposed=[...room.students];
+        for(let index=0;index<take;index++){
+          const student=group.students[group.offset+index];
+          proposed.push({...student,candidate_id:student.id??student.candidate_id,room_code:room.room_code});
+        }
+        const oriented=orientRoomAssignments(proposed,candidateById);
+        if(!oriented)continue;
+        const subjects=new Set(oriented.flatMap(student=>[
+          student.ca1_subject_code,student.ca2_subject_code
+        ]));
+        const currentSubjects=new Set(room.students.flatMap(student=>[
+          student.ca1_subject_code,student.ca2_subject_code
+        ]));
+        const delta=subjects.size-currentSubjects.size;
+        const score=delta;
+        const candidateRank=rank(group.pair.join('|'));
+        if(!best||score<best.score||score===best.score&&
+          (take>best.take||take===best.take&&candidateRank<best.rank))
+          best={group,take,oriented,score,rank:candidateRank};
+      }
+      if(!best)return null;
+      room.students=best.oriented;
+      room.ca1=new Set(room.students.map(student=>student.ca1_subject_code));
+      room.ca2=new Set(room.students.map(student=>student.ca2_subject_code));
+      best.group.offset+=best.take;
+    }
+  }
+  if(groups.some(group=>group.offset!==group.students.length))return null;
+  return rooms;
+}
+function allocateElectiveBySubjectGroupsWithRetries(candidates, roomPlan) {
+  for(let attempt=0;attempt<24;attempt++){
+    const result=allocateElectiveBySubjectGroups(candidates,roomPlan,attempt);
+    if(result)return result;
+  }
+  return null;
+}
 function rebalanceSuggestedAssignments(candidates, roomPlan, suggestedAssignments) {
   const candidateById=new Map(candidates.map(candidate=>[
     String(candidate.id??candidate.candidate_id),candidate
@@ -170,60 +235,67 @@ export function allocateCandidatesToRoomPlan(candidates, roomPlan, options={}) {
         room.students.push(assignment);assignments.push(assignment);
       }
     }
-  }else if(Array.isArray(options.suggestedAssignments)){
-    const rebalanced=rebalanceSuggestedAssignments(candidates,roomPlan,options.suggestedAssignments);
-    if(!rebalanced)
-      return allocateCandidatesToRoomPlan(candidates,roomPlan,{
-        capacity,planType:options.planType,subjectCode:options.subjectCode
-      });
-    for(const assignment of rebalanced){
-      const room=roomState.find(item=>item.room_code===assignment.room_code);
-      room.students.push(assignment);room.ca1.add(assignment.ca1_subject_code);room.ca2.add(assignment.ca2_subject_code);
-      assignments.push(assignment);
-    }
   }else{
-    const pairFrequency=new Map(),subjectFrequency=new Map();
-    for(const candidate of candidates){
-      const pair=[...candidate.elective_subjects].sort(),key=pair.join('|');
-      pairFrequency.set(key,(pairFrequency.get(key)||0)+1);
-      for(const subject of pair)subjectFrequency.set(subject,(subjectFrequency.get(subject)||0)+1);
-    }
-    const allocationOrder=[...candidates].sort((a,b)=>{
-      const pairA=[...a.elective_subjects].sort(),pairB=[...b.elective_subjects].sort();
-      const frequency=pairFrequency.get(pairA.join('|'))-pairFrequency.get(pairB.join('|'));
-      if(frequency)return frequency;
-      const subjectFrequencyA=pairA.reduce((sum,subject)=>sum+subjectFrequency.get(subject),0);
-      const subjectFrequencyB=pairB.reduce((sum,subject)=>sum+subjectFrequency.get(subject),0);
-      return subjectFrequencyB-subjectFrequencyA||cmpSbd(a,b);
-    });
-    const candidateById=new Map(allocationOrder.map(candidate=>[
-      String(candidate.id??candidate.candidate_id),candidate
-    ]));
-    for(const candidate of allocationOrder){
-      const choices=[];
-      for(const room of roomState){
-        if(room.students.length>=planCount.get(room.room_code))continue;
-        const proposed=orientRoomAssignments([...room.students,{
-          ...candidate,candidate_id:candidate.id??candidate.candidate_id,room_code:room.room_code
-        }],candidateById);
-        if(!proposed)continue;
-        const subjects=new Set(proposed.flatMap(assignment=>[
-          assignment.ca1_subject_code,assignment.ca2_subject_code
-        ]));
-        choices.push({room,proposed,additional:subjects.size-room.ca1.size-room.ca2.size});
+    const groupedRooms=allocateElectiveBySubjectGroupsWithRetries(candidates,roomPlan);
+    if(groupedRooms){
+      for(let index=0;index<roomState.length;index++){
+        const grouped=groupedRooms[index],room=roomState[index];
+        room.students=grouped.students;room.ca1=grouped.ca1;room.ca2=grouped.ca2;
+        assignments.push(...room.students);
       }
-      choices.sort((a,b)=>a.additional-b.additional||
-        (b.room.students.length/planCount.get(b.room.room_code))-
-        (a.room.students.length/planCount.get(a.room.room_code))||
-        a.room.room_number-b.room.room_number);
-      if(!choices.length)
-        return {ok:false,errors:[`Không thể xếp ${candidate.student_name||candidate.sbd||candidate.id} đúng theo sĩ số đã định mà vẫn tránh trùng môn giữa hai ca. Hãy điều chỉnh sĩ số hoặc thêm phòng rồi thử lại.`]};
-      const {room,proposed}=choices[0];
-      room.students=proposed;
-      room.ca1=new Set(proposed.map(assignment=>assignment.ca1_subject_code));
-      room.ca2=new Set(proposed.map(assignment=>assignment.ca2_subject_code));
+    }else if(Array.isArray(options.suggestedAssignments)){
+      const rebalanced=rebalanceSuggestedAssignments(candidates,roomPlan,options.suggestedAssignments);
+      if(!rebalanced)
+        return {ok:false,errors:['Không tìm thấy phương án tương thích với sĩ số các phòng. Điều chỉnh sĩ số để thử lại.']};
+      for(const assignment of rebalanced){
+        const room=roomState.find(item=>item.room_code===assignment.room_code);
+        room.students.push(assignment);room.ca1.add(assignment.ca1_subject_code);room.ca2.add(assignment.ca2_subject_code);
+        assignments.push(assignment);
+      }
+    }else{
+      const pairFrequency=new Map(),subjectFrequency=new Map();
+      for(const candidate of candidates){
+        const pair=[...candidate.elective_subjects].sort(),key=pair.join('|');
+        pairFrequency.set(key,(pairFrequency.get(key)||0)+1);
+        for(const subject of pair)subjectFrequency.set(subject,(subjectFrequency.get(subject)||0)+1);
+      }
+      const allocationOrder=[...candidates].sort((a,b)=>{
+        const pairA=[...a.elective_subjects].sort(),pairB=[...b.elective_subjects].sort();
+        const frequency=pairFrequency.get(pairA.join('|'))-pairFrequency.get(pairB.join('|'));
+        if(frequency)return frequency;
+        const subjectFrequencyA=pairA.reduce((sum,subject)=>sum+subjectFrequency.get(subject),0);
+        const subjectFrequencyB=pairB.reduce((sum,subject)=>sum+subjectFrequency.get(subject),0);
+        return subjectFrequencyB-subjectFrequencyA||cmpSbd(a,b);
+      });
+      const candidateById=new Map(allocationOrder.map(candidate=>[
+        String(candidate.id??candidate.candidate_id),candidate
+      ]));
+      for(const candidate of allocationOrder){
+        const choices=[];
+        for(const room of roomState){
+          if(room.students.length>=planCount.get(room.room_code))continue;
+          const proposed=orientRoomAssignments([...room.students,{
+            ...candidate,candidate_id:candidate.id??candidate.candidate_id,room_code:room.room_code
+          }],candidateById);
+          if(!proposed)continue;
+          const subjects=new Set(proposed.flatMap(assignment=>[
+            assignment.ca1_subject_code,assignment.ca2_subject_code
+          ]));
+          choices.push({room,proposed,additional:subjects.size-room.ca1.size-room.ca2.size});
+        }
+        choices.sort((a,b)=>a.additional-b.additional||
+          (b.room.students.length/planCount.get(b.room.room_code))-
+          (a.room.students.length/planCount.get(a.room.room_code))||
+          a.room.room_number-b.room.room_number);
+        if(!choices.length)
+          return {ok:false,errors:[`Không thể xếp ${candidate.student_name||candidate.sbd||candidate.id} đúng theo sĩ số đã định mà vẫn tránh trùng môn giữa hai ca. Hãy điều chỉnh sĩ số hoặc thêm phòng rồi thử lại.`]};
+        const {room,proposed}=choices[0];
+        room.students=proposed;
+        room.ca1=new Set(proposed.map(assignment=>assignment.ca1_subject_code));
+        room.ca2=new Set(proposed.map(assignment=>assignment.ca2_subject_code));
+      }
+      for(const room of roomState)assignments.push(...room.students);
     }
-    for(const room of roomState)assignments.push(...room.students);
     const underfilled=roomState.find(room=>room.students.length!==planCount.get(room.room_code));
     if(underfilled)
       return {ok:false,errors:[`Phòng ${underfilled.room_code} chưa đạt sĩ số dự kiến. Hãy điều chỉnh lại phương án phòng.`]};
@@ -265,6 +337,35 @@ export function optimizeElectiveRooms(candidates, options={}) {
   if(errors.length)return {ok:false,errors};
   if(sortMode==='previous')students.sort((a,b)=>Number(b.previous_score)-Number(a.previous_score)||cmpName(a,b));
   else if(sortMode==='abc')students.sort(cmpName);else students.sort(cmpSbd);
+  const minimumRoomCount=Math.ceil(students.length/capacity);
+  const targetRooms=Array.from({length:minimumRoomCount},(_,index)=>({
+    room_number:first+index,room_code:`${prefix}${String(first+index).padStart(2,'0')}`,
+    student_count:Math.min(capacity,students.length-index*capacity),capacity
+  }));
+  const groupedRooms=allocateElectiveBySubjectGroupsWithRetries(students,targetRooms);
+  if(groupedRooms){
+    const assignments=groupedRooms.flatMap(room=>room.students.map(student=>({
+      candidate_id:student.candidate_id,sbd:String(student.sbd||student.student_code||''),
+      student_code:String(student.student_code||''),student_name:String(student.student_name||''),
+      class_code:String(student.class_code||''),room_code:room.room_code,
+      ca1_subject_code:student.ca1_subject_code,ca2_subject_code:student.ca2_subject_code,
+      previous_score:student.previous_score??null
+    })));
+    const rooms=groupedRooms.map(room=>{
+      const sbds=room.students.map(student=>String(student.sbd||student.student_code||''))
+        .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+      const ca1=[...room.ca1].sort(),ca2=[...room.ca2].sort();
+      return {room_number:room.room_number,room_code:room.room_code,student_count:room.students.length,capacity,
+        ca1_subject_codes:ca1,ca2_subject_codes:ca2,
+        ca1_subject_name:ca1.map(nameOf).join(', '),ca2_subject_name:ca2.map(nameOf).join(', '),
+        sbd_first:sbds[0]||'',sbd_last:sbds.at(-1)||'',
+        candidate_ids:room.students.map(student=>student.candidate_id)};
+    });
+    return {ok:true,rooms,assignments,summary:{candidate_count:assignments.length,room_count:rooms.length,capacity,
+      subject_count:rooms.reduce((sum,room)=>sum+room.ca1_subject_codes.length+room.ca2_subject_codes.length,0),
+      full_rooms:rooms.filter(room=>room.student_count===capacity).length,
+      partial_rooms:rooms.filter(room=>room.student_count<capacity).length}};
+  }
   const rooms=[];
   for(const s of students){
     let choices=[];
