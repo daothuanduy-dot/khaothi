@@ -4,6 +4,9 @@ export const SUBJECTS = [
   {code:'KTPL', name:'Giáo dục kinh tế và pháp luật'},{code:'LY', name:'Vật lí'},
   {code:'HOA', name:'Hóa học'},{code:'SINH', name:'Sinh học'},{code:'TIN', name:'Tin học'}
 ];
+export function isValidSbd(value) {
+  return /^(?:\d{6}|\d{8})$/.test(String(value ?? ''));
+}
 const nameOf = code => ({TOAN:'Toán',VAN:'Ngữ văn',...Object.fromEntries(SUBJECTS.map(s=>[s.code,s.name]))})[String(code||'').toUpperCase()] || String(code||'');
 const normalize = s => String(s||'').normalize('NFC').trim();
 const cmpName = (a,b) => normalize(a.student_name).localeCompare(normalize(b.student_name),'vi',{sensitivity:'base'}) ||
@@ -345,14 +348,14 @@ export function optimizeElectiveRooms(candidates, options={}) {
   const groupedRooms=allocateElectiveBySubjectGroupsWithRetries(students,targetRooms);
   if(groupedRooms){
     const assignments=groupedRooms.flatMap(room=>room.students.map(student=>({
-      candidate_id:student.candidate_id,sbd:String(student.sbd||student.student_code||''),
+      candidate_id:student.candidate_id,sbd:String(student.sbd||''),
       student_code:String(student.student_code||''),student_name:String(student.student_name||''),
       class_code:String(student.class_code||''),room_code:room.room_code,
       ca1_subject_code:student.ca1_subject_code,ca2_subject_code:student.ca2_subject_code,
       previous_score:student.previous_score??null
     })));
     const rooms=groupedRooms.map(room=>{
-      const sbds=room.students.map(student=>String(student.sbd||student.student_code||''))
+      const sbds=room.students.map(student=>String(student.sbd||''))
         .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
       const ca1=[...room.ca1].sort(),ca2=[...room.ca2].sort();
       return {room_number:room.room_number,room_code:room.room_code,student_count:room.students.length,capacity,
@@ -393,7 +396,7 @@ export function optimizeElectiveRooms(candidates, options={}) {
   const assignments=[];
   const resultRooms=rooms.map(room=>{
     const assigned=room.students.map(s=>{
-      const a={candidate_id:s.id,sbd:String(s.sbd||s.student_code||''),student_code:String(s.student_code||''),
+      const a={candidate_id:s.id,sbd:String(s.sbd||''),student_code:String(s.student_code||''),
         student_name:String(s.student_name||''),class_code:String(s.class_code||''),room_code:room.room_code,
         ca1_subject_code:s.ca1,ca2_subject_code:s.ca2,previous_score:s.previous_score??null};
       assignments.push(a);return a;
@@ -420,11 +423,11 @@ export function optimizeMandatoryRooms(candidates, options={}) {
  const rooms=[],assignments=[];
  for(let i=0;i<students.length;i+=capacity){
   const chunk=students.slice(i,i+capacity),number=first+rooms.length,code=`${prefix}${String(number).padStart(2,'0')}`;
-  const sbds=chunk.map(s=>String(s.sbd||s.student_code||'')).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+  const sbds=chunk.map(s=>String(s.sbd||'')).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   rooms.push({room_number:number,room_code:code,student_count:chunk.length,capacity,subject_code:subject,
    ca1_subject_codes:[subject],ca2_subject_codes:[],ca1_subject_name:nameOf(subject),ca2_subject_name:'—',
    sbd_first:sbds[0]||'',sbd_last:sbds[sbds.length-1]||'',candidate_ids:chunk.map(s=>s.id)});
-  for(const s of chunk)assignments.push({candidate_id:s.id,sbd:String(s.sbd||s.student_code||''),student_code:String(s.student_code||''),
+  for(const s of chunk)assignments.push({candidate_id:s.id,sbd:String(s.sbd||''),student_code:String(s.student_code||''),
    student_name:String(s.student_name||''),class_code:String(s.class_code||''),room_code:code,
    subject_code:subject,subject_name:nameOf(subject),previous_score:s.previous_score??null});
  }

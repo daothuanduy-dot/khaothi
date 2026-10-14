@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, isValidSbd, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+
+test('SBD validation accepts only six or eight digits', () => {
+  assert.equal(isValidSbd('315001'), true);
+  assert.equal(isValidSbd('31501234'), true);
+  assert.equal(isValidSbd('3150122352'), false);
+  assert.equal(isValidSbd(' 315001'), false);
+  assert.equal(isValidSbd(''), false);
+});
 
 test('changing any room count offsets the balancing room and preserves the planned total', () => {
   const plan = [
@@ -44,7 +52,14 @@ test('elective rooming assigns every candidate once, respects capacity, and keep
   assert.equal(new Set(result.assignments.map(row => row.candidate_id)).size, candidates.length);
   for (const room of result.rooms) {
     assert.ok(room.student_count <= room.capacity);
+    assert.ok(Array.isArray(room.ca1_subject_codes));
+    assert.ok(Array.isArray(room.ca2_subject_codes));
     assert.equal(room.ca1_subject_codes.some(code => room.ca2_subject_codes.includes(code)), false);
+    const roomAssignments = result.assignments.filter(row => row.room_code === room.room_code);
+    assert.ok(roomAssignments.every(row =>
+      room.ca1_subject_codes.includes(row.ca1_subject_code) &&
+      room.ca2_subject_codes.includes(row.ca2_subject_code)
+    ));
   }
 });
 
@@ -60,6 +75,16 @@ test('mandatory rooming includes the full roster and never exceeds room capacity
     roomPrefix: 'M',
     firstRoomNumber: 1,
     subjectCode: 'TOAN'
+  });
+
+  test('rooming never substitutes student_code for a missing SBD', () => {
+    const result = optimizeMandatoryRooms([
+      { id: '1', student_code: '3150122352', student_name: 'Student 1' }
+    ], { capacity: 24 });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.assignments[0].sbd, '');
+    assert.equal(result.assignments[0].student_code, '3150122352');
   });
 
   assert.equal(result.ok, true);

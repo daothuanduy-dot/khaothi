@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.51';
-import {loadTabModules} from './module-loader.js?v=0.1.51';
-const APP_VERSION='v0.1.51';
-const APP_BUILD='2026-10-15-elective-subject-groups';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.53';
+import {loadTabModules} from './module-loader.js?v=0.1.53';
+const APP_VERSION='v0.1.53';
+const APP_BUILD='2026-10-15-elective-room-subject-sets';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -528,6 +528,11 @@ async function previewRooming(){
   const withoutSbd=candidates.filter(c=>!String(c.sbd||'').trim());
   const sbdValues=candidates.map(c=>String(c.sbd||'').trim()).filter(Boolean);
   if(withoutSbd.length)throw new Error(`Còn ${withoutSbd.length} thí sinh chưa có SBD. Hãy cấp SBD trước rồi mới xếp phòng.`);
+  const invalidSbd=candidates.filter(c=>!isValidSbd(c.sbd));
+  if(invalidSbd.length){
+    const examples=invalidSbd.slice(0,10).map(c=>`${c.student_code||c.id}: "${c.sbd}"`).join('; ');
+    throw new Error(`Có ${invalidSbd.length} thí sinh có SBD không hợp lệ (SBD phải gồm đúng 6 hoặc 8 chữ số). Hãy sửa/cấp lại SBD trước khi xếp phòng. Ví dụ: ${examples}${invalidSbd.length>10?'…':''}`);
+  }
   if(new Set(sbdValues).size!==sbdValues.length)throw new Error('Phát hiện SBD trùng trong kỳ thi. Hãy cấp lại SBD trước khi xếp phòng.');
   candidates.sort((a,b)=>String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}));
   const requestedCapacity=Number($('room-capacity').value);if(!Number.isInteger(requestedCapacity)||requestedCapacity<1||requestedCapacity>25)throw new Error('Sức chứa phòng phải từ 1 đến 25 học sinh.');
@@ -553,7 +558,7 @@ async function previewRooming(){
       if(slot1.length!==1||slot2.length!==1||slot1[0]===slot2[0]){
         invalid.push({code:c.student_code||c.sbd||c.id,reason:!rows.length?'chưa đăng ký môn':slot1.length!==1||slot2.length!==1?'cần đúng 1 môn ở Môn 1 và 1 môn ở Môn 2':'hai môn đang trùng nhau'});continue;
       }
-      eligible.push({...c,sbd:c.sbd||c.student_code,elective_subjects:[slot1[0],slot2[0]]});
+      eligible.push({...c,elective_subjects:[slot1[0],slot2[0]]});
     }
     if(!eligible.length)throw new Error(`Không có thí sinh đủ điều kiện xếp phòng môn lựa chọn. Tổng ${candidates.length}; ${invalid.length} chưa đủ hai môn khác nhau. Ví dụ: ${invalid.slice(0,10).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>10?'…':''}`);
     result=optimizeElectiveRooms(eligible,{capacity:Math.min(25,Number($('room-capacity').value)),roomPrefix:$('room-prefix').value,
@@ -778,7 +783,7 @@ async function saveRooming(){
     p_rooms:rooms,p_assignments:result.assignments,p_lock:false};
   }
   const{data,error}=await state.client.rpc(rpcName,payload);
-  if(error)throw new Error(`Không lưu được phương án ${planType==='mandatory'?'môn bắt buộc':'môn lựa chọn'}. ${planType==='mandatory'?'Hãy chạy migration SQL v0.1.39. ':''}${error.message}`);
+  if(error)throw new Error(`Không lưu được phương án ${planType==='mandatory'?'môn bắt buộc':'môn lựa chọn'}. ${planType==='mandatory'?'Hãy chạy migration SQL v0.1.39. ':'Nếu là môn lựa chọn, hãy xác nhận đã chạy migration SQL v0.1.53. '}${error.message}`);
   const sourcePlanId=data?.plan_id;
   if(typeof sourcePlanId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sourcePlanId))
    throw new Error('RPC lưu phương án không trả về plan_id hợp lệ. Phương án đã gửi nhưng chưa thể phân phòng chính thức.');
