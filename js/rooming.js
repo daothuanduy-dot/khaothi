@@ -36,6 +36,132 @@ export function assignElectiveCandidateToRoom(candidate, roomAssignments, roomCo
   return {...candidate,candidate_id:candidate.id??candidate.candidate_id,room_code:roomCode,
     ca1_subject_code:orientation.a,ca2_subject_code:orientation.b};
 }
+function rebalanceSuggestedAssignments(candidates, roomPlan, suggestedAssignments) {
+  const candidateById=new Map(candidates.map(candidate=>[
+    String(candidate.id??candidate.candidate_id),candidate
+  ]));
+  const targetCounts=new Map(roomPlan.map(room=>[room.room_code,Number(room.student_count)]));
+  const rooms=new Map();
+  for(const room of roomPlan)rooms.set(room.room_code,{...room,students:[]});
+  for(const assignment of suggestedAssignments){
+    const roomCode=String(assignment.room_code);
+    if(!rooms.has(roomCode))rooms.set(roomCode,{room_code:roomCode,students:[]});
+    rooms.get(roomCode).students.push({...assignment});
+  }
+  const currentIds=[...rooms.values()].flatMap(room=>room.students.map(row=>String(row.candidate_id)));
+  if(currentIds.length!==candidateById.size||new Set(currentIds).size!==currentIds.length||
+    currentIds.some(id=>!candidateById.has(id)))return null;
+
+  while(true){
+    const sources=[...rooms.values()].filter(room=>
+      room.students.length>(targetCounts.get(room.room_code)||0));
+    const destinations=[...rooms.values()].filter(room=>
+      targetCounts.has(room.room_code)&&room.students.length<targetCounts.get(room.room_code));
+    if(!sources.length&&!destinations.length)break;
+    let move=null;
+    for(const destination of destinations){
+      for(const source of sources){
+        for(let index=0;index<source.students.length;index++){
+          const assignment=source.students[index];
+          const candidate=candidateById.get(String(assignment.candidate_id));
+          const moved=assignElectiveCandidateToRoom(candidate,destination.students,destination.room_code);
+          if(moved){move={source,destination,index,moved};break}
+        }
+        if(move)break;
+      }
+      if(move)break;
+    }
+    if(!move)return null;
+    move.source.students.splice(move.index,1);
+    move.destination.students.push(move.moved);
+  }
+
+  if([...targetCounts].some(([roomCode,count])=>
+    (rooms.get(roomCode)?.students.length||0)!==count))return null;
+  return [...targetCounts.keys()].flatMap(roomCode=>rooms.get(roomCode).students);
+}
+export function allocateCandidatesToRoomPlan(candidates, roomPlan, options={}) {
+  if(!Array.isArray(candidates)||!candidates.length)return {ok:false,errors:['Không có thí sinh đủ điều kiện.']};
+  if(!Array.isArray(roomPlan)||!roomPlan.length)return {ok:false,errors:['Phương án chưa có phòng.']};
+  const capacity=Number(options.capacity),planCount=new Map();
+  for(const room of roomPlan){
+    const count=Number(room.student_count);
+    if(!room.room_code||!Number.isInteger(count)||count<1||count>capacity||planCount.has(room.room_code))
+      return {ok:false,errors:['Mã phòng hoặc sĩ số dự kiến không hợp lệ.']};
+    planCount.set(room.room_code,count);
+  }
+  const total=[...planCount.values()].reduce((sum,count)=>sum+count,0);
+  if(total!==candidates.length)
+    return {ok:false,errors:[`Tổng sĩ số dự kiến là ${total}; nhưng có ${candidates.length} thí sinh đủ điều kiện.`]};
+
+  const assignments=[],roomState=roomPlan.map(room=>({
+    ...room,students:[],ca1:new Set(),ca2:new Set()
+  }));
+  if(options.planType==='mandatory'){
+    let candidateIndex=0;
+    for(const room of roomState){
+      for(let index=0;index<planCount.get(room.room_code);index++){
+        const candidate=candidates[candidateIndex++];
+        const assignment={...candidate,candidate_id:candidate.id??candidate.candidate_id,
+          room_code:room.room_code,subject_code:options.subjectCode,
+          subject_name:nameOf(options.subjectCode)};
+        room.students.push(assignment);assignments.push(assignment);
+      }
+    }
+  }else if(Array.isArray(options.suggestedAssignments)){
+    const rebalanced=rebalanceSuggestedAssignments(candidates,roomPlan,options.suggestedAssignments);
+    if(!rebalanced)
+      return allocateCandidatesToRoomPlan(candidates,roomPlan,{
+        capacity,planType:options.planType,subjectCode:options.subjectCode
+      });
+    for(const assignment of rebalanced){
+      const room=roomState.find(item=>item.room_code===assignment.room_code);
+      room.students.push(assignment);room.ca1.add(assignment.ca1_subject_code);room.ca2.add(assignment.ca2_subject_code);
+      assignments.push(assignment);
+    }
+  }else{
+    for(const candidate of candidates){
+      const choices=[];
+      for(const room of roomState){
+        if(room.students.length>=planCount.get(room.room_code))continue;
+        const assignment=assignElectiveCandidateToRoom(candidate,room.students,room.room_code);
+        if(!assignment)continue;
+        const additional=(room.ca1.has(assignment.ca1_subject_code)?0:1)+
+          (room.ca2.has(assignment.ca2_subject_code)?0:1);
+        choices.push({room,assignment,additional});
+      }
+      choices.sort((a,b)=>a.additional-b.additional||b.room.students.length-a.room.students.length||
+        a.room.room_number-b.room.room_number);
+      if(!choices.length)
+        return {ok:false,errors:[`Không thể xếp ${candidate.student_name||candidate.sbd||candidate.id} đúng theo sĩ số đã định mà vẫn tránh trùng môn giữa hai ca. Hãy điều chỉnh sĩ số hoặc thêm phòng rồi thử lại.`]};
+      const {room,assignment}=choices[0];
+      room.students.push(assignment);room.ca1.add(assignment.ca1_subject_code);room.ca2.add(assignment.ca2_subject_code);
+      assignments.push(assignment);
+    }
+    const underfilled=roomState.find(room=>room.students.length!==planCount.get(room.room_code));
+    if(underfilled)
+      return {ok:false,errors:[`Phòng ${underfilled.room_code} chưa đạt sĩ số dự kiến. Hãy điều chỉnh lại phương án phòng.`]};
+  }
+
+  const rooms=roomState.map(room=>{
+    const sbds=room.students.map(candidate=>String(candidate.sbd||candidate.student_code||''))
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const ca1=options.planType==='mandatory'?[options.subjectCode]:[...room.ca1].sort();
+    const ca2=options.planType==='mandatory'?[]:[...room.ca2].sort();
+    return {room_number:room.room_number,room_code:room.room_code,student_count:room.students.length,
+      capacity,ca1_subject_codes:ca1,ca2_subject_codes:ca2,
+      ca1_subject_name:ca1.map(nameOf).join(', '),ca2_subject_name:ca2.map(nameOf).join(', ')||'—',
+      sbd_first:sbds[0]||'',sbd_last:sbds.at(-1)||'',
+      candidate_ids:room.students.map(candidate=>candidate.candidate_id),
+      ...(options.planType==='mandatory'?{subject_code:options.subjectCode}: {})};
+  });
+  return {ok:true,rooms,assignments,summary:{
+    candidate_count:assignments.length,room_count:rooms.length,capacity,
+    subject_count:rooms.reduce((sum,room)=>sum+room.ca1_subject_codes.length+room.ca2_subject_codes.length,0),
+    full_rooms:rooms.filter(room=>room.student_count===capacity).length,
+    partial_rooms:rooms.filter(room=>room.student_count<capacity).length
+  }};
+}
 export function optimizeElectiveRooms(candidates, options={}) {
   const capacity=Math.floor(Number(options.capacity||24)),prefix=String(options.roomPrefix||'P').trim()||'P',
     first=Math.floor(Number(options.firstRoomNumber||1)),sortMode=options.sortMode||'abc';
@@ -70,7 +196,8 @@ export function optimizeElectiveRooms(candidates, options={}) {
       room.students.push({...s,ca1:orientation.a,ca2:orientation.b});
       room.ca1.add(orientation.a);room.ca2.add(orientation.b);
     }else{
-      const [a,b]=s.elective_subjects;
+      const orientation=chooseOrientation(s.elective_subjects,new Set(),new Set());
+      const {a,b}=orientation;
       const room={room_number:first+rooms.length,room_code:`${prefix}${String(first+rooms.length).padStart(2,'0')}`,
         students:[{...s,ca1:a,ca2:b}],ca1:new Set([a]),ca2:new Set([b])};
       rooms.push(room);
