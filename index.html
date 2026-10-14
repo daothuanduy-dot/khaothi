@@ -209,7 +209,7 @@
 
       <section class="tab-panel hidden" id="tab-rooming">
         <div class="section-heading"><div><h2>Xếp phòng thi</h2><p>Xếp phòng môn bắt buộc và môn lựa chọn độc lập. Mỗi phòng có thể tổ chức nhiều môn trong một ca; hệ thống ưu tiên đủ sĩ số và giảm số môn, đồng thời không để một môn xuất hiện ở cả hai ca.</p></div></div>
-        <div class="notice notice-info"><b>Quy tắc:</b> Chế độ môn bắt buộc xếp Toán hoặc Ngữ văn thành phương án riêng. Chế độ môn lựa chọn cho phép nhiều môn trong mỗi ca, nhưng tập môn Ca 1 và Ca 2 của một phòng không được giao nhau. Học sinh đăng ký Anh–Lý và Lý–Anh có thể được đổi thứ tự để ghép phòng.</div>
+        <div class="notice notice-info"><b>Quy trình:</b> Cấp SBD trước, sau đó mới tạo phương án xếp phòng. SBD được lưu theo từng thí sinh trong kỳ thi và không thay đổi khi xếp lại phòng. <b>Quy tắc môn:</b> Chế độ môn bắt buộc xếp Toán hoặc Ngữ văn thành phương án riêng. Chế độ môn lựa chọn cho phép nhiều môn trong mỗi ca, nhưng tập môn Ca 1 và Ca 2 của một phòng không được giao nhau. Học sinh đăng ký Anh–Lý và Lý–Anh có thể được đổi thứ tự để ghép phòng.</div>
         <div class="form-grid rooming-controls">
           <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
           <label>Loại phương án<select id="room-plan-type"><option value="elective">Môn lựa chọn</option><option value="mandatory">Môn bắt buộc</option></select></label>
@@ -222,12 +222,12 @@
           <label>Sức chứa phòng (tối đa 25)<input id="room-capacity" type="number" min="1" max="25" value="24" required></label>
           <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
           <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
-          <div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phương án</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Khóa phương án</button></div>
+          <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-secondary" type="button">Đánh số SBD và lưu CSDL</button><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phương án</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Khóa phương án</button></div>
         </div>
         <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
         <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số</th><th>Ca 1 / Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="6" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
-        <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách chi tiết theo SBD.</p></div><div class="form-actions">
-            <button id="assign-sbd-rooming" class="btn btn-secondary" type="button" disabled>Đánh số SBD và lưu CSDL</button>
+        <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách thí sinh theo SBD đã cấp; xếp phòng không cấp lại SBD.</p></div><div class="form-actions">
+            
             <button id="export-rooming" class="btn btn-light" disabled>Xuất Excel</button>
             <button id="print-rooming-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button>
           </div></div>
@@ -258,8 +258,8 @@
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.41 · build 2026-10-14-sbd-generator</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.42 · build 2026-10-14-sbd-independent</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.41"></script>
+  <script type="module" src="./js/app.js?v=0.1.42"></script>
 </body>
 </html>
