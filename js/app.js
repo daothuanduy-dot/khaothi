@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.49';
-import {loadTabModules} from './module-loader.js?v=0.1.49';
-const APP_VERSION='v0.1.49';
-const APP_BUILD='2026-10-15-save-rooming-allocation';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.50';
+import {loadTabModules} from './module-loader.js?v=0.1.50';
+const APP_VERSION='v0.1.50';
+const APP_BUILD='2026-10-15-elective-room-review';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -566,15 +566,7 @@ async function previewRooming(){
   preview.suggestedAssignments=result.assignments.map(assignment=>({...assignment}));
   preview.suggestedRoomCounts=result.rooms.map(room=>({room_code:room.room_code,student_count:room.student_count}));
   preview.assignmentsCreated=false;
-  result.assignments=[];
-  for(const room of result.rooms){
-    room.candidate_ids=[];
-    room.sbd_first='';room.sbd_last='';
-    if(planType==='elective'){
-      room.ca1_subject_codes=[];room.ca2_subject_codes=[];
-      room.ca1_subject_name='Chưa gán';room.ca2_subject_name='Chưa gán';
-    }
-  }
+  preview.suggestionValid=true;
   renderRooming(result,planType);
   const warning=invalid.length?` Đã loại khỏi phương án ${invalid.length} thí sinh chưa đủ hai môn: ${invalid.slice(0,8).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>8?'…':''}.`:'';
   const note=planType==='mandatory'
@@ -610,11 +602,10 @@ function renderRooming(result,planType='elective'){
   result.summary.room_count=result.rooms.length;
   result.summary.full_rooms=result.rooms.filter(room=>room.student_count===room.capacity).length;
   result.summary.partial_rooms=result.rooms.filter(room=>room.student_count<room.capacity).length;
-  if(planType==='elective')result.summary.subject_count='Chưa gán';
  }
  $('rooming-summary').innerHTML=[['Thí sinh',result.summary.candidate_count],['Số phòng',result.summary.room_count],
  ['Phòng đủ sĩ số',result.summary.full_rooms??'—'],['Phòng chưa đủ sĩ số',result.summary.partial_rooms??'—'],
- ['Lượt môn trong phòng',result.summary.subject_count??'—']].map(([l,v])=>`<div class="metric"><span>${l}</span><strong>${v}</strong></div>`).join('');
+ ['Lượt môn trong phòng',preview&&!preview.assignmentsCreated?'Đề xuất':result.summary.subject_count??'—']].map(([l,v])=>`<div class="metric"><span>${l}</span><strong>${v}</strong></div>`).join('');
  const th=$('rooming-table-body')?.closest('table')?.querySelector('thead');
  if(th)th.innerHTML=planType==='mandatory'
   ?'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>'
@@ -622,7 +613,8 @@ function renderRooming(result,planType='elective'){
  $('rooming-table-body').innerHTML=result.rooms.map((r,i)=>{
   const count=preview?.assignmentsCreated?`${r.student_count}/${r.capacity}`:`<input class="room-count-input" type="number" min="1" max="${r.capacity}" value="${r.student_count}" data-room-count="${esc(r.room_code)}" aria-label="Sĩ số dự kiến phòng ${esc(r.room_code)}" ${preview?.finalized||preview?.saving||preview?.finalizing?'disabled':''}> / ${r.capacity}`;
   const subjects=planType==='mandatory'?'':`<td>${esc(r.ca1_subject_name||'Chưa gán')}</td><td>${esc(r.ca2_subject_name||'Chưa gán')}</td>`;
-  const sbd=preview?.assignmentsCreated?`${esc(r.sbd_first)} – ${esc(r.sbd_last)}`:'Chưa gán';
+  const sbd=preview?.assignmentsCreated?`${esc(r.sbd_first)} – ${esc(r.sbd_last)}`
+   :preview?`Dự kiến: ${esc(r.sbd_first)} – ${esc(r.sbd_last)}`:'Chưa gán';
   const actions=preview?.assignmentsCreated?'':`<button class="small-btn" type="button" data-remove-room="${esc(r.room_code)}" ${result.rooms.length<=1||preview?.saving?'disabled':''}>Xóa phòng</button>`;
   return `<tr><td>${i+1}</td><td><b>${esc(r.room_code)}</b></td><td>${count}</td>${subjects}<td>${sbd}</td><td>${actions}</td></tr>`;
  }).join('');
@@ -637,7 +629,7 @@ function renderRooming(result,planType='elective'){
   :`<tr><td colspan="${planType==='mandatory'?4:6}" class="empty">Chưa gán thí sinh. Điều chỉnh sĩ số phòng rồi bấm “Lưu phân bổ phòng”.</td></tr>`;
  const planned=preview?.result.rooms.reduce((sum,room)=>sum+Number(room.student_count||0),0)||0;
  $('room-plan-status').textContent=preview
-  ?`Tổng sĩ số dự kiến ${planned}/${preview.pool.length} thí sinh đủ điều kiện${preview.assignmentsCreated?' · Thí sinh đã được gán vào phòng':' · Sĩ số phòng cuối sẽ tự cân đối khi điều chỉnh'}`
+  ?`Tổng sĩ số dự kiến ${planned}/${preview.pool.length} thí sinh đủ điều kiện${preview.assignmentsCreated?' · Đã gán theo phương án':preview.suggestionValid===false?' · Danh sách bên dưới là gợi ý gần nhất, chưa khớp sĩ số vừa chỉnh':' · Danh sách và môn dưới đây là phương án gợi ý; sĩ số phòng cuối tự cân đối khi điều chỉnh'}`
   :'Chưa lập phương án phòng.';
  updateRoomingActions();
 }
@@ -679,14 +671,20 @@ function updateRoomingActions(){
 function poolCandidateId(candidate){return String(candidate?.id??candidate?.candidate_id??'')}
 function invalidateRoomAssignments(preview){
  preview.assignmentsCreated=false;preview.saved=null;preview.finalized=null;preview.sourcePlanId=null;
- preview.result.assignments=[];
- for(const room of preview.result.rooms){
-  room.candidate_ids=[];room.sbd_first='';room.sbd_last='';
-  if(preview.planType==='elective'){
-   room.ca1_subject_codes=[];room.ca2_subject_codes=[];
-   room.ca1_subject_name='Chưa gán';room.ca2_subject_name='Chưa gán';
-  }
- }
+ preview.suggestionValid=false;
+}
+function refreshSuggestedRoomAssignments(preview){
+ const plan=preview.result.rooms.map(({room_code,room_number,student_count,capacity})=>
+  ({room_code,room_number,student_count,capacity}));
+ const allocation=allocateCandidatesToRoomPlan(preview.pool,plan,{
+  capacity:preview.options.capacity,planType:preview.planType,subjectCode:preview.subjectCode,
+  suggestedAssignments:preview.suggestedAssignments
+ });
+ if(!allocation.ok)return allocation;
+ preview.result={...preview.result,...allocation};
+ preview.suggestedAssignments=allocation.assignments.map(assignment=>({...assignment}));
+ preview.suggestionValid=true;
+ return allocation;
 }
 function updateRoomPlanCount(event){
  const input=event.target.closest('[data-room-count]'),preview=state.preview;
@@ -698,7 +696,10 @@ function updateRoomPlanCount(event){
  }
  preview.result.rooms=adjusted.rooms;
  invalidateRoomAssignments(preview);
+ const allocation=refreshSuggestedRoomAssignments(preview);
  renderRooming(preview.result,preview.planType);
+ if(!allocation.ok)message($('rooming-message'),(allocation.errors||['Không thể cập nhật danh sách gợi ý theo sĩ số đã chỉnh.']).join('\n'),'error');
+ else message($('rooming-message'),'Đã cập nhật danh sách thí sinh và môn dự kiến theo sĩ số phòng mới.','success');
 }
 function addRoomToPlan(){
  const preview=state.preview;if(!preview||preview.assignmentsCreated)return;
@@ -715,13 +716,17 @@ function addRoomToPlan(){
   capacity:preview.options.capacity,subject_code:preview.subjectCode,subject_name:subjectName(preview.subjectCode),
   ca1_subject_codes:[],ca2_subject_codes:[],ca1_subject_name:'Chưa gán',ca2_subject_name:'Chưa gán',
   sbd_first:'',sbd_last:'',candidate_ids:[]});
- invalidateRoomAssignments(preview);renderRooming(preview.result,preview.planType);
+ invalidateRoomAssignments(preview);
+ const allocation=refreshSuggestedRoomAssignments(preview);
+ renderRooming(preview.result,preview.planType);
+ if(!allocation.ok)message($('rooming-message'),(allocation.errors||['Không thể cập nhật danh sách gợi ý theo phòng mới.']).join('\n'),'error');
+ else message($('rooming-message'),'Đã cập nhật danh sách gợi ý theo phương án có phòng mới.','success');
 }
 function removeRoomFromPlan(roomCode){
  const preview=state.preview;if(!preview||preview.assignmentsCreated||preview.result.rooms.length<=1)return;
  const removed=preview.result.rooms.find(room=>room.room_code===roomCode);
  if(!removed)return;
- const remaining=preview.result.rooms.filter(room=>room.room_code!==roomCode);
+ const remaining=preview.result.rooms.filter(room=>room.room_code!==roomCode).map(room=>({...room}));
  let excess=Number(removed.student_count);
  for(const room of [...remaining].reverse()){
   const free=room.capacity-room.student_count,added=Math.min(free,excess);
@@ -732,7 +737,11 @@ function removeRoomFromPlan(roomCode){
   message($('rooming-message'),'Không thể xóa phòng vì các phòng còn lại đã đủ sức chứa. Hãy điều chỉnh sĩ số trước.','error');return;
  }
  preview.result.rooms=remaining;
- invalidateRoomAssignments(preview);renderRooming(preview.result,preview.planType);
+ invalidateRoomAssignments(preview);
+ const allocation=refreshSuggestedRoomAssignments(preview);
+ renderRooming(preview.result,preview.planType);
+ if(!allocation.ok)message($('rooming-message'),(allocation.errors||['Không thể cập nhật danh sách gợi ý sau khi xóa phòng.']).join('\n'),'error');
+ else message($('rooming-message'),'Đã cập nhật danh sách gợi ý sau khi xóa phòng.','success');
 }
 function assignRoomingCandidates(){
  const preview=state.preview;if(!preview)return false;

@@ -10,11 +10,11 @@
           <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
 <div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Xem trước phương án phòng</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phân bổ (xếp thí sinh)</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Phân phòng chính thức</button></div>
         </div>
-        <div class="notice notice-info">Xem trước sẽ hiển thị số phòng và sĩ số dự kiến. Khi tăng hoặc giảm sĩ số một phòng, sĩ số phòng cân đối sẽ tự thay đổi để tổng không đổi. Sau khi kiểm tra phương án, bấm “Lưu phân bổ (xếp thí sinh)” để xếp danh sách vào phòng và lưu; chỉ sau khi phân phòng chính thức mới được xuất/in danh sách.</div>
+        <div class="notice notice-info">Xem trước hiển thị phòng, các môn theo từng ca và danh sách thí sinh dự kiến của mỗi phòng để kiểm tra. Khi tăng hoặc giảm sĩ số một phòng, phòng cân đối sẽ tự thay đổi; hệ thống thử sắp xếp lại danh sách gợi ý theo sĩ số mới. Nếu một lượt sắp xếp không phù hợp quy tắc môn giữa hai ca, danh sách gợi ý gần nhất vẫn được giữ để tham khảo nhưng không được lưu; hãy điều chỉnh sĩ số rồi thử lại. Bấm “Lưu phân bổ (xếp thí sinh)” để xác nhận và lưu danh sách. Chỉ sau khi phân phòng chính thức mới được xuất/in.</div>
         <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
         <div class="section-heading subheading"><div><h3>Phương án sĩ số phòng</h3><p id="room-plan-status">Chưa lập phương án phòng.</p></div><button id="add-room-plan" class="btn btn-light" type="button" disabled>+ Thêm phòng</button></div>
         <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến</th><th>Môn thi</th><th>Ca 2</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="7" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
-        <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách thí sinh theo SBD đã cấp; xếp phòng không cấp lại SBD.</p></div><div class="form-actions">
+        <div class="section-heading subheading"><div><h3>Danh sách phân phòng / gợi ý</h3><p>Danh sách phòng và môn của từng thí sinh để kiểm tra; SBD đã cấp được giữ nguyên.</p></div><div class="form-actions">
             
             <button id="export-rooming" class="btn btn-light" disabled>Xuất Excel</button>
             <button id="print-rooming-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button>
