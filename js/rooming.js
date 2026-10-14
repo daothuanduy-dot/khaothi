@@ -10,17 +10,31 @@ const cmpName = (a,b) => normalize(a.student_name).localeCompare(normalize(b.stu
   String(a.student_code||a.sbd||'').localeCompare(String(b.student_code||b.sbd||''),'vi',{numeric:true});
 const cmpSbd = (a,b) => String(a.sbd||a.student_code||'').localeCompare(String(b.sbd||b.student_code||''),'vi',{numeric:true});
 
-function orientForRoom(student, room) {
-  const [x,y]=student.elective_subjects;
+function chooseOrientation(subjects, ca1, ca2) {
+  const [x,y]=subjects;
   const options=[[x,y],[y,x]];
   const possible=[];
   for(const [a,b] of options){
-    if(room.ca1.has(b)||room.ca2.has(a)) continue;
-    const add=(room.ca1.has(a)?0:1)+(room.ca2.has(b)?0:1);
+    if(ca1.has(b)||ca2.has(a)) continue;
+    const add=(ca1.has(a)?0:1)+(ca2.has(b)?0:1);
     possible.push({a,b,add});
   }
   possible.sort((p,q)=>p.add-q.add || p.a.localeCompare(q.a));
   return possible[0]||null;
+}
+function orientForRoom(student, room) {
+  return chooseOrientation(student.elective_subjects,room.ca1,room.ca2);
+}
+export function assignElectiveCandidateToRoom(candidate, roomAssignments, roomCode) {
+  const subjects=[...new Set((Array.isArray(candidate.elective_subjects)?candidate.elective_subjects:[])
+    .map(code=>String(code||'').trim().toUpperCase()).filter(Boolean))];
+  if(subjects.length!==2)return null;
+  const ca1=new Set(roomAssignments.map(a=>a.ca1_subject_code).filter(Boolean));
+  const ca2=new Set(roomAssignments.map(a=>a.ca2_subject_code).filter(Boolean));
+  const orientation=chooseOrientation(subjects,ca1,ca2);
+  if(!orientation)return null;
+  return {...candidate,candidate_id:candidate.id??candidate.candidate_id,room_code:roomCode,
+    ca1_subject_code:orientation.a,ca2_subject_code:orientation.b};
 }
 export function optimizeElectiveRooms(candidates, options={}) {
   const capacity=Math.floor(Number(options.capacity||24)),prefix=String(options.roomPrefix||'P').trim()||'P',
