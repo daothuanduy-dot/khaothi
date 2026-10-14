@@ -145,12 +145,12 @@
       </section>
 
       <section class="tab-panel hidden" id="tab-subjects">
-        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình môn thi theo từng kỳ thi, độc lập với hồ sơ học sinh và SBD.</p></div><button id="download-subject-template" class="btn btn-light">Tải Excel môn thi mẫu</button></div>
+        <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình danh mục môn thi và quản lý đăng ký đã có. Để nhập danh sách môn lựa chọn từ Excel, chỉ sử dụng mục “Quản lý môn lựa chọn theo lớp” bên dưới.</p></div></div>
         <div class="form-grid">
           <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
           <label>Hình thức kỳ thi<select id="subject-config-kind" disabled><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn theo lớp/học sinh</option></select></label><div id="subject-mode-note" class="notice notice-info" style="grid-column:1/-1">Chọn kỳ thi để tải đúng hình thức cấu hình môn.</div>
           <label>Loại môn<select id="subject-mode"><option value="required">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option></select></label>
-          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option><option value="file">Nạp từ Excel</option></select></label>
+          <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option></select></label>
           <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
           <div id="subject-class-picker-wrap" class="picker-panel hidden"><div class="picker-heading"><strong>Danh sách lớp</strong><div><button id="subject-classes-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-classes-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-class-picker" class="checkbox-grid"></div></div>
           <label id="subject-student-class-wrap" class="hidden">Chọn lớp<select id="subject-student-class"><option value="">-- Chọn lớp --</option></select></label>
@@ -160,10 +160,10 @@
           <label id="subject-student-list-wrap" class="hidden">Danh sách mã học sinh trong lớp<textarea id="subject-student-list" rows="3"></textarea></label>
           <label>Môn thi<select id="subject-code"></select></label>
           <label id="subject-order-wrap">Thứ tự ca thi<select id="subject-order"><option value="1">Ca 1 / môn lựa chọn 1</option><option value="2">Ca 2 / môn lựa chọn 2</option></select></label>
-          <label>File đăng ký môn<input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label>
+          <div class="hidden" aria-hidden="true"><input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"><button id="download-subject-template" type="button"></button></div>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
-        <div class="notice notice-info">Muốn nhập file Excel, bạn có thể chọn tệp tại đây; hệ thống sẽ tự chuyển Phạm vi áp dụng sang “Nạp từ Excel”. Hỗ trợ .xlsx và .csv UTF-8. Cột Môn 1/Môn 2 bắt buộc dùng mã môn (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không nhập tên môn; tải mẫu Excel để dùng đúng định dạng. Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
+        <div class="notice notice-info">Lưu ý: nhập danh sách môn lựa chọn từ Excel tại duy nhất mục “Quản lý môn lựa chọn theo lớp” bên dưới. Khu vực này chỉ dùng để cấu hình môn thi hoặc quản lý đăng ký từng môn, tránh nhập trùng qua nhiều luồng.</div>
         <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
           <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
           <div class="roster-import-box">
@@ -247,6 +247,6 @@
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
 </style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.32 · build 2026-10-14</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.30"></script>
+  <script type="module" src="./js/app.js?v=0.1.33"></script>
 </body>
 </html>
