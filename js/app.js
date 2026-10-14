@@ -1,6 +1,6 @@
 import {optimizeElectiveRooms,SUBJECTS} from './rooming.js';
-const APP_VERSION='v0.1.36';
-const APP_BUILD='2026-10-14-connection-diagnostic';
+const APP_VERSION='v0.1.37';
+const APP_BUILD='2026-10-14-connection-fallback';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -21,11 +21,22 @@ async function connect(url,key){
   if(!key||key.length<20)throw new Error('Publishable/anon key đang trống hoặc quá ngắn. Sao chép khóa public/publishable hoặc anon trong Supabase → Settings → API Keys; không dùng service_role.');
   if(/^eyJ[a-zA-Z0-9_-]+\./.test(key)){/* legacy anon JWT is accepted */}
   else if(!key.startsWith('sb_publishable_'))throw new Error('Khóa không có định dạng publishable/anon được hỗ trợ. Hãy sao chép lại đúng khóa public/publishable hoặc anon của project.');
-  // Verify actual network reachability; getSession alone only checks local auth storage.
-  let response;
-  try{response=await fetch(`${url}/auth/v1/health`,{method:'GET',headers:{apikey:key},cache:'no-store'});}
-  catch(e){throw new Error('Không truy cập được Supabase qua mạng. Kiểm tra URL, Internet, DNS, VPN hoặc CORS/proxy của mạng. Chi tiết: '+(e?.message||'NetworkError'));}
-  if(!response.ok){let detail='';try{detail=(await response.text()).slice(0,240)}catch{};throw new Error(`Supabase phản hồi HTTP ${response.status} khi kiểm tra kết nối. Kiểm tra URL và khóa public/anon. ${detail}`.trim());}
+  // Verify network reachability. Some projects/proxies reject the Auth health
+  // route while PostgREST is reachable, so try both endpoints before failing.
+  const probeErrors=[];
+  let reachable=false;
+  for (const endpoint of [`${url}/auth/v1/health`, `${url}/rest/v1/`]) {
+    try {
+      const response=await fetch(endpoint,{method:'GET',headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'},cache:'no-store'});
+      if(response.ok){reachable=true;break;}
+      let detail='';try{detail=(await response.text()).slice(0,180)}catch{}
+      probeErrors.push(`${new URL(endpoint).pathname}: HTTP ${response.status}${detail?` — ${detail}`:''}`);
+      // An Auth health route may be unsupported by an intermediary. Continue to REST.
+    } catch(e) {
+      probeErrors.push(`${new URL(endpoint).pathname}: ${e?.message||'NetworkError'}`);
+    }
+  }
+  if(!reachable)throw new Error('Không xác minh được kết nối tới Supabase. Kiểm tra URL project, khóa publishable/anon, trạng thái project và kết nối mạng. Chi tiết: '+probeErrors.join(' | '));
   const client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   const {data,error}=await client.auth.getSession();
   if(error)throw new Error('Đã tới được Supabase nhưng không đọc được phiên xác thực trong trình duyệt: '+error.message);
@@ -404,8 +415,7 @@ async function previewRooming(){
    throw new Error(`Không có thí sinh đủ điều kiện xếp phòng. Tổng ${(candidates||[]).length} thí sinh; ${invalid.length} thí sinh chưa có đủ hai môn khác nhau. Hãy vào “Quản lý môn lựa chọn theo lớp”, sửa/lưu Môn 1 và Môn 2 rồi tải lại danh sách. Ví dụ: ${invalid.slice(0,10).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>10?'…':''}`);
   }
   const result=optimizeElectiveRooms(eligible,{capacity:$('room-capacity').value,roomPrefix:$('room-prefix').value,firstRoomNumber:$('first-room-number').value});
-  if(!result.ok){state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;$('export-rooming').disabled=true;throw new Error((result.errors||['Không tạo được phương án xếp phòng.']).join('
-'))}
+  if(!result.ok){state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;$('export-rooming').disabled=true;throw new Error((result.errors||['Không tạo được phương án xếp phòng.']).join('\\n'))}
   state.preview={examId,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value,firstRoomNumber:Number($('first-room-number').value)},result};
   renderRooming(result);
   const warning=invalid.length?` Đã loại khỏi phương án ${invalid.length} thí sinh chưa đủ hai môn khác nhau: ${invalid.slice(0,8).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>8?'…':''}.`:'';
@@ -1027,5 +1037,5 @@ function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDe
 };$('load-subject-registrations').onclick=async()=>{const b=$('load-subject-registrations');b.disabled=true;const oldText=b.textContent;b.textContent='Đang tải...';try{await loadSubjectRegistrations()}catch(e){message($('subject-message'),`Không tải được danh sách đăng ký môn: ${e.message}`,'error')}finally{b.disabled=false;b.textContent=oldText}};$('subject-exam-select').onchange=()=>{syncSubjectExamMode();loadSubjectRegistrations();loadRosterData()};$('subject-scope').onchange=()=>{const scope=$('subject-scope').value;$('subject-class-code').disabled=!['class','class_students'].includes(scope);$('subject-student-code').disabled=scope!=='student';$('subject-csv').disabled=false;$('subject-grade').disabled=scope!=='grade';$('subject-student-list').disabled=scope!=='class_students';$('subject-class-code-wrap').classList.add('hidden');$('subject-class-picker-wrap').classList.toggle('hidden',scope!=='class');$('subject-student-class-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-picker-wrap').classList.toggle('hidden',scope!=='class_students');$('subject-student-code-wrap').classList.toggle('hidden',scope!=='student');$('subject-grade-wrap').classList.toggle('hidden',scope!=='grade');$('subject-student-list-wrap').classList.add('hidden');if(['class','class_students'].includes(scope)&&state.client)loadSubjectPickerCandidates();};$('subject-scope').dispatchEvent(new Event('change'));$('subject-student-class').onchange=renderSubjectStudentPicker;$('subject-exam-select').addEventListener('change',()=>{if(['class','class_students'].includes($('subject-scope').value))loadSubjectPickerCandidates()});$('subject-classes-select-all').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=true);$('subject-classes-clear').onclick=()=>document.querySelectorAll('.subject-class-check').forEach(el=>el.checked=false);$('subject-students-select-all').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=true);$('subject-students-clear').onclick=()=>document.querySelectorAll('.subject-student-check').forEach(el=>el.checked=false);$('subject-mode').onchange=()=>{const elective=$('subject-mode').value==='elective';$('subject-order-wrap').classList.toggle('hidden',!elective);if(!elective)$('subject-order').value='1'};$('subject-mode').dispatchEvent(new Event('change'));initSubjectCatalog();$('preview-rooming').onclick=previewRooming;$('save-rooming').onclick=()=>saveRooming(false);$('lock-rooming').onclick=()=>{if(confirm('Khóa phương án xếp phòng? Hãy chắc chắn đã kiểm tra danh sách.'))saveRooming(true)};$('export-rooming').onclick=exportRooming;
   $('roster-import-btn').onclick=importRosterElectivesFromExcel;$('roster-print-btn').onclick=printRosterChoices;$('roster-template-btn').onclick=downloadRosterExcelTemplate;$('roster-reload').onclick=loadRosterData;$('roster-grade').onchange=()=>{syncRosterClassFilters();state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-class').onchange=()=>{state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-search').oninput=()=>{state.rosterPage=0;renderRosterTable()};$('roster-show-overage').onchange=renderRosterTable;$('roster-prev').onclick=()=>{state.rosterPage=Math.max(0,state.rosterPage-1);renderRosterTable()};$('roster-next').onclick=()=>{state.rosterPage++;renderRosterTable()};$('roster-table-body').addEventListener('change',e=>{if(e.target.matches('[data-roster-subject]')){const tr=e.target.closest('tr'),sels=[...tr.querySelectorAll('[data-roster-subject]')];const id=String(tr.dataset.candidateId);state.rosterDirty.set(id,{m1:sels[0].value,m2:sels[1].value});tr.classList.add('roster-dirty');renderRosterTable();}});$('roster-table-body').addEventListener('click',async e=>{const btn=e.target.closest('[data-roster-save]');if(btn){btn.disabled=true;const ok=await saveRosterStudent(btn.dataset.rosterSave);if(ok){renderRosterTable();renderRosterStats();message($('roster-message'),'Đã lưu môn lựa chọn cho học sinh.','success')}btn.disabled=false}});$('roster-save-all').onclick=saveRosterAll;$('overage-grade').onchange=syncOverageClassFilters;$('overage-class').onchange=syncOverageStudents;$('overage-add').onclick=addOverageStudent;$('roster-stats-refresh').onclick=renderRosterStats;$('roster-stats-scope').onchange=()=>{if($('roster-stats-scope').value==='all'){$('roster-stats-grade').disabled=true;$('roster-stats-class').disabled=true}else{$('roster-stats-grade').disabled=false;$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class'||!$('roster-stats-grade').value}renderRosterStats()};$('roster-stats-grade').onchange=()=>{syncRosterStatsClass();$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class';renderRosterStats()};$('roster-stats-class').onchange=renderRosterStats;
 }
-async function boot(){wire();renderSubjects();const config=readConfig();if(!config.url||!config.key){showScreen('setup-screen');return}$('supabase-url').value=config.url;$('supabase-key').value=config.key;try{await connect(config.url,config.key)}catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(e?.message||String(e)),'error')}}
+async function boot(){wire();renderSubjects();updateVersionDisplay();const config=readConfig();if(!config.url||!config.key){showScreen('setup-screen');if(config.url||config.key)message($('setup-message'),'Cấu hình Supabase chưa đầy đủ trong trình duyệt này. Hãy nhập lại cả URL project và khóa publishable/anon.','error');return}$('supabase-url').value=config.url;$('supabase-key').value=config.key;try{await connect(config.url,config.key)}catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(e?.message||String(e)),'error')}}
 boot();
