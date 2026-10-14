@@ -23,7 +23,10 @@
     .candidate-modal input,.candidate-modal select{width:100%;box-sizing:border-box}
     .candidate-row-check{width:16px;height:16px}
     @media(max-width:800px){.candidate-filters{grid-template-columns:1fr 1fr}.candidate-modal form{padding:18px}.candidate-modal .form-grid{grid-template-columns:1fr}}
-  </style>
+  .roster-import-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:14px;margin:14px 0;display:flex;flex-direction:column;gap:8px}
+.roster-import-box label{display:flex;flex-direction:column;gap:4px}.roster-import-box label span,.roster-import-box .help-text{font-size:13px;color:#64748b;margin:0}
+.roster-import-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.roster-import-controls input{max-width:100%;flex:1;min-width:240px}
+</style>
 <style>
 .candidate-delete-progress{margin:12px 0 16px;padding:14px 16px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px}
 .delete-progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#1e3a8a}
@@ -62,7 +65,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.31</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.32</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -163,6 +166,15 @@
         <div class="notice notice-info">Muốn nhập file Excel, bạn có thể chọn tệp tại đây; hệ thống sẽ tự chuyển Phạm vi áp dụng sang “Nạp từ Excel”. Hỗ trợ .xlsx và .csv UTF-8. Cột Môn 1/Môn 2 bắt buộc dùng mã môn (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không nhập tên môn; tải mẫu Excel để dùng đúng định dạng. Kỳ thi mặc định dùng để phân công môn theo lớp; kỳ thi lựa chọn dùng để đăng ký môn lựa chọn cho lớp hoặc từng học sinh. Có thể quản lý danh sách thí sinh của từng môn để thêm, chuyển sang môn khác hoặc xóa đăng ký.</div>
         <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
           <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
+          <div class="roster-import-box">
+            <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; Môn 1/Môn 2 phải là mã môn như ANH, LY, HOA, SINH.</span></label>
+            <div class="roster-import-controls">
+              <input id="roster-excel-file" type="file" accept=".xlsx,.csv">
+              <button id="roster-import-btn" type="button" class="btn btn-primary">Nạp Excel vào danh sách</button>
+              <button id="roster-template-btn" type="button" class="btn btn-light">Tải mẫu Excel</button>
+            </div>
+            <p class="help-text">Hệ thống đối chiếu theo mã học sinh với kỳ thi đang chọn, kiểm tra toàn bộ file trước khi ghi và báo rõ các dòng không khớp.</p>
+          </div>
           <div class="candidate-filters roster-filters">
             <label>Khối<select id="roster-grade"><option value="">-- Chọn khối --</option></select></label>
             <label>Lớp<select id="roster-class" disabled><option value="">-- Chọn lớp --</option></select></label>
@@ -233,7 +245,7 @@
 #subject-manage-dialog .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
-</style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.31 · build 2026-10-14</span></span><span>GitHub Pages + Supabase</span></footer>
+</style>\n    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.32 · build 2026-10-14</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <script type="module" src="./js/app.js?v=0.1.30"></script>
 </body>
