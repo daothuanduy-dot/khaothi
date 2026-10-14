@@ -7,6 +7,10 @@ export const SUBJECTS = [
 export function isValidSbd(value) {
   return /^(?:\d{6}|\d{8})$/.test(String(value ?? ''));
 }
+export function roomExportRowPositions(headerRow, itemCount) {
+  const dataStart=headerRow+1;
+  return {dataStart,dataEnd:dataStart+itemCount-1,totalRow:dataStart+itemCount};
+}
 const nameOf = code => ({TOAN:'Toán',VAN:'Ngữ văn',...Object.fromEntries(SUBJECTS.map(s=>[s.code,s.name]))})[String(code||'').toUpperCase()] || String(code||'');
 const normalize = s => String(s||'').normalize('NFC').trim();
 const cmpName = (a,b) => normalize(a.student_name).localeCompare(normalize(b.student_name),'vi',{sensitivity:'base'}) ||

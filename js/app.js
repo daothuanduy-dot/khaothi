@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,SUBJECTS} from './rooming.js?v=0.1.57';
-import {loadTabModules} from './module-loader.js?v=0.1.57';
-const APP_VERSION='v0.1.57';
-const APP_BUILD='2026-10-15-rooming-persistence';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.58';
+import {loadTabModules} from './module-loader.js?v=0.1.58';
+const APP_VERSION='v0.1.58';
+const APP_BUILD='2026-10-15-rooming-export-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -1010,26 +1010,26 @@ function exportRooming(){
  let roomIndex=0;
  for(const [roomCode,items] of roomMap){
   if(roomIndex++){
-   listingBreaks.push(listingData.length-1);
-   receiptBreaks.push(receiptData.length-1);
+  listingBreaks.push({id:listingData.length-1,max:16383,man:1});
+  receiptBreaks.push({id:receiptData.length-1,max:16383,man:1});
   }
   const listingStart=listingData.length;
-  let row=addRoomHeading(listingData,listingMerges,roomCode,6,'DANH SÁCH NIÊM YẾT THÍ SINH');
-  listingTitles.push(listingStart,listingStart+1);listingBold.push(row);
-  items.forEach((a,i)=>listingData.push([i+1,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
-  listingTables.push([row,row+items.length,0,5]);
-  row+=items.length;
+ const listingHeaderRow=addRoomHeading(listingData,listingMerges,roomCode,6,'DANH SÁCH NIÊM YẾT THÍ SINH');
+ const listingPositions=roomExportRowPositions(listingHeaderRow,items.length);
+ listingTitles.push(listingStart,listingStart+1);listingBold.push(listingHeaderRow);
+ items.forEach((a,i)=>listingData.push([i+1,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
+ listingTables.push([listingHeaderRow,listingPositions.dataEnd,0,5]);
   listingData.push([`Tổng số thí sinh: ${items.length}`,...Array(5).fill('')]);
-  listingMerges.push({s:{r:row,c:0},e:{r:row,c:5}});listingBold.push(row);
-  listingData.push([]);
+ listingMerges.push({s:{r:listingPositions.totalRow,c:0},e:{r:listingPositions.totalRow,c:5}});
+ listingBold.push(listingPositions.totalRow);
+ listingData.push([]);
 
-  const receiptStart=receiptData.length;
-  row=addRoomHeading(receiptData,receiptMerges,roomCode,10,'PHIẾU THU BÀI');
-  receiptTitles.push(receiptStart,receiptStart+1);receiptBold.push(row);
-  receiptData[row-1]=['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'];
-  items.forEach((a,i)=>receiptData.push([i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']));
-  receiptTables.push([row,row+items.length,0,9]);
-  row+=items.length;
+ const receiptStart=receiptData.length;
+ const receiptHeaderRow=addRoomHeading(receiptData,receiptMerges,roomCode,10,'PHIẾU THU BÀI');
+ const receiptPositions=roomExportRowPositions(receiptHeaderRow,items.length);
+ receiptTitles.push(receiptStart,receiptStart+1);receiptBold.push(receiptHeaderRow);
+ items.forEach((a,i)=>receiptData.push([i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']));
+ receiptTables.push([receiptHeaderRow,receiptPositions.dataEnd,0,9]);
   receiptData.push([]);
   receiptData.push(['Tổng số thí sinh:',items.length,'Số thí sinh vắng:','','','','','','','']);
   receiptData.push(['Tổng số bài:','','Tổng số tờ:','','','','','','','']);
@@ -1037,13 +1037,17 @@ function exportRooming(){
   receiptData.push(['Cán bộ coi thi số 1','','','','','Cán bộ coi thi số 2','','','','']);
   receiptData.push(['(Ký, ghi rõ họ tên)','','','','','(Ký, ghi rõ họ tên)','','','','']);
   receiptMerges.push(
-   {s:{r:row+2,c:0},e:{r:row+2,c:1}},{s:{r:row+2,c:2},e:{r:row+2,c:3}},
-   {s:{r:row+3,c:0},e:{r:row+3,c:1}},{s:{r:row+3,c:2},e:{r:row+3,c:3}},
-   {s:{r:row+5,c:0},e:{r:row+5,c:4}},{s:{r:row+5,c:5},e:{r:row+5,c:9}},
-   {s:{r:row+6,c:0},e:{r:row+6,c:4}},{s:{r:row+6,c:5},e:{r:row+6,c:9}}
-  );
-  receiptBold.push(row+2,row+3,row+5);
-  receiptData.push([]);
+  {s:{r:receiptPositions.totalRow+1,c:0},e:{r:receiptPositions.totalRow+1,c:1}},
+  {s:{r:receiptPositions.totalRow+1,c:2},e:{r:receiptPositions.totalRow+1,c:3}},
+  {s:{r:receiptPositions.totalRow+2,c:0},e:{r:receiptPositions.totalRow+2,c:1}},
+  {s:{r:receiptPositions.totalRow+2,c:2},e:{r:receiptPositions.totalRow+2,c:3}},
+  {s:{r:receiptPositions.totalRow+4,c:0},e:{r:receiptPositions.totalRow+4,c:4}},
+  {s:{r:receiptPositions.totalRow+4,c:5},e:{r:receiptPositions.totalRow+4,c:9}},
+  {s:{r:receiptPositions.totalRow+5,c:0},e:{r:receiptPositions.totalRow+5,c:4}},
+  {s:{r:receiptPositions.totalRow+5,c:5},e:{r:receiptPositions.totalRow+5,c:9}}
+ );
+ receiptBold.push(receiptPositions.totalRow+1,receiptPositions.totalRow+2,receiptPositions.totalRow+4);
+ receiptData.push([]);
  }
  const wsListing=window.XLSX.utils.aoa_to_sheet(listingData);
  wsListing['!merges']=listingMerges;
@@ -1065,19 +1069,27 @@ function printRoomingPDF(){
  const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt"><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
  const win=window.open('','_blank');if(!win){message($('rooming-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
  win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách niêm yết và phiếu thu bài</title><style>
- @page{size:A4 landscape;margin:2mm}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:"Times New Roman",serif;color:#111;font-size:12pt;line-height:1.05}
- .page{width:100%;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
+ @page{size:A4 landscape;margin:2mm}
+ *{box-sizing:border-box}
+ html,body{margin:0;padding:0}
+ body{font-family:"Times New Roman",serif;color:#111;font-size:12pt;line-height:1}
+ .page{width:293mm;min-height:205mm;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
  .page:last-child{page-break-after:auto;break-after:auto}
- header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 3mm;font-size:12pt;line-height:1.15}
- table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif;font-size:12pt}
- th,td{border:1px solid #000;padding:1px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1.05}
+ header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 2mm;font-size:12pt;line-height:1.05}
+ table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif;font-size:12pt;page-break-inside:avoid;break-inside:avoid}
+ thead{display:table-header-group}
+ tr{break-inside:avoid;page-break-inside:avoid}
+ th,td{border:1px solid #000;padding:1px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1}
  th{font-weight:bold}td:nth-child(3){text-align:left}.receipt{font-size:12pt}
  .receipt th,.receipt td{padding:1px;line-height:1}
  .receipt th:nth-child(1){width:4%}.receipt th:nth-child(2){width:9%}.receipt th:nth-child(3){width:19%}
  .receipt th:nth-child(4){width:9%}.receipt th:nth-child(5){width:7%}.receipt th:nth-child(6){width:15%}
  .receipt th:nth-child(7){width:7%}.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:12%}
- .totals{font-weight:normal;margin:2mm 0}footer{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;line-height:1.3}footer div{width:40%}
- @media screen{body{max-width:1100px;margin:20px auto}.page{margin-bottom:20px;border-bottom:1px dashed #aaa;padding-bottom:20px}}
+ .totals{font-weight:normal;margin:2mm 0}
+ footer{display:flex;justify-content:space-around;text-align:center;margin-top:4mm;line-height:1.2}
+ footer div{width:40%}
+ @media print{html,body{width:293mm;margin:0!important}.page{margin:0!important}}
+ @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;min-height:0;margin-bottom:20px;border-bottom:1px dashed #aaa;padding-bottom:20px}}
  </style></head><body>${posting}${receipts}<script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script></body></html>`);
  win.document.close();
 }
