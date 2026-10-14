@@ -1,6 +1,6 @@
 import {optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js';
-const APP_VERSION='v0.1.41';
-const APP_BUILD='2026-10-14-sbd-generator';
+const APP_VERSION='v0.1.42';
+const APP_BUILD='2026-10-14-sbd-independent';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -419,21 +419,15 @@ async function previewRooming(){
     .select('id,sbd,student_code,student_name,class_code,grade_code,date_of_birth').eq('exam_id',examId).order('sbd');
   if(error)throw new Error(`Không tải được thí sinh: ${error.message}`);state.candidates=candidates||[];
   if(!candidates?.length)throw new Error('Kỳ thi chưa có danh sách thí sinh.');
+  const withoutSbd=candidates.filter(c=>!String(c.sbd||'').trim());
+  const sbdValues=candidates.map(c=>String(c.sbd||'').trim()).filter(Boolean);
+  if(withoutSbd.length)throw new Error(`Còn ${withoutSbd.length} thí sinh chưa có SBD. Hãy cấp SBD trước rồi mới xếp phòng.`);
+  if(new Set(sbdValues).size!==sbdValues.length)throw new Error('Phát hiện SBD trùng trong kỳ thi. Hãy cấp lại SBD trước khi xếp phòng.');
+  candidates.sort((a,b)=>String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}));
   const requestedCapacity=Number($('room-capacity').value);if(!Number.isInteger(requestedCapacity)||requestedCapacity<1||requestedCapacity>25)throw new Error('Sức chứa phòng phải từ 1 đến 25 học sinh.');
-  const sortMode=$('room-sort-mode')?.value||'abc';
+  const sortMode='sbd';
   let sortedCandidates=[...candidates];
-  if(sortMode==='previous'){
-    const previousExamId=$('room-previous-exam')?.value;
-    if(!previousExamId)throw new Error('Hãy chọn kỳ thi trước để sắp xếp theo kết quả.');
-    if(previousExamId===examId)throw new Error('Kỳ thi dùng kết quả trước phải khác kỳ thi đang xếp phòng.');
-    const previous=await loadPreviousScores(previousExamId);
-    for(const c of sortedCandidates){
-      const keys=[String(c.student_code||'').trim(),String(c.sbd||'').trim(),String(c.id||'').trim()];
-      c.previous_score=keys.map(k=>previous.map.get(k)).find(v=>v!==undefined)??null;
-    }
-    const missing=sortedCandidates.filter(c=>c.previous_score===null).length;
-    if(missing)throw new Error(`Không tìm thấy kết quả kỳ thi trước cho ${missing} thí sinh. Hãy kiểm tra mã học sinh/SBD giữa hai kỳ thi.`);
-  }
+  // SBD đã phản ánh quy tắc sắp xếp được chọn ở bước cấp số; không sắp xếp lại ở bước xếp phòng.
   let result,invalid=[];
   if(planType==='mandatory'){
     const subjectCode=$('mandatory-subject')?.value||'TOAN';
@@ -469,8 +463,8 @@ async function previewRooming(){
     ?`Phương án môn ${$('mandatory-subject').selectedOptions[0]?.text||''} gồm ${result.summary.candidate_count} thí sinh, ${result.summary.room_count} phòng. Đây là phương án độc lập với môn lựa chọn.`
     :`Phương án môn lựa chọn gồm ${result.summary.candidate_count} thí sinh, ${result.summary.room_count} phòng; mỗi phòng có thể có nhiều môn trong từng ca, nhưng không trùng môn giữa hai ca.`;
   message($('rooming-message'),note+warning,invalid.length?'error':'success');
-  $('save-rooming').disabled=false;$('lock-rooming').disabled=true;$('export-rooming').disabled=false;$('print-rooming-pdf').disabled=false;$('assign-sbd-rooming').disabled=true;
- }catch(e){state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;$('export-rooming').disabled=true;$('print-rooming-pdf').disabled=true;$('assign-sbd-rooming').disabled=true;message($('rooming-message'),e.message||String(e),'error')}
+  $('save-rooming').disabled=false;$('lock-rooming').disabled=true;$('export-rooming').disabled=false;$('print-rooming-pdf').disabled=false;
+ }catch(e){state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;$('export-rooming').disabled=true;$('print-rooming-pdf').disabled=true;message($('rooming-message'),e.message||String(e),'error')}
  finally{$('preview-rooming').disabled=false}
 }
 function renderRooming(result,planType='elective'){
@@ -507,7 +501,7 @@ async function saveRooming(lock=false){
  if(error){message($('rooming-message'),`Không lưu được phương án ${planType==='mandatory'?'môn bắt buộc':'môn lựa chọn'}. ${planType==='mandatory'?'Hãy chạy migration SQL v0.1.39. ':''}${error.message}`,'error');return}
  message($('rooming-message'),`${lock?'Đã khóa':'Đã lưu'} phương án ${planType==='mandatory'?'môn bắt buộc':'môn lựa chọn'} ${data?.plan_id||''}.`,'success');
  $('save-rooming').disabled=lock;$('lock-rooming').disabled=lock;state.preview.saved=data;state.preview.locked=lock;
- $('assign-sbd-rooming').disabled=!lock;$('export-rooming').disabled=false;$('print-rooming-pdf').disabled=false;
+ $('export-rooming').disabled=false;$('print-rooming-pdf').disabled=false;
 }
 function roomingRows(){
  if(!state.preview)return [];
@@ -587,8 +581,8 @@ function printRoomingPDF(){
  win.document.close();
 }
 async function assignSbdByRoom(){
- if(!state.preview)return;
- if(!state.preview.locked){message($('rooming-message'),'Hãy khóa phương án xếp phòng trước khi đánh số báo danh.','error');return}
+ const examId=$('rooming-exam-select')?.value;
+ if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi trước khi đánh số báo danh.','error');return}
  const totalLength=Number($('sbd-length')?.value||6);
  const prefixLength=Number($('sbd-prefix-length')?.value||2);
  const prefix=String($('sbd-prefix')?.value||'').trim();
@@ -596,46 +590,53 @@ async function assignSbdByRoom(){
  if(![2,3].includes(prefixLength)||prefix.length!==prefixLength||!/^\\d+$/.test(prefix)){
    message($('rooming-message'),`Tiền tố SBD phải gồm đúng ${prefixLength} chữ số. Ví dụ: ${prefixLength===2?'01':'001'}.`,'error');return
  }
- const rows=roomingRows();
- const uniqueIds=new Set(rows.map(a=>String(a.candidate_id)));
- if(uniqueIds.size!==rows.length){message($('rooming-message'),'Phát hiện học sinh bị lặp trong phương án. Không đánh số để tránh ghi đè SBD.','error');return}
  const suffixLength=totalLength-prefixLength;
  const maxNumber=10**suffixLength-1;
- if(rows.length>maxNumber){message($('rooming-message'),`Tiền tố ${prefix} và độ dài ${totalLength} chỉ cho phép tối đa ${maxNumber.toLocaleString('vi-VN')} thí sinh. Hiện có ${rows.length}.`,'error');return}
- const sortMode=state.preview.options?.sortMode||$('room-sort-mode')?.value||'abc';
- // Assign serial numbers according to the selected candidate sorting rule, independently
- // of room display order; the room placement itself remains unchanged.
- const ordered=[...rows];
- if(sortMode==='previous'){
-   ordered.sort((a,b)=>{
-     const av=a.previous_score==null?-Infinity:Number(a.previous_score);
-     const bv=b.previous_score==null?-Infinity:Number(b.previous_score);
-     return bv-av || String(a.student_name||'').localeCompare(String(b.student_name||''),'vi',{sensitivity:'base'}) ||
-       String(a.student_code||'').localeCompare(String(b.student_code||''),'vi',{numeric:true});
-   });
- }else{
-   ordered.sort((a,b)=>String(a.student_name||'').localeCompare(String(b.student_name||''),'vi',{sensitivity:'base'}) ||
-     String(a.student_code||'').localeCompare(String(b.student_code||''),'vi',{numeric:true}));
- }
- const sbdById=new Map();
- ordered.forEach((a,i)=>sbdById.set(String(a.candidate_id),prefix+String(i+1).padStart(suffixLength,'0')));
- const payload=ordered.map(a=>({candidate_id:a.candidate_id,sbd:sbdById.get(String(a.candidate_id))}));
  const btn=$('assign-sbd-rooming');btn.disabled=true;
  try{
-   const {data,error}=await state.client.rpc('exam_assign_candidate_sbd',{p_exam_id:state.preview.examId,p_assignments:payload});
-   if(error)throw new Error(`Không lưu được SBD vào CSDL. Hãy chạy migration v0.1.41 trong Supabase SQL Editor. ${error.message}`);
-   state.preview.result.assignments=state.preview.result.assignments.map(a=>({...a,sbd:sbdById.get(String(a.candidate_id))||a.sbd}));
-   for(const room of state.preview.result.rooms){
-     const s=state.preview.result.assignments.filter(a=>a.room_code===room.room_code).map(a=>String(a.sbd)).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
-     room.sbd_first=s[0]||'';room.sbd_last=s[s.length-1]||'';
+   const {data:candidates,error}=await state.client.from('exam_candidates')
+     .select('id,sbd,student_code,student_name,class_code,grade_code,date_of_birth').eq('exam_id',examId);
+   if(error)throw new Error(`Không tải được danh sách thí sinh: ${error.message}`);
+   if(!candidates?.length)throw new Error('Kỳ thi chưa có danh sách thí sinh.');
+   if(candidates.length>maxNumber)throw new Error(`Tiền tố ${prefix} với SBD ${totalLength} chữ số chỉ cấp được ${maxNumber.toLocaleString('vi-VN')} số; danh sách có ${candidates.length} thí sinh.`);
+   const sortMode=$('room-sort-mode')?.value||'abc';
+   const ordered=[...candidates];
+   if(sortMode==='previous'){
+     const previousExamId=$('room-previous-exam')?.value;
+     if(!previousExamId)throw new Error('Hãy chọn kỳ thi trước để cấp SBD theo kết quả.');
+     if(previousExamId===examId)throw new Error('Kỳ thi lấy kết quả phải khác kỳ thi đang cấp SBD.');
+     const previous=await loadPreviousScores(previousExamId);
+     for(const c of ordered){
+       const keys=[String(c.student_code||'').trim(),String(c.sbd||'').trim(),String(c.id||'').trim()];
+       c.previous_score=keys.map(k=>previous.map.get(k)).find(v=>v!==undefined)??null;
+     }
+     const missing=ordered.filter(c=>c.previous_score===null).length;
+     if(missing)throw new Error(`Không tìm thấy kết quả kỳ thi trước cho ${missing} thí sinh. Hãy kiểm tra mã học sinh giữa hai kỳ thi.`);
+     ordered.sort((a,b)=>Number(b.previous_score)-Number(a.previous_score)||compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),undefined,{numeric:true}));
+   }else{
+     ordered.sort((a,b)=>compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),undefined,{numeric:true}));
    }
-   state.candidates=(state.candidates||[]).map(c=>({...c,sbd:sbdById.get(String(c.id))||c.sbd}));
-   state.preview.sbdConfig={totalLength,prefixLength,prefix,sortMode};
-   renderRooming(state.preview.result,state.preview.planType);
-   message($('rooming-message'),`Đã cấp và lưu ${payload.length} số báo danh ${totalLength} chữ số với tiền tố ${prefix}. Số thứ tự được cấp theo ${sortMode==='previous'?'kết quả kỳ thi trước':'ABC theo họ tên'}.`,'success');
-   $('export-rooming').disabled=false;$('print-rooming-pdf').disabled=false;
+   const assignments=ordered.map((c,i)=>({candidate_id:c.id,sbd:prefix+String(i+1).padStart(suffixLength,'0')}));
+   const {data,error:rpcError}=await state.client.rpc('exam_assign_candidate_sbd',{p_exam_id:examId,p_assignments:assignments});
+   if(rpcError)throw new Error(`Không lưu được SBD. Hãy chạy migration v0.1.41 trên đúng project Supabase. ${rpcError.message}`);
+   state.candidates=ordered.map((c,i)=>({...c,sbd:assignments[i].sbd}));
+   state.sbdExamId=examId;
+   state.sbdConfig={totalLength,prefixLength,prefix,sortMode};
+   if(state.preview?.examId===examId)state.preview=null;
+   $('save-rooming').disabled=true;$('lock-rooming').disabled=true;$('export-rooming').disabled=true;$('print-rooming-pdf').disabled=true;
+   message($('rooming-message'),`Đã cấp và lưu ${assignments.length} SBD duy nhất cho kỳ thi với tiền tố ${prefix}. Tiếp theo, tạo phương án xếp phòng; SBD sẽ được giữ nguyên khi xếp lại phòng.`,'success');
  }catch(e){message($('rooming-message'),e.message||String(e),'error')}
  finally{btn.disabled=false}
+}
+function compareVietnameseName(a,b){
+ const parts=s=>String(s||'').trim().normalize('NFC').split(/\\s+/).filter(Boolean);
+ const ap=parts(a),bp=parts(b);
+ const ag=ap.at(-1)||'',bg=bp.at(-1)||'';
+ const am=ap.slice(1,-1).join(' '),bm=bp.slice(1,-1).join(' ');
+ const af=ap[0]||'',bf=bp[0]||'';
+ return ag.localeCompare(bg,'vi',{sensitivity:'base'}) ||
+   am.localeCompare(bm,'vi',{sensitivity:'base'}) ||
+   af.localeCompare(bf,'vi',{sensitivity:'base'});
 }
 function download(text,name,type){const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 function downloadTemplate(){downloadExcelTemplate()}
