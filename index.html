@@ -212,13 +212,15 @@
         <div class="notice notice-info"><b>Quy tắc:</b> ca 1 thi môn lựa chọn thứ nhất, ca 2 thi môn lựa chọn thứ hai. Mỗi phòng được ghép học sinh cùng cặp môn lựa chọn, nhờ đó một phòng chỉ có hai môn và không trùng môn giữa hai ca.</div>
         <div class="form-grid rooming-controls">
           <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
+          <label>Sắp xếp thí sinh<select id="room-sort-mode"><option value="abc">ABC theo họ tên</option><option value="previous">Theo kết quả kỳ thi trước</option></select></label>
+          <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
           <label>Sức chứa phòng<input id="room-capacity" type="number" min="1" max="100" value="24" required></label>
           <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
           <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
           <div class="form-actions"><button id="preview-rooming" class="btn btn-primary" type="button">Tạo phương án xem trước</button><button id="save-rooming" class="btn btn-secondary" type="button" disabled>Lưu phương án</button><button id="lock-rooming" class="btn btn-danger" type="button" disabled>Khóa phương án</button></div>
         </div>
         <div id="rooming-message" class="notice hidden"></div><div id="rooming-summary" class="metric-grid"></div>
-        <div class="table-wrap"><table><thead><tr><th>Phòng</th><th>Sĩ số</th><th>Ca 1</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="5" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>STT</th><th>Phòng</th><th>Sĩ số</th><th>Ca 1</th><th>Ca 2</th><th>SBD đầu–cuối</th></tr></thead><tbody id="rooming-table-body"><tr><td colspan="6" class="empty">Chưa có phương án.</td></tr></tbody></table></div>
         <div class="section-heading subheading"><div><h3>Danh sách phân phòng</h3><p>Danh sách chi tiết theo SBD.</p></div><button id="export-rooming" class="btn btn-light" disabled>Xuất CSV</button></div>
         <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th></tr></thead><tbody id="assignment-table-body"><tr><td colspan="6" class="empty">Chưa có phân công.</td></tr></tbody></table></div>
       </section>
@@ -247,8 +249,8 @@
 #subject-manage-dialog .modal-header h3{margin:0 0 6px}
 #subject-manage-dialog .modal-header p{margin:0;color:#64748b}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.37 · build 2026-10-14-connection-diagnostic</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.38 · build 2026-10-14-connection-diagnostic</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
-  <script type="module" src="./js/app.js?v=0.1.37"></script>
+  <script type="module" src="./js/app.js?v=0.1.38"></script>
 </body>
 </html>
