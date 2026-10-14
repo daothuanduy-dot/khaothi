@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.53';
-import {loadTabModules} from './module-loader.js?v=0.1.53';
-const APP_VERSION='v0.1.53';
-const APP_BUILD='2026-10-15-elective-room-subject-sets';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,SUBJECTS} from './rooming.js?v=0.1.56';
+import {loadTabModules} from './module-loader.js?v=0.1.56';
+const APP_VERSION='v0.1.56';
+const APP_BUILD='2026-10-15-a4-rooming-exports';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
 let rosterLoadedExamId=null;
@@ -825,7 +825,10 @@ async function finalizeRooming(){
    p_capacity:preview.options.capacity,p_rooms:occupiedRooms,p_assignments:preview.result.assignments,
    p_source_plan_id:preview.sourcePlanId
   });
-  if(error)throw new Error(`Không thể phân phòng chính thức. Hãy chạy migration v0.1.45 trên đúng project Supabase. ${error.message}`);
+  if(error){
+   const missingFinalizeFunction=error.code==='42883'||error.code==='PGRST202';
+   throw new Error(`Không thể phân phòng chính thức.${missingFinalizeFunction?' Hãy chạy migration v0.1.45 trên đúng project Supabase.':''} ${error.message}`);
+  }
   preview.result.rooms=occupiedRooms;
   preview.finalized=data;
   updateRoomingActions();
@@ -861,40 +864,99 @@ function roomSubjectsFor(a){
 function exportRooming(){
  if(!state.preview)return;
  if(!window.XLSX){message($('rooming-message'),'Không tải được thư viện Excel. Hãy kiểm tra kết nối Internet.','error');return}
- const rows=roomingRows(),{planType,subjectCode,result}=state.preview;
- const wb=window.XLSX.utils.book_new();
- const listing=[['DANH SÁCH NIÊM YẾT THÍ SINH'],['Kỳ thi',($('rooming-exam-select').selectedOptions[0]?.text||'')],[],
-  ['STT','Phòng thi','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi']];
- rows.forEach((a,i)=>listing.push([i+1,a.room_code,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
- const wsList=window.XLSX.utils.aoa_to_sheet(listing);
- wsList['!cols']=[{wch:7},{wch:14},{wch:16},{wch:30},{wch:15},{wch:12},{wch:36}];
- wsList['!autofilter']={ref:`A4:G${listing.length}`};window.XLSX.utils.book_append_sheet(wb,wsList,'Danh sach niem yet');
+ const rows=roomingRows(),{planType,subjectCode}=state.preview;
+ const examTitle=$('rooming-exam-select').selectedOptions[0]?.text||'Kỳ thi';
  const roomMap=new Map();rows.forEach(a=>{if(!roomMap.has(a.room_code))roomMap.set(a.room_code,[]);roomMap.get(a.room_code).push(a)});
- for(const [roomCode,items] of roomMap){
-  const subject=items.length?(state.preview.planType==='mandatory'?subjectName(subjectCode):[...new Set(items.map(a=>a.ca1_name))].join(', ')+' / '+[...new Set(items.map(a=>a.ca2_name))].join(', ')):'';
-  const data=[
-   ['SỞ GDĐT HẢI PHÒNG','','','','KỲ THI: '+($('rooming-exam-select').selectedOptions[0]?.text||'')],
-   ['TRƯỜNG THPT LÊ HỒNG PHONG','','','','PHIẾU THU BÀI'],
-   ['','','','','Phòng thi số: '+roomCode],
-   [],
-   ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'],
-   ...items.map((a,i)=>[i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']),
-   [],
-   ['Tổng số thí sinh:',items.length,'; Số thí sinh vắng:',''],
-   ['Tổng số bài:','','; Tổng số tờ:',''],
-   [],
-   ['Cán bộ coi thi số 1','','','','Cán bộ coi thi số 2'],
-   ['(Ký, ghi rõ họ tên)','','','','(Ký, ghi rõ họ tên)']
-  ];
-  const ws=window.XLSX.utils.aoa_to_sheet(data);
-  ws['!cols']=[{wch:6},{wch:13},{wch:29},{wch:15},{wch:10},{wch:20},{wch:10},{wch:9},{wch:14},{wch:20}];
-  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:2}},{s:{r:0,c:4},e:{r:0,c:9}},{s:{r:1,c:0},e:{r:1,c:2}},{s:{r:1,c:4},e:{r:1,c:9}},{s:{r:2,c:4},e:{r:2,c:9}},{s:{r:data.length-3,c:0},e:{r:data.length-3,c:3}},{s:{r:data.length-2,c:0},e:{r:data.length-2,c:3}},{s:{r:data.length-1,c:0},e:{r:data.length-1,c:2}},{s:{r:data.length-1,c:4},e:{r:data.length-1,c:6}}];
-  ws['!rows']=[{hpt:24},{hpt:24},{hpt:22},{hpt:8},{hpt:24},...items.map(()=>({hpt:22})),{hpt:8},{hpt:20},{hpt:20},{hpt:8},{hpt:28},{hpt:22}];
-  ws['!autofilter']={ref:`A5:J${5+items.length}`};
-  const safe=roomCode.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,20)||`Room${wb.SheetNames.length}`;
-  window.XLSX.utils.book_append_sheet(wb,ws,`Phieu ${safe}`.slice(0,31));
+ const wb=window.XLSX.utils.book_new();
+ const thin={style:'thin',color:{rgb:'000000'}};
+ const border={top:thin,bottom:thin,left:thin,right:thin};
+ const baseFont={name:'Times New Roman',sz:12};
+ const center={horizontal:'center',vertical:'center',wrapText:true};
+ const left={horizontal:'left',vertical:'center',wrapText:true};
+ function cell(ws,row,col,style){
+  const address=window.XLSX.utils.encode_cell({r:row,c:col});
+  if(!ws[address])ws[address]={t:'s',v:''};
+  ws[address].s=style;
  }
- window.XLSX.writeFile(wb,`danh-sach-niem-yet_phieu-thu-bai_${planType==='mandatory'?subjectCode:'lua-chon'}.xlsx`);
+ function styleSheet(ws,{columnWidths,tableRanges,titleRows,boldRows,breaks}){
+  ws['!cols']=columnWidths.map(wch=>({wch}));
+  ws['!margins']={left:0.15,right:0.15,top:0.25,bottom:0.25,header:0.1,footer:0.1};
+  ws['!pageSetup']={paperSize:9,orientation:'landscape',fitToWidth:1,fitToHeight:0};
+  ws['!rowBreaks']=breaks;
+  for(const [firstRow,lastRow,firstCol,lastCol] of tableRanges){
+   for(let r=firstRow;r<=lastRow;r++)for(let c=firstCol;c<=lastCol;c++)
+    cell(ws,r,c,{font:baseFont,border,alignment:r===firstRow?center:(c===2?left:center)});
+  }
+  for(const row of titleRows)for(let c=0;c<columnWidths.length;c++)
+   cell(ws,row,c,{font:{...baseFont,bold:true},alignment:center});
+  for(const row of boldRows)for(let c=0;c<columnWidths.length;c++)
+   cell(ws,row,c,{font:{...baseFont,bold:true},alignment:center,border});
+ }
+ function addRoomHeading(data,merges,roomCode,columns,title){
+  const start=data.length;
+  const split=Math.floor(columns/2);
+  data.push(['SỞ GDĐT HẢI PHÒNG',...Array(columns-1).fill('')]);
+  data.push(['TRƯỜNG THPT LÊ HỒNG PHONG',...Array(split-1).fill(''),`${examTitle} — ${title}`,...Array(columns-split-1).fill('')]);
+  data.push([`Phòng thi: ${roomCode}`,...Array(columns-1).fill('')]);
+  data.push(columns===6
+   ? ['STT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi']
+   : ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú']);
+  merges.push({s:{r:start,c:0},e:{r:start,c:split-1}});
+  merges.push({s:{r:start,c:split},e:{r:start,c:columns-1}});
+  merges.push({s:{r:start+1,c:0},e:{r:start+1,c:split-1}});
+  merges.push({s:{r:start+1,c:split},e:{r:start+1,c:columns-1}});
+  merges.push({s:{r:start+2,c:0},e:{r:start+2,c:columns-1}});
+  return start+3;
+ }
+ const listingData=[],listingMerges=[],listingTables=[],listingTitles=[],listingBold=[],listingBreaks=[];
+ const receiptData=[],receiptMerges=[],receiptTables=[],receiptTitles=[],receiptBold=[],receiptBreaks=[];
+ let roomIndex=0;
+ for(const [roomCode,items] of roomMap){
+  if(roomIndex++){
+   listingBreaks.push(listingData.length-1);
+   receiptBreaks.push(receiptData.length-1);
+  }
+  const listingStart=listingData.length;
+  let row=addRoomHeading(listingData,listingMerges,roomCode,6,'DANH SÁCH NIÊM YẾT THÍ SINH');
+  listingTitles.push(listingStart,listingStart+1);listingBold.push(row);
+  items.forEach((a,i)=>listingData.push([i+1,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
+  listingTables.push([row,row+items.length,0,5]);
+  row+=items.length;
+  listingData.push([`Tổng số thí sinh: ${items.length}`,...Array(5).fill('')]);
+  listingMerges.push({s:{r:row,c:0},e:{r:row,c:5}});listingBold.push(row);
+  listingData.push([]);
+
+  const receiptStart=receiptData.length;
+  row=addRoomHeading(receiptData,receiptMerges,roomCode,10,'PHIẾU THU BÀI');
+  receiptTitles.push(receiptStart,receiptStart+1);receiptBold.push(row);
+  receiptData[row-1]=['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'];
+  items.forEach((a,i)=>receiptData.push([i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']));
+  receiptTables.push([row,row+items.length,0,9]);
+  row+=items.length;
+  receiptData.push([]);
+  receiptData.push(['Tổng số thí sinh:',items.length,'Số thí sinh vắng:','','','','','','','']);
+  receiptData.push(['Tổng số bài:','','Tổng số tờ:','','','','','','','']);
+  receiptData.push([]);
+  receiptData.push(['Cán bộ coi thi số 1','','','','','Cán bộ coi thi số 2','','','','']);
+  receiptData.push(['(Ký, ghi rõ họ tên)','','','','','(Ký, ghi rõ họ tên)','','','','']);
+  receiptMerges.push(
+   {s:{r:row+2,c:0},e:{r:row+2,c:1}},{s:{r:row+2,c:2},e:{r:row+2,c:3}},
+   {s:{r:row+3,c:0},e:{r:row+3,c:1}},{s:{r:row+3,c:2},e:{r:row+3,c:3}},
+   {s:{r:row+5,c:0},e:{r:row+5,c:4}},{s:{r:row+5,c:5},e:{r:row+5,c:9}},
+   {s:{r:row+6,c:0},e:{r:row+6,c:4}},{s:{r:row+6,c:5},e:{r:row+6,c:9}}
+  );
+  receiptBold.push(row+2,row+3,row+5);
+  receiptData.push([]);
+ }
+ const wsListing=window.XLSX.utils.aoa_to_sheet(listingData);
+ wsListing['!merges']=listingMerges;
+ styleSheet(wsListing,{columnWidths:[7,14,30,15,12,28],tableRanges:listingTables,titleRows:listingTitles,boldRows:listingBold,breaks:listingBreaks});
+ window.XLSX.utils.book_append_sheet(wb,wsListing,'Danh sach niem yet');
+ const wsReceipts=window.XLSX.utils.aoa_to_sheet(receiptData);
+ wsReceipts['!merges']=receiptMerges;
+ styleSheet(wsReceipts,{columnWidths:[6,13,25,14,9,18,9,8,13,15],tableRanges:receiptTables,titleRows:receiptTitles,boldRows:receiptBold,breaks:receiptBreaks});
+ window.XLSX.utils.book_append_sheet(wb,wsReceipts,'Phieu thu bai');
+ window.XLSX.writeFile(wb,`danh-sach-niem-yet_phieu-thu-bai_${planType==='mandatory'?subjectCode:'lua-chon'}.xlsx`,{cellStyles:true});
 }
 function printRoomingPDF(){
  if(!state.preview)return;
@@ -902,16 +964,22 @@ function printRoomingPDF(){
  const title=$('rooming-exam-select').selectedOptions[0]?.text||'Kỳ thi';
  const roomMap=new Map();rows.forEach(a=>{if(!roomMap.has(a.room_code))roomMap.set(a.room_code,[]);roomMap.get(a.room_code).push(a)});
  const escHtml=s=>esc(s).replace(/\n/g,' ');
- const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br>Phòng thi số: ${escHtml(room)}</div></header><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${items.length}</p></section>`).join('');
+ const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br><b>TRƯỜNG THPT LÊ HỒNG PHONG</b></div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br><b>Phòng thi số: ${escHtml(room)}</b></div></header><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ${items.length}</p></section>`).join('');
  const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt"><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
  const win=window.open('','_blank');if(!win){message($('rooming-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
  win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách niêm yết và phiếu thu bài</title><style>
- @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Times New Roman",serif;color:#111;font-size:11pt}
- .page{page-break-after:always;break-after:page}.page:last-child{page-break-after:auto;break-after:auto}
- header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 8mm;font-size:12pt;line-height:1.5}
- table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #111;padding:4px 5px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}
- th{font-weight:bold}td:nth-child(3){text-align:left}.receipt{font-size:9pt}.receipt th,.receipt td{padding:3px 2px}.receipt th:nth-child(3),.receipt td:nth-child(3){width:20%;text-align:left}
- .totals{font-style:italic;margin:7px 0}footer{display:flex;justify-content:space-around;text-align:center;margin-top:12mm;line-height:1.8}footer div{width:40%}
+ @page{size:A4 landscape;margin:2mm}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:"Times New Roman",serif;color:#111;font-size:12pt;line-height:1.05}
+ .page{width:100%;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
+ .page:last-child{page-break-after:auto;break-after:auto}
+ header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 3mm;font-size:12pt;line-height:1.15}
+ table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif;font-size:12pt}
+ th,td{border:1px solid #000;padding:1px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1.05}
+ th{font-weight:bold}td:nth-child(3){text-align:left}.receipt{font-size:12pt}
+ .receipt th,.receipt td{padding:1px;line-height:1}
+ .receipt th:nth-child(1){width:4%}.receipt th:nth-child(2){width:9%}.receipt th:nth-child(3){width:19%}
+ .receipt th:nth-child(4){width:9%}.receipt th:nth-child(5){width:7%}.receipt th:nth-child(6){width:15%}
+ .receipt th:nth-child(7){width:7%}.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:12%}
+ .totals{font-weight:normal;margin:2mm 0}footer{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;line-height:1.3}footer div{width:40%}
  @media screen{body{max-width:1100px;margin:20px auto}.page{margin-bottom:20px;border-bottom:1px dashed #aaa;padding-bottom:20px}}
  </style></head><body>${posting}${receipts}<script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script></body></html>`);
  win.document.close();
