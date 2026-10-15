@@ -35,6 +35,13 @@ export function validateEssayScore(value,config){
   return null;
 }
 
+export function candidateClassOptions(candidates,grade){
+  return [...new Set((candidates||[])
+    .filter(candidate=>String(candidate.grade_code||'').trim()===String(grade||'').trim())
+    .map(candidate=>String(candidate.class_code||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+}
+
 export function randomScriptHead(usedHeads=new Set()){
   const cryptoApi=globalThis.crypto;
   if(!cryptoApi||typeof cryptoApi.getRandomValues!=='function')

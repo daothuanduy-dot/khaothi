@@ -1,5 +1,5 @@
 const TAB_MODULES = ['exams', 'candidates', 'subjects', 'sbd', 'rooming', 'forms', 'absences', 'scripts', 'scores', 'settings'];
-const MODULE_VERSION = '0.1.70';
+const MODULE_VERSION = '0.1.71';
 
 export async function loadTabModules() {
   const modules = await Promise.all(TAB_MODULES.map(async name => {

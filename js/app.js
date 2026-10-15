@@ -1,14 +1,20 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.70';
-import {loadTabModules} from './module-loader.js?v=0.1.70';
-import {candidateClassOptions,wireOperations} from './operations.js?v=0.1.70';
-const APP_VERSION='v0.1.70';
-const APP_BUILD='2026-10-15-candidate-class-select-runtime-fix';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.71';
+import {loadTabModules} from './module-loader.js?v=0.1.71';
+import {wireOperations} from './operations.js?v=0.1.71';
+const APP_VERSION='v0.1.71';
+const APP_BUILD='2026-10-15-candidate-class-select-init-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
 let operations=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const subjectName=code=>{const key=String(code??'').trim().toUpperCase();if(!key)return '';const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];return all.find(s=>String(s.code).toUpperCase()===key)?.name||String(code)};
+function candidateClassOptions(candidates,grade){
+  return [...new Set((candidates||[])
+    .filter(candidate=>String(candidate.grade_code||'').trim()===String(grade||'').trim())
+    .map(candidate=>String(candidate.class_code||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+}
 async function selectAllPages(buildQuery,pageSize=500){
   const rows=[];
   for(let offset=0;;offset+=pageSize){
