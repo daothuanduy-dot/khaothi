@@ -1,26 +1,40 @@
 <section class="tab-panel hidden" id="tab-scripts">
-  <div class="section-heading"><div><h2>Quản lý phách</h2><p>Chọn môn tự luận, kiểm tra báo vắng, lập phương án và khóa phách. Bảng ánh xạ phách–thí sinh chỉ quản trị viên được xem.</p></div></div>
+  <div class="section-heading"><div><h2>Quản lý phách</h2><p>Mọi môn thi đều có phần tự luận: chọn môn đã phân phòng, kiểm tra báo vắng, lập phương án và khóa phách. Bảng ánh xạ phách–thí sinh chỉ quản trị viên được xem.</p></div></div>
   <div class="form-grid">
     <label>Kỳ thi<select id="script-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
     <label>Môn<select id="script-subject"><option value="">-- Chọn môn --</option></select></label>
-    <label class="roster-checkbox"><input id="script-is-essay" type="checkbox"> Môn có bài tự luận, cần đánh phách</label>
-    <label>Điểm tối đa<input id="script-max-score" type="number" min="0.001" step="0.001"></label>
+    <label>Điểm tối đa phần tự luận<input id="script-max-score" type="number" min="0.001" step="0.001"></label>
     <label>Bước điểm hợp lệ<input id="script-score-step" type="number" min="0.001" step="0.001"></label>
     <label>Số chữ số thập phân<input id="script-decimals" type="number" min="0" max="3" step="1" value="2"></label>
-    <label>Điểm mặc định<input id="script-default-score" type="number" min="0" step="0.001"></label>
-    <div class="form-actions"><button id="script-save-subject" class="btn btn-light" type="button">Lưu cấu hình môn và thang điểm</button></div>
-    <label>Phương án phách<select id="script-method"><option value="room">Từng phòng: chữ cái + số thứ tự</option><option value="bag">Dồn phòng thành túi, đánh số liên tục</option><option value="random">Mã ngẫu nhiên duy nhất</option></select></label>
+    <label>Điểm mặc định (không bắt buộc)<input id="script-default-score" type="number" min="0" step="0.001"></label>
+    <div class="form-actions"><button id="script-save-subject" class="btn btn-light" type="button">Lưu thang điểm tự luận</button></div>
+    <label>Điểm tối đa phần trắc nghiệm<input id="script-mcq-max-score" type="number" min="0.001" step="0.001" value="10"></label>
+    <div class="form-actions"><button id="script-save-mcq-max-score" class="btn btn-light" type="button">Lưu điểm tối đa trắc nghiệm</button></div>
+    <label>Phương án phách<select id="script-method"><option value="room">Theo phòng: đầu phách + số thứ tự</option><option value="bag">Dồn phòng thành túi, đánh số liên tục</option><option value="random">Mã ngẫu nhiên duy nhất</option></select></label>
     <label>Thí sinh vắng<select id="script-absence-mode"><option value="compact">Dồn phách, bỏ qua bài vắng</option><option value="gap">Cách phách, giữ chỗ bài vắng</option></select></label>
     <div class="form-actions"><button id="script-load-rooms" class="btn btn-light" type="button">Tải phòng / thứ tự túi</button><button id="script-generate" class="btn btn-primary" type="button">Tạo phương án phách</button></div>
   </div>
-  <p class="help-text">Với phương án dồn túi, sắp xếp thứ tự các phòng và đánh dấu đảo thứ tự trong phòng khi cần. Với vắng “cách phách”, hồ sơ vẫn ghi nhận vị trí vắng nhưng phách đó không xuất hiện cho giám khảo nhập điểm.</p>
+  <p class="help-text">Mỗi phòng được tạo đầu phách ngẫu nhiên riêng, không trùng với các đầu phách đã dùng trong kỳ thi; có thể thay đầu phách và đảo thứ tự thí sinh trong phòng. Số bài trong phòng được đánh ngắn từ 1; mỗi phòng tối đa 100 bài. Phân công theo túi sau khi khóa là tùy chọn; nếu không phân công riêng, mọi giám khảo đã được phân môn đều có thể chấm.</p>
   <div id="script-room-order" class="table-wrap"></div>
   <div id="script-message" class="notice hidden" role="status" aria-live="polite"></div>
+  <div class="form-actions"><button id="script-export-heads" class="btn btn-light" type="button">Xuất bảng đầu phách tổng thể</button></div>
   <div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Môn</th><th>Phương án</th><th>Vắng</th><th>Hồ sơ</th><th>Thí sinh</th><th>Trạng thái</th><th></th></tr></thead><tbody id="script-runs-body"><tr><td colspan="8" class="empty">Chọn kỳ thi và tải dữ liệu.</td></tr></tbody></table></div>
-  <div class="section-heading subheading"><div><h3>Phân công tài khoản chấm</h3><p>Tạo/invite người dùng Supabase Auth trong Dashboard, sau đó nhập UUID tài khoản và phân môn. Mật khẩu không được lưu trong ứng dụng.</p></div></div>
+  <div id="script-bag-assignment" class="section-panel hidden"></div>
+  <div class="section-heading subheading"><div><h3>Quản lý tài khoản và nhóm giám khảo</h3><p>Giáo viên đăng nhập lần đầu bằng Google (email công vụ) để xuất hiện trong danh sách. Mật khẩu do Google/Supabase Auth quản lý, ứng dụng không lưu mật khẩu.</p></div></div>
   <div class="form-grid">
-    <label>Môn tự luận<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
-    <label>UUID tài khoản giám khảo<input id="grader-user-id" autocomplete="off" placeholder="UUID từ Supabase Auth"></label>
-    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Phân công tài khoản</button></div>
+    <label>Môn thi<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label>Tài khoản<select id="grader-user-id"><option value="">-- Chọn tài khoản đã đăng nhập --</option></select></label>
+    <label>Tên giáo viên<input id="grader-full-name" maxlength="160"></label>
+    <label>Mã định danh giáo viên<input id="grader-teacher-code" maxlength="60"></label>
+    <div class="form-actions"><button id="grader-profile-save" class="btn btn-light" type="button">Lưu thông tin giáo viên</button></div>
+    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Thêm giám khảo vào môn</button></div>
   </div>
+  <div class="section-heading subheading"><div><h3>Nhóm chấm môn hiện tại</h3><p>Mỗi nhóm chỉ gồm giáo viên đã được phân công cùng môn.</p></div></div>
+  <div class="form-grid">
+    <label>Nhóm<select id="grader-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
+    <label>Tên nhóm<input id="grader-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
+    <label>Thành viên<select id="grader-group-members" multiple size="6"></select></label>
+    <div class="form-actions"><button id="grader-group-save" class="btn btn-primary" type="button">Lưu nhóm</button><button id="grader-group-delete" class="btn btn-light" type="button" disabled>Xóa nhóm</button></div>
+  </div>
+  <div id="grader-account-list" class="table-wrap"></div>
 </section>
