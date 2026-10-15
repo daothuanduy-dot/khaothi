@@ -1,10 +1,12 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.58';
-import {loadTabModules} from './module-loader.js?v=0.1.58';
-const APP_VERSION='v0.1.58';
-const APP_BUILD='2026-10-15-rooming-export-fix';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.59';
+import {loadTabModules} from './module-loader.js?v=0.1.59';
+import {wireOperations} from './operations.js?v=0.1.59';
+const APP_VERSION='v0.1.59';
+const APP_BUILD='2026-10-15-exam-operations';
 const $=id=>document.getElementById(id);
-const state={client:null,session:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map()};
+const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
+let operations=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const subjectName=code=>{const key=String(code??'').trim().toUpperCase();if(!key)return '';const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];return all.find(s=>String(s.code).toUpperCase()===key)?.name||String(code)};
 async function selectAllPages(buildQuery,pageSize=500){
@@ -19,7 +21,7 @@ async function selectAllPages(buildQuery,pageSize=500){
 }
 function message(el,text,type='info'){el.textContent=text;el.className=`notice notice-${type}`;el.classList.remove('hidden')}
 function hide(el){el.classList.add('hidden')}
-function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen'])$(id).classList.toggle('hidden',id!==name)}
+function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen','grader-screen'])$(id).classList.toggle('hidden',id!==name)}
 function setConnection(text,ok=false){$('connection-state').textContent=text;$('connection-state').style.background=ok?'#166534':'transparent';$('connection-state').style.color=ok?'white':'#dce8fb'}
 function saveConfig(url,key){localStorage.setItem('exam_supabase_url',url);localStorage.setItem('exam_supabase_key',key)}
 function readConfig(){return {url:localStorage.getItem('exam_supabase_url')||'',key:localStorage.getItem('exam_supabase_key')||''}}
@@ -66,15 +68,33 @@ function notifyExamSelected(exam,created=false){
   if(!exam)return;
   window.alert(`${created?'Đã tạo và chọn kỳ thi':'Đã chọn kỳ thi'}: ${exam.name} (${exam.school_year}).`);
 }
-async function enterApp(user){state.session={user};updateVersionDisplay();$('user-email').textContent=user.email||'';$('logout-btn').classList.remove('hidden');showScreen('app-screen');await loadExams();renderSubjects();}
-async function signOut(){await state.client?.auth.signOut();state.session=null;state.selectedExam=null;state.preview=null;updateSelectedExamTitle();$('user-email').textContent='';$('logout-btn').classList.add('hidden');showScreen('login-screen')}
+async function enterApp(user){
+  state.session={user};
+  const{data:role,error:roleError}=await state.client.rpc('exam_current_user_role');
+  if(roleError)throw new Error(`Không xác định được quyền tài khoản. Hãy chạy migration v0.1.59. ${roleError.message}`);
+  state.role=role;
+  updateVersionDisplay();$('user-email').textContent=user.email||'';
+  if(role==='grader'){
+    showScreen('grader-screen');
+    try{await operations?.enterAsGrader()}
+    catch(error){message($('grader-message'),error?.message||String(error),'error')}
+    return;
+  }
+  if(role!=='admin'){
+    await state.client.auth.signOut();state.session=null;state.role=null;showScreen('login-screen');
+    message($('login-message'),'Tài khoản chưa được cấp quyền quản trị hoặc chưa được phân công chấm.','error');return;
+  }
+  $('logout-btn').classList.remove('hidden');showScreen('app-screen');await loadExams();renderSubjects();
+}
+async function signOut(){await state.client?.auth.signOut();state.session=null;state.role=null;state.selectedExam=null;state.preview=null;state.formData=null;updateSelectedExamTitle();$('user-email').textContent='';$('logout-btn').classList.add('hidden');showScreen('login-screen')}
 async function loadExams(){
   const body=$('exam-table-body');
   body.innerHTML='<tr><td colspan="6" class="empty">Đang tải...</td></tr>';
   const{data,error}=await state.client.from('exam_sessions')
-    .select('id,name,school_year,status,created_at,exam_mode').order('created_at',{ascending:false});
+    .select('id,name,school_year,status,created_at,exam_mode,managing_authority,institution_name,form_exam_title').order('created_at',{ascending:false});
   if(error){body.innerHTML=`<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`;return}
   state.exams=data||[];
+  operations?.refreshExamSelectors();
   body.innerHTML='';
   if(!state.exams.length)body.innerHTML='<tr><td colspan="6" class="empty">Chưa có kỳ thi. Hãy tạo kỳ thi đầu tiên.</td></tr>';
   for(const exam of state.exams){
@@ -82,7 +102,7 @@ async function loadExams(){
     tr.innerHTML=`<td><b>${esc(exam.name)}</b><br><small>${esc(exam.id)}</small></td><td>${esc(exam.school_year)}</td><td><span class="tag">${mode}</span></td><td><span class="tag">${esc(exam.status)}</span></td><td>${exam.created_at?new Date(exam.created_at).toLocaleDateString('vi-VN'):'—'}</td><td><button class="small-btn" data-select-exam="${esc(exam.id)}">Chọn kỳ thi</button> <button class="small-btn" data-edit-exam="${esc(exam.id)}">Sửa</button> <button class="small-btn" data-delete-exam="${esc(exam.id)}">Xóa</button></td>`;
     body.append(tr);
   }
-  for(const id of ['rooming-exam-select','subject-exam-select','sbd-exam-select']){
+  for(const id of ['rooming-exam-select','subject-exam-select','sbd-exam-select','forms-exam','absence-exam','script-exam']){
     const select=$(id),current=select.value;
     select.innerHTML='<option value="">-- Chọn kỳ thi --</option>'+state.exams.map(e=>`<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.school_year)})</option>`).join('');
     select.value=state.selectedExam&&state.exams.some(e=>e.id===state.selectedExam)?state.selectedExam:(current&&state.exams.some(e=>e.id===current)?current:(state.exams.length===1?state.exams[0].id:''));
@@ -1719,7 +1739,7 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(err?.message||String(err)),'error')}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error){message($('login-message'),error.message,'error');return}await enterApp(data.user)});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(err?.message||String(err)),'error')}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const selectBtn=e.target.closest('[data-select-exam]');
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
@@ -1810,6 +1830,7 @@ async function boot(){
     message($('setup-message'),`Không khởi tạo được giao diện: ${error.message||String(error)}`,'error');
     return;
   }
+  operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName});
   wire();wireRoomingEditor();renderSubjects();updateVersionDisplay();
   const config=readConfig();
   if(!config.url||!config.key){

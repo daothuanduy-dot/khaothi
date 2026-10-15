@@ -1,0 +1,26 @@
+<section class="tab-panel hidden" id="tab-scripts">
+  <div class="section-heading"><div><h2>Quản lý phách</h2><p>Chọn môn tự luận, kiểm tra báo vắng, lập phương án và khóa phách. Bảng ánh xạ phách–thí sinh chỉ quản trị viên được xem.</p></div></div>
+  <div class="form-grid">
+    <label>Kỳ thi<select id="script-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <label>Môn<select id="script-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label class="roster-checkbox"><input id="script-is-essay" type="checkbox"> Môn có bài tự luận, cần đánh phách</label>
+    <label>Điểm tối đa<input id="script-max-score" type="number" min="0.001" step="0.001"></label>
+    <label>Bước điểm hợp lệ<input id="script-score-step" type="number" min="0.001" step="0.001"></label>
+    <label>Số chữ số thập phân<input id="script-decimals" type="number" min="0" max="3" step="1" value="2"></label>
+    <label>Điểm mặc định<input id="script-default-score" type="number" min="0" step="0.001"></label>
+    <div class="form-actions"><button id="script-save-subject" class="btn btn-light" type="button">Lưu cấu hình môn và thang điểm</button></div>
+    <label>Phương án phách<select id="script-method"><option value="room">Từng phòng: chữ cái + số thứ tự</option><option value="bag">Dồn phòng thành túi, đánh số liên tục</option><option value="random">Mã ngẫu nhiên duy nhất</option></select></label>
+    <label>Thí sinh vắng<select id="script-absence-mode"><option value="compact">Dồn phách, bỏ qua bài vắng</option><option value="gap">Cách phách, giữ chỗ bài vắng</option></select></label>
+    <div class="form-actions"><button id="script-load-rooms" class="btn btn-light" type="button">Tải phòng / thứ tự túi</button><button id="script-generate" class="btn btn-primary" type="button">Tạo phương án phách</button></div>
+  </div>
+  <p class="help-text">Với phương án dồn túi, sắp xếp thứ tự các phòng và đánh dấu đảo thứ tự trong phòng khi cần. Với vắng “cách phách”, hồ sơ vẫn ghi nhận vị trí vắng nhưng phách đó không xuất hiện cho giám khảo nhập điểm.</p>
+  <div id="script-room-order" class="table-wrap"></div>
+  <div id="script-message" class="notice hidden" role="status" aria-live="polite"></div>
+  <div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Môn</th><th>Phương án</th><th>Vắng</th><th>Hồ sơ</th><th>Thí sinh</th><th>Trạng thái</th><th></th></tr></thead><tbody id="script-runs-body"><tr><td colspan="8" class="empty">Chọn kỳ thi và tải dữ liệu.</td></tr></tbody></table></div>
+  <div class="section-heading subheading"><div><h3>Phân công tài khoản chấm</h3><p>Tạo/invite người dùng Supabase Auth trong Dashboard, sau đó nhập UUID tài khoản và phân môn. Mật khẩu không được lưu trong ứng dụng.</p></div></div>
+  <div class="form-grid">
+    <label>Môn tự luận<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label>UUID tài khoản giám khảo<input id="grader-user-id" autocomplete="off" placeholder="UUID từ Supabase Auth"></label>
+    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Phân công tài khoản</button></div>
+  </div>
+</section>

@@ -1,0 +1,14 @@
+<section class="tab-panel hidden" id="tab-forms">
+  <div class="section-heading"><div><h2>Biểu mẫu và danh sách</h2><p>Tiêu đề được khai báo riêng theo từng kỳ thi, dùng cho biểu mẫu xuất và in.</p></div></div>
+  <div class="form-grid">
+    <label>Kỳ thi<select id="forms-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <label>Cơ quan chủ quản<input id="forms-authority" maxlength="200" placeholder="Ví dụ: SỞ GIÁO DỤC VÀ ĐÀO TẠO ..."></label>
+    <label>Tên đơn vị<input id="forms-institution" maxlength="200" placeholder="Ví dụ: TRƯỜNG THPT ..."></label>
+    <label>Tên kỳ thi trên biểu mẫu<input id="forms-title" maxlength="240" placeholder="Tên hiển thị trên các biểu mẫu"></label>
+    <div class="form-actions"><button id="forms-save-header" class="btn btn-primary" type="button">Lưu tiêu đề kỳ thi</button><button id="forms-load-data" class="btn btn-light" type="button">Tải dữ liệu biểu mẫu</button></div>
+  </div>
+  <div class="notice notice-info">Danh sách niêm yết có riêng cột Môn 1, Môn 2 và Ghi chú. Phiếu thu bài môn lựa chọn tách thành từng dòng thi theo Môn 1/Môn 2, có Mã đề, Ký nộp và Ghi chú. Danh sách SBD/môn lựa chọn dùng để gửi lớp rà soát; cấu trúc có thể mở rộng thêm bảng điểm theo lớp.</div>
+  <div id="forms-message" class="notice hidden" role="status" aria-live="polite"></div>
+  <div class="form-actions"><button id="forms-export-xlsx" class="btn btn-primary" type="button" disabled>Xuất Excel</button><button id="forms-export-pdf" class="btn btn-light" type="button" disabled>In / lưu PDF</button></div>
+  <div id="forms-summary" class="metric-grid"></div>
+</section>
