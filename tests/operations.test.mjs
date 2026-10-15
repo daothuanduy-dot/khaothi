@@ -47,6 +47,14 @@ test('every operations DOM lookup has a matching static control', async () => {
   for (const id of lookups) assert.ok(ids.has(id) || dynamicIds.has(id), `Missing DOM control #${id}`);
 });
 
+test('Supabase connection errors are distinct from application initialization errors', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /async function openConnectedApp\(\)/);
+  assert.match(app, /function showConnectionFailure\(error\)[\s\S]*?if\(state\.client\)[\s\S]*?Đã kết nối Supabase nhưng không khởi tạo được ứng dụng/);
+  assert.match(app, /await connect\(url,key\);saveConfig\(url,key\);await openConnectedApp\(\)/);
+  assert.match(app, /await connect\(config\.url,config\.key\);await openConnectedApp\(\)/);
+});
+
 test('the script subject selector is populated before exams and configs finish loading', async () => {
   const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../sql/v0.1.60_script_any_subject.sql', import.meta.url), 'utf8');
