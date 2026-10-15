@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.69';
-import {loadTabModules} from './module-loader.js?v=0.1.69';
-import {candidateClassOptions,wireOperations} from './operations.js?v=0.1.69';
-const APP_VERSION='v0.1.69';
-const APP_BUILD='2026-10-15-candidate-class-select-add';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.70';
+import {loadTabModules} from './module-loader.js?v=0.1.70';
+import {candidateClassOptions,wireOperations} from './operations.js?v=0.1.70';
+const APP_VERSION='v0.1.70';
+const APP_BUILD='2026-10-15-candidate-class-select-runtime-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -424,6 +424,16 @@ function populateCandidateEditClasses(selectedClass='',preserveMissing=false){
   select.innerHTML=`<option value="">${placeholder}</option>`+classes.map(classCode=>
     `<option value="${esc(classCode)}">${esc(classCode)}</option>`).join('');
   if(classes.includes(selectedClass))select.value=selectedClass;
+}
+function ensureCandidateClassDropdown(){
+  const control=$('candidate-edit-class');
+  if(control.tagName==='SELECT')return;
+  if(control.tagName!=='INPUT')throw new Error('Không tìm thấy trường lớp của hồ sơ thí sinh.');
+  const select=document.createElement('select');
+  select.id=control.id;select.required=control.required;select.disabled=true;
+  select.className=control.className;
+  select.innerHTML='<option value="">-- Chọn khối trước --</option>';
+  control.replaceWith(select);
 }
 async function saveCandidate(event){
   event.preventDefault();
@@ -1919,6 +1929,7 @@ function wireRoomingEditor(){
 async function boot(){
   try{
     await loadTabModules();
+    ensureCandidateClassDropdown();
   }catch(error){
     showScreen('setup-screen');
     message($('setup-message'),`Không khởi tạo được giao diện: ${error.message||String(error)}`,'error');
