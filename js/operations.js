@@ -523,6 +523,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function wire(){
     setExamOptions();
+    setSubjectOptions('script-subject',allSubjectOptions());
     $('forms-exam').onchange=()=>{try{setAdminExam($('forms-exam').value);loadForms().catch(error=>message($('forms-message'),error.message,'error'))}catch(error){message($('forms-message'),error.message,'error')}};
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
     safeAction('forms-message',loadForms,$('forms-load-data'));
@@ -578,5 +579,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
   }
   wire();
-  return{refreshExamSelectors:setExamOptions,enterAsGrader};
+  return{
+    refreshExamSelectors:setExamOptions,
+    refreshScriptConfigs:()=>{
+      if($('script-exam').value)loadScriptConfigs().catch(error=>message($('script-message'),error?.message||String(error),'error'));
+    },
+    enterAsGrader
+  };
 }
