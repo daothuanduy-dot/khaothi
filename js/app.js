@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.59';
-import {loadTabModules} from './module-loader.js?v=0.1.59';
-import {wireOperations} from './operations.js?v=0.1.59';
-const APP_VERSION='v0.1.59';
-const APP_BUILD='2026-10-15-exam-operations';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.63';
+import {loadTabModules} from './module-loader.js?v=0.1.63';
+import {wireOperations} from './operations.js?v=0.1.63';
+const APP_VERSION='v0.1.63';
+const APP_BUILD='2026-10-15-score-management';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -625,6 +625,36 @@ async function previewRooming(){
   // SBD đã phản ánh quy tắc sắp xếp được chọn ở bước cấp số; không sắp xếp lại ở bước xếp phòng.
   let result,invalid=[];
   if(planType==='mandatory'){
+    const otherMandatorySubject=subjectCode==='TOAN'?'VAN':'TOAN';
+    const fixedSeatPlan=await findCurrentRoomingFinalization(examId,'mandatory',otherMandatorySubject);
+    if(fixedSeatPlan){
+      const restored=restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
+        planType,subjectCode,capacity:fixedSeatPlan.record.capacity
+      });
+      if(!restored.ok)throw new Error(`Không thể kế thừa vị trí cố định từ môn ${subjectName(otherMandatorySubject)}: ${restored.errors.join(' ')}`);
+      result=restored.result;
+      result.assignments=result.assignments.map(assignment=>({
+        ...assignment,subject_code:subjectCode,subject_name:subjectName(subjectCode)
+      }));
+      result.rooms=result.rooms.map(room=>({
+        ...room,subject_code:subjectCode,ca1_subject_codes:[subjectCode],
+        ca1_subject_name:subjectName(subjectCode),ca2_subject_codes:[],ca2_subject_name:'—'
+      }));
+      const firstRoom=[...result.rooms].sort((a,b)=>Number(a.room_number)-Number(b.room_number))[0];
+      const roomPrefix=String(firstRoom?.room_code||'').replace(/\d+$/,'')||'M';
+      const firstRoomNumber=Number(firstRoom?.room_number)||1;
+      $('room-capacity').value=Number(fixedSeatPlan.record.capacity);
+      $('room-prefix').value=roomPrefix;
+      $('first-room-number').value=firstRoomNumber;
+      state.preview={
+        examId,planType,subjectCode,pool:sortedCandidates,
+        options:{capacity:Number(fixedSeatPlan.record.capacity),roomPrefix,firstRoomNumber,sortMode,previousExamId:null,fixedSeats:true},
+        result,assignmentsCreated:true,suggestionValid:true
+      };
+      renderRooming(result,planType);
+      message($('rooming-message'),`Đã kế thừa nguyên vị trí phòng và chỗ ngồi theo SBD từ môn ${subjectName(otherMandatorySubject)}. Không thể thay đổi sĩ số hoặc thứ tự chỗ của riêng môn này.`,'success');
+      return;
+    }
     if(!creatingNewPlan){
       const snapshot=await findLatestRoomingSnapshot(examId,planType,subjectCode);
       if(snapshot){
@@ -702,14 +732,16 @@ function clearRoomingPreview(){
   :'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>Ca 1 (các môn)</th><th>Ca 2 (các môn)</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>';
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=mandatory
-  ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th></tr>'
+  ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th></tr>'
   :'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th></tr>';
  $('rooming-table-body').innerHTML=`<tr><td colspan="${mandatory?5:7}" class="empty">Chưa có phương án.</td></tr>`;
- $('assignment-table-body').innerHTML=`<tr><td colspan="${mandatory?4:6}" class="empty">Chưa có phân công.</td></tr>`;
+ $('assignment-table-body').innerHTML=`<tr><td colspan="${mandatory?5:6}" class="empty">Chưa có phân công.</td></tr>`;
+ ['room-capacity','room-prefix','first-room-number'].forEach(id=>$(id).disabled=false);
  updateRoomingActions();
 }
 function renderRooming(result,planType='elective'){
  const preview=state.preview;
+ ['room-capacity','room-prefix','first-room-number'].forEach(id=>$(id).disabled=Boolean(preview?.options.fixedSeats));
  if(preview?.assignmentsCreated)syncRoomingResult(result,planType);
  else if(preview){
   result.summary.candidate_count=preview.pool.length;
@@ -735,12 +767,20 @@ function renderRooming(result,planType='elective'){
  $('add-room-plan').disabled=!preview||preview.assignmentsCreated||preview.finalized||preview.saving||preview.finalizing;
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=planType==='mandatory'
-  ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th></tr>'
+  ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th></tr>'
   :'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th></tr>';
+ const seatNumbers=new Map();
+ if(planType==='mandatory'){
+  for(const room of result.rooms){
+   result.assignments.filter(assignment=>assignment.room_code===room.room_code)
+    .sort((a,b)=>String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}))
+    .forEach((assignment,index)=>seatNumbers.set(String(assignment.candidate_id),index+1));
+  }
+ }
  $('assignment-table-body').innerHTML=result.assignments.length?result.assignments.map(a=>planType==='mandatory'
-  ?`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td></tr>`
+  ?`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${seatNumbers.get(String(a.candidate_id))??''}</td></tr>`
   :`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td></tr>`).join('')
-  :`<tr><td colspan="${planType==='mandatory'?4:6}" class="empty">Chưa gán thí sinh. Điều chỉnh sĩ số phòng rồi bấm “Lưu phân bổ phòng”.</td></tr>`;
+  :`<tr><td colspan="${planType==='mandatory'?5:6}" class="empty">Chưa gán thí sinh. Điều chỉnh sĩ số phòng rồi bấm “Lưu phân bổ phòng”.</td></tr>`;
  const planned=preview?.result.rooms.reduce((sum,room)=>sum+Number(room.student_count||0),0)||0;
  $('room-plan-status').textContent=preview
   ?preview.restoredFromDatabase
@@ -967,7 +1007,16 @@ function roomingRows(){
    return {...a,date_of_birth:a.date_of_birth||candidate.date_of_birth||candidate.ngay_sinh||'',subject_name:a.subject_name|| (planType==='mandatory'?subjectName(subjectCode):''),
     ca1_name:a.ca1_subject_code?subjectName(a.ca1_subject_code):'',ca2_name:a.ca2_subject_code?subjectName(a.ca2_subject_code):''};
  });
- return source.sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
+ const rows=source.sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
+ if(planType==='mandatory'){
+  const roomSeats=new Map();
+  for(const row of rows){
+   const next=(roomSeats.get(row.room_code)||0)+1;
+   roomSeats.set(row.room_code,next);
+   row.seat_number=next;
+  }
+ }
+ return rows;
 }
 function normalizedDOB(v){
  if(!v)return '';
@@ -995,14 +1044,14 @@ function exportRooming(){
   if(!ws[address])ws[address]={t:'s',v:''};
   ws[address].s=style;
  }
- function styleSheet(ws,{columnWidths,tableRanges,titleRows,boldRows,breaks}){
+ function styleSheet(ws,{columnWidths,tableRanges,titleRows,boldRows,breaks,nameColumn=2}){
   ws['!cols']=columnWidths.map(wch=>({wch}));
   ws['!margins']={left:0.15,right:0.15,top:0.25,bottom:0.25,header:0.1,footer:0.1};
   ws['!pageSetup']={paperSize:9,orientation:'landscape',fitToWidth:1,fitToHeight:0};
   ws['!rowBreaks']=breaks;
   for(const [firstRow,lastRow,firstCol,lastCol] of tableRanges){
    for(let r=firstRow;r<=lastRow;r++)for(let c=firstCol;c<=lastCol;c++)
-    cell(ws,r,c,{font:baseFont,border,alignment:r===firstRow?center:(c===2?left:center)});
+    cell(ws,r,c,{font:baseFont,border,alignment:r===firstRow?center:(c===nameColumn?left:center)});
   }
   for(const row of titleRows)for(let c=0;c<columnWidths.length;c++)
    cell(ws,row,c,{font:{...baseFont,bold:true},alignment:center});
@@ -1017,7 +1066,11 @@ function exportRooming(){
   data.push([`Phòng thi: ${roomCode}`,...Array(columns-1).fill('')]);
   data.push(columns===6
    ? ['STT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi']
-   : ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú']);
+   : columns===7
+    ? ['STT','Vị trí','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi']
+    : columns===10
+     ? ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú']
+     : ['TT','Vị trí','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú']);
   merges.push({s:{r:start,c:0},e:{r:start,c:split-1}});
   merges.push({s:{r:start,c:split},e:{r:start,c:columns-1}});
   merges.push({s:{r:start+1,c:0},e:{r:start+1,c:split-1}});
@@ -1027,6 +1080,7 @@ function exportRooming(){
  }
  const listingData=[],listingMerges=[],listingTables=[],listingTitles=[],listingBold=[],listingBreaks=[];
  const receiptData=[],receiptMerges=[],receiptTables=[],receiptTitles=[],receiptBold=[],receiptBreaks=[];
+ const listingColumns=planType==='mandatory'?7:6,receiptColumns=planType==='mandatory'?11:10;
  let roomIndex=0;
  for(const [roomCode,items] of roomMap){
   if(roomIndex++){
@@ -1034,48 +1088,52 @@ function exportRooming(){
   receiptBreaks.push({id:receiptData.length-1,max:16383,man:1});
   }
   const listingStart=listingData.length;
- const listingHeaderRow=addRoomHeading(listingData,listingMerges,roomCode,6,'DANH SÁCH NIÊM YẾT THÍ SINH');
+ const listingHeaderRow=addRoomHeading(listingData,listingMerges,roomCode,listingColumns,'DANH SÁCH NIÊM YẾT THÍ SINH');
  const listingPositions=roomExportRowPositions(listingHeaderRow,items.length);
  listingTitles.push(listingStart,listingStart+1);listingBold.push(listingHeaderRow);
- items.forEach((a,i)=>listingData.push([i+1,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
- listingTables.push([listingHeaderRow,listingPositions.dataEnd,0,5]);
-  listingData.push([`Tổng số thí sinh: ${items.length}`,...Array(5).fill('')]);
- listingMerges.push({s:{r:listingPositions.totalRow,c:0},e:{r:listingPositions.totalRow,c:5}});
+ items.forEach((a,i)=>listingData.push(listingColumns===7
+  ?[i+1,a.seat_number,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]
+  :[i+1,a.sbd,a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a)]));
+ listingTables.push([listingHeaderRow,listingPositions.dataEnd,0,listingColumns-1]);
+  listingData.push([`Tổng số thí sinh: ${items.length}`,...Array(listingColumns-1).fill('')]);
+ listingMerges.push({s:{r:listingPositions.totalRow,c:0},e:{r:listingPositions.totalRow,c:listingColumns-1}});
  listingBold.push(listingPositions.totalRow);
  listingData.push([]);
 
  const receiptStart=receiptData.length;
- const receiptHeaderRow=addRoomHeading(receiptData,receiptMerges,roomCode,10,'PHIẾU THU BÀI');
+ const receiptHeaderRow=addRoomHeading(receiptData,receiptMerges,roomCode,receiptColumns,'PHIẾU THU BÀI');
  const receiptPositions=roomExportRowPositions(receiptHeaderRow,items.length);
  receiptTitles.push(receiptStart,receiptStart+1);receiptBold.push(receiptHeaderRow);
- items.forEach((a,i)=>receiptData.push([i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']));
- receiptTables.push([receiptHeaderRow,receiptPositions.dataEnd,0,9]);
+ items.forEach((a,i)=>receiptData.push(receiptColumns===11
+  ?[i+1,a.seat_number,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']
+  :[i+1,String(a.sbd||''),a.student_name,normalizedDOB(a.date_of_birth),a.class_code,roomSubjectsFor(a),'','','','']));
+ receiptTables.push([receiptHeaderRow,receiptPositions.dataEnd,0,receiptColumns-1]);
   receiptData.push([]);
-  receiptData.push(['Tổng số thí sinh:',items.length,'Số thí sinh vắng:','','','','','','','']);
-  receiptData.push(['Tổng số bài:','','Tổng số tờ:','','','','','','','']);
+  receiptData.push(['Tổng số thí sinh:',items.length,'Số thí sinh vắng:','',...Array(receiptColumns-4).fill('')]);
+  receiptData.push(['Tổng số bài:','','Tổng số tờ:','',...Array(receiptColumns-4).fill('')]);
   receiptData.push([]);
-  receiptData.push(['Cán bộ coi thi số 1','','','','','Cán bộ coi thi số 2','','','','']);
-  receiptData.push(['(Ký, ghi rõ họ tên)','','','','','(Ký, ghi rõ họ tên)','','','','']);
+  receiptData.push(['Cán bộ coi thi số 1','','','','','Cán bộ coi thi số 2',...Array(receiptColumns-6).fill('')]);
+  receiptData.push(['(Ký, ghi rõ họ tên)','','','','','(Ký, ghi rõ họ tên)',...Array(receiptColumns-6).fill('')]);
   receiptMerges.push(
   {s:{r:receiptPositions.totalRow+1,c:0},e:{r:receiptPositions.totalRow+1,c:1}},
   {s:{r:receiptPositions.totalRow+1,c:2},e:{r:receiptPositions.totalRow+1,c:3}},
   {s:{r:receiptPositions.totalRow+2,c:0},e:{r:receiptPositions.totalRow+2,c:1}},
   {s:{r:receiptPositions.totalRow+2,c:2},e:{r:receiptPositions.totalRow+2,c:3}},
   {s:{r:receiptPositions.totalRow+4,c:0},e:{r:receiptPositions.totalRow+4,c:4}},
-  {s:{r:receiptPositions.totalRow+4,c:5},e:{r:receiptPositions.totalRow+4,c:9}},
+  {s:{r:receiptPositions.totalRow+4,c:5},e:{r:receiptPositions.totalRow+4,c:receiptColumns-1}},
   {s:{r:receiptPositions.totalRow+5,c:0},e:{r:receiptPositions.totalRow+5,c:4}},
-  {s:{r:receiptPositions.totalRow+5,c:5},e:{r:receiptPositions.totalRow+5,c:9}}
+  {s:{r:receiptPositions.totalRow+5,c:5},e:{r:receiptPositions.totalRow+5,c:receiptColumns-1}}
  );
  receiptBold.push(receiptPositions.totalRow+1,receiptPositions.totalRow+2,receiptPositions.totalRow+4);
  receiptData.push([]);
  }
  const wsListing=window.XLSX.utils.aoa_to_sheet(listingData);
  wsListing['!merges']=listingMerges;
- styleSheet(wsListing,{columnWidths:[7,14,30,15,12,28],tableRanges:listingTables,titleRows:listingTitles,boldRows:listingBold,breaks:listingBreaks});
+ styleSheet(wsListing,{columnWidths:listingColumns===7?[6,8,13,30,15,12,28]:[7,14,30,15,12,28],tableRanges:listingTables,titleRows:listingTitles,boldRows:listingBold,breaks:listingBreaks,nameColumn:listingColumns===7?3:2});
  window.XLSX.utils.book_append_sheet(wb,wsListing,'Danh sach niem yet');
  const wsReceipts=window.XLSX.utils.aoa_to_sheet(receiptData);
  wsReceipts['!merges']=receiptMerges;
- styleSheet(wsReceipts,{columnWidths:[6,13,25,14,9,18,9,8,13,15],tableRanges:receiptTables,titleRows:receiptTitles,boldRows:receiptBold,breaks:receiptBreaks});
+ styleSheet(wsReceipts,{columnWidths:receiptColumns===11?[6,8,12,25,14,9,18,9,8,13,15]:[6,13,25,14,9,18,9,8,13,15],tableRanges:receiptTables,titleRows:receiptTitles,boldRows:receiptBold,breaks:receiptBreaks,nameColumn:receiptColumns===11?3:2});
  window.XLSX.utils.book_append_sheet(wb,wsReceipts,'Phieu thu bai');
  window.XLSX.writeFile(wb,`danh-sach-niem-yet_phieu-thu-bai_${planType==='mandatory'?subjectCode:'lua-chon'}.xlsx`,{cellStyles:true});
 }
@@ -1085,8 +1143,9 @@ function printRoomingPDF(){
  const title=$('rooming-exam-select').selectedOptions[0]?.text||'Kỳ thi';
  const roomMap=new Map();rows.forEach(a=>{if(!roomMap.has(a.room_code))roomMap.set(a.room_code,[]);roomMap.get(a.room_code).push(a)});
  const escHtml=s=>esc(s).replace(/\n/g,' ');
- const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br><b>TRƯỜNG THPT LÊ HỒNG PHONG</b></div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br><b>Phòng thi số: ${escHtml(room)}</b></div></header><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ${items.length}</p></section>`).join('');
- const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt"><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td><td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
+ const hasSeats=planType==='mandatory';
+ const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br><b>TRƯỜNG THPT LÊ HỒNG PHONG</b></div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br><b>Phòng thi số: ${escHtml(room)}</b></div></header><table class="${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ${items.length}</p></section>`).join('');
+ const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt ${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
  const win=window.open('','_blank');if(!win){message($('rooming-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
  win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách niêm yết và phiếu thu bài</title><style>
  @page{size:A4 landscape;margin:2mm}
@@ -1100,11 +1159,15 @@ function printRoomingPDF(){
  thead{display:table-header-group}
  tr{break-inside:avoid;page-break-inside:avoid}
  th,td{border:1px solid #000;padding:1px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1}
- th{font-weight:bold}td:nth-child(3){text-align:left}.receipt{font-size:12pt}
+ th{font-weight:bold}td:nth-child(3){text-align:left}.mandatory td:nth-child(4){text-align:left}.receipt{font-size:12pt}
  .receipt th,.receipt td{padding:1px;line-height:1}
  .receipt th:nth-child(1){width:4%}.receipt th:nth-child(2){width:9%}.receipt th:nth-child(3){width:19%}
  .receipt th:nth-child(4){width:9%}.receipt th:nth-child(5){width:7%}.receipt th:nth-child(6){width:15%}
  .receipt th:nth-child(7){width:7%}.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:12%}
+ .receipt.mandatory th:nth-child(1){width:4%}.receipt.mandatory th:nth-child(2){width:6%}.receipt.mandatory th:nth-child(3){width:9%}
+ .receipt.mandatory th:nth-child(4){width:17%}.receipt.mandatory th:nth-child(5){width:8%}.receipt.mandatory th:nth-child(6){width:6%}
+ .receipt.mandatory th:nth-child(7){width:14%}.receipt.mandatory th:nth-child(8){width:6%}.receipt.mandatory th:nth-child(9){width:5%}
+ .receipt.mandatory th:nth-child(10){width:11%}.receipt.mandatory th:nth-child(11){width:14%}
  .totals{font-weight:normal;margin:2mm 0}
  footer{display:flex;justify-content:space-around;text-align:center;margin-top:4mm;line-height:1.2}
  footer div{width:40%}
@@ -1739,7 +1802,7 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ $('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(err?.message||String(err)),'error')}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(err?.message||String(err)),'error')}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const selectBtn=e.target.closest('[data-select-exam]');
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
