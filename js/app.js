@@ -26,6 +26,7 @@ function setConnection(text,ok=false){$('connection-state').textContent=text;$('
 function saveConfig(url,key){localStorage.setItem('exam_supabase_url',url);localStorage.setItem('exam_supabase_key',key)}
 function readConfig(){return {url:localStorage.getItem('exam_supabase_url')||'',key:localStorage.getItem('exam_supabase_key')||''}}
 async function connect(url,key){
+  state.client=null;state.session=null;
   if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase JS từ CDN. Kiểm tra kết nối Internet, tiện ích chặn quảng cáo hoặc mở CDN jsDelivr.');
   let parsed;
   try{parsed=new URL(url)}catch{throw new Error('URL project không hợp lệ. Hãy sao chép nguyên URL trong Supabase → Settings → API.')}
@@ -55,7 +56,22 @@ async function connect(url,key){
   if(error)throw new Error('Đã tới được Supabase nhưng không đọc được phiên xác thực trong trình duyệt: '+error.message);
   state.client=client;state.session=data.session||null;
   setConnection('Đã kết nối Supabase',true);
-  if(data.session?.user){await enterApp(data.session.user)}else showScreen('login-screen');
+}
+async function openConnectedApp(){
+  if(state.session?.user)await enterApp(state.session.user);
+  else showScreen('login-screen');
+}
+function showConnectionFailure(error){
+  const detail=error?.message||String(error);
+  if(state.client){
+    setConnection('Đã kết nối Supabase',true);
+    showScreen('login-screen');
+    message($('login-message'),`Đã kết nối Supabase nhưng không khởi tạo được ứng dụng: ${detail}`,'error');
+    return;
+  }
+  setConnection('Kết nối lỗi');
+  showScreen('setup-screen');
+  message($('setup-message'),'Không kết nối được Supabase: '+detail,'error');
 }
 function updateVersionDisplay(){const label=`Phiên bản ${APP_VERSION} · build ${APP_BUILD}`;const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
@@ -1802,7 +1818,7 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key)}catch(err){setConnection('Kết nối lỗi');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(err?.message||String(err)),'error')}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const selectBtn=e.target.closest('[data-select-exam]');
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
@@ -1902,7 +1918,7 @@ async function boot(){
     return;
   }
   $('supabase-url').value=config.url;$('supabase-key').value=config.key;
-  try{await connect(config.url,config.key)}
-  catch(e){setConnection('Chưa kết nối');showScreen('setup-screen');message($('setup-message'),'Không kết nối được Supabase: '+(e?.message||String(e)),'error')}
+  try{await connect(config.url,config.key);await openConnectedApp()}
+  catch(e){showConnectionFailure(e)}
 }
 boot();
