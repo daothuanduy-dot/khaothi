@@ -1,6 +1,22 @@
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_SIZE=500;
 
+export function excelColumnIndex(value){
+  const letters=String(value??'').trim().toUpperCase();
+  if(!/^[A-Z]{1,3}$/.test(letters))throw new Error('Cột Excel phải là chữ cái từ A đến XFD.');
+  let index=0;
+  for(const letter of letters)index=index*26+letter.charCodeAt(0)-64;
+  if(index>16384)throw new Error('Cột Excel không vượt quá XFD.');
+  return index-1;
+}
+
+export function parseImportedScore(value,rowNumber){
+  if(typeof value==='number'&&Number.isFinite(value)&&value>=0)return value;
+  const normalized=String(value??'').trim().replace(',','.');
+  if(!/^\d+(?:\.\d+)?$/.test(normalized))throw new Error(`Điểm ở dòng ${rowNumber} không phải số không âm hợp lệ.`);
+  return Number(normalized);
+}
+
 export function parseQuickScore(value,decimalPlaces){
   const digits=String(value??'').trim().replace(/\D/g,'');
   if(!digits)return null;
@@ -19,10 +35,22 @@ export function validateEssayScore(value,config){
   return null;
 }
 
+export function randomScriptHead(usedHeads=new Set()){
+  const cryptoApi=globalThis.crypto;
+  if(!cryptoApi||typeof cryptoApi.getRandomValues!=='function')
+    throw new Error('Không thể tạo đầu phách ngẫu nhiên an toàn trên trình duyệt này.');
+  for(let attempt=0;attempt<100;attempt++){
+    const bytes=cryptoApi.getRandomValues(new Uint8Array(4));
+    const head=[...bytes].map(value=>String.fromCharCode(65+(value%26))).join('');
+    if(!usedHeads.has(head))return head;
+  }
+  throw new Error('Không tạo được đầu phách khác nhau; hãy tải lại danh sách phòng.');
+}
+
 export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName}){
   const nameOf=subjectName;
-  const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0};
-  const examIds=['forms-exam','absence-exam','script-exam'];
+  const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0,graderBagAssignments:[],graderProfiles:[],graderGroups:[],scoreImportRows:[],combinedScores:[]};
+  const examIds=['forms-exam','absence-exam','script-exam','scores-exam'];
   const setExamOptions=()=>{
     for(const id of examIds){
       const select=$(id),current=select.value;
@@ -275,38 +303,46 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     setSubjectOptions('grader-assign-subject',essay);
     if(!$('script-subject').value)$('script-subject').value=essay[0]?.subject_code||'TOAN';
     const selected=cache.scriptConfigs.find(row=>row.subject_code===$('script-subject').value);
-    $('script-is-essay').checked=Boolean(selected?.is_essay);
-    for(const id of ['script-max-score','script-score-step','script-decimals','script-default-score'])
-      $(id).disabled=!$('script-is-essay').checked;
-    if(selected){
-      $('script-max-score').value=selected.maximum_score??'';
-      $('script-score-step').value=selected.score_step??'';
-      $('script-decimals').value=selected.decimal_places??2;
-      $('script-default-score').value=selected.default_score??'';
-    }
+    $('script-max-score').value=selected?.maximum_score??'';
+    $('script-score-step').value=selected?.score_step??'';
+    $('script-decimals').value=selected?.decimal_places??2;
+    $('script-default-score').value=selected?.default_score??'';
+    $('script-mcq-max-score').value=selected?.mcq_maximum_score??10;
     await loadScriptRuns();
   }
   async function saveScriptConfig(){
     const examId=currentExam('script-exam');setAdminExam(examId);
     const code=$('script-subject').value;
     if(!code)throw new Error('Chọn môn cần cấu hình.');
-    const isEssay=$('script-is-essay').checked;
-    if(isEssay&&(!Number.isFinite(Number($('script-max-score').value))||Number($('script-max-score').value)<=0||
+    if(!Number.isFinite(Number($('script-max-score').value))||Number($('script-max-score').value)<=0||
       !Number.isFinite(Number($('script-score-step').value))||Number($('script-score-step').value)<=0||
-      !Number.isInteger(Number($('script-decimals').value))||Number($('script-decimals').value)<0||Number($('script-decimals').value)>3))
+      !Number.isInteger(Number($('script-decimals').value))||Number($('script-decimals').value)<0||Number($('script-decimals').value)>3)
       throw new Error('Nhập điểm tối đa, bước điểm dương và số chữ số thập phân từ 0 đến 3.');
-    const payload={p_exam_id:examId,p_subject_code:code,p_is_essay:isEssay,
-      p_maximum_score:isEssay?Number($('script-max-score').value):null,
-      p_score_step:isEssay?Number($('script-score-step').value):null,
+    const payload={p_exam_id:examId,p_subject_code:code,p_is_essay:true,
+      p_maximum_score:Number($('script-max-score').value),
+      p_score_step:Number($('script-score-step').value),
       p_decimal_places:Number($('script-decimals').value),
-      p_default_score:!isEssay||$('script-default-score').value===''?null:Number($('script-default-score').value)};
+      p_default_score:$('script-default-score').value===''?null:Number($('script-default-score').value)};
     const invalid=payload.p_default_score===null?null:validateEssayScore(payload.p_default_score,{
       maximum_score:payload.p_maximum_score,score_step:payload.p_score_step
     });
     if(invalid)throw new Error(`Điểm mặc định không hợp lệ: ${invalid}`);
     const{error}=await state.client.rpc('exam_save_subject_assessment_config',payload);
     if(error)throw new Error(`Không lưu được cấu hình điểm: ${error.message}`);
-    message($('script-message'),isEssay?`Đã khai báo ${nameOf(code)} là môn tự luận và lưu thang điểm.`:`Đã bỏ cấu hình tự luận cho ${nameOf(code)}.`,'success');
+    message($('script-message'),`Đã lưu thang điểm phần tự luận môn ${nameOf(code)}.`,'success');
+    await loadScriptConfigs();
+  }
+  async function saveMcqMaximumScore(){
+    const examId=currentExam('script-exam'),subjectCode=$('script-subject').value;
+    const maximum=Number($('script-mcq-max-score').value);
+    setAdminExam(examId);
+    if(!subjectCode||!Number.isFinite(maximum)||maximum<=0)
+      throw new Error('Chọn môn và nhập điểm tối đa trắc nghiệm lớn hơn 0.');
+    const{error}=await state.client.rpc('exam_set_mcq_maximum_score',{
+      p_exam_id:examId,p_subject_code:subjectCode,p_maximum_score:maximum
+    });
+    if(error)throw new Error(`Không lưu được điểm tối đa trắc nghiệm: ${error.message}`);
+    message($('script-message'),`Đã lưu điểm tối đa trắc nghiệm ${maximum} cho môn ${nameOf(subjectCode)}.`,'success');
     await loadScriptConfigs();
   }
   async function loadScriptRuns(){
@@ -319,15 +355,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       <td>${esc({room:'Theo phòng',bag:'Dồn túi',random:'Ngẫu nhiên'}[run.method]||run.method)}</td>
       <td>${esc(run.absence_mode==='gap'?'Cách phách':'Dồn phách')}</td><td>${esc(run.id)}</td>
       <td>${run.record_count}</td><td>${esc(run.status==='locked'?'Đã khóa':'Bản nháp')}</td>
-      <td>${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button>`:
-        `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`}</td></tr>`).join('')||
+      <td>${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
+        `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`).join('')||
       '<tr><td colspan="8" class="empty">Chưa có phương án phách.</td></tr>';
   }
   async function loadScriptRooms(){
     const examId=currentExam('script-exam');setAdminExam(examId);
-    const code=$('script-subject').value;if(!code)throw new Error('Chọn môn tự luận trước.');
-    if(!cache.scriptConfigs.some(row=>row.subject_code===code&&row.is_essay))
-      throw new Error('Hãy lưu cấu hình môn là môn tự luận trước khi lập phương án phách.');
+    const code=$('script-subject').value;if(!code)throw new Error('Chọn môn thi trước.');
     const finals=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
       .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng');
     let target=null,records=[];
@@ -340,10 +374,22 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     if(!target)throw new Error(`Chưa có phân phòng chính thức cho môn ${nameOf(code)}.`);
     cache.scriptFinalizationId=target.id;
-    cache.scriptRooms=[...new Set(records.map(row=>row.room_code))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map((room,index)=>({room,position:index+1,reverse:false}));
-    $('script-room-order').innerHTML=`<table><thead><tr><th>Phòng</th><th>Thứ tự túi</th><th>Đảo thứ tự trong phòng</th><th>Sĩ số môn</th></tr></thead><tbody>${cache.scriptRooms.map(item=>{
+    const{data:existingRuns,error:runsError}=await state.client.from('exam_script_runs')
+      .select('room_order').eq('exam_id',examId);
+    if(runsError)throw new Error(`Không tải được các đầu phách đã sử dụng: ${runsError.message}`);
+    const usedHeads=new Set((existingRuns||[]).flatMap(run=>(Array.isArray(run.room_order)?run.room_order:[])
+      .map(room=>String(room.phach_prefix||'').trim().toUpperCase()).filter(Boolean)));
+    cache.scriptRooms=[...new Set(records.map(row=>row.room_code))]
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map((room,index)=>{
+        const phach_prefix=randomScriptHead(usedHeads);
+        usedHeads.add(phach_prefix);
+        return {room,position:index+1,reverse:false,phach_prefix,
+          count:records.filter(row=>row.room_code===room).length};
+      });
+    $('script-room-order').innerHTML=`<table><thead><tr><th>Phòng</th><th>Đầu phách</th><th>Thứ tự túi</th><th>Đảo thứ tự trong phòng</th><th>Sĩ số môn</th></tr></thead><tbody>${cache.scriptRooms.map(item=>{
       const count=records.filter(row=>row.room_code===item.room).length;
-      return `<tr data-script-room="${esc(item.room)}"><td>${esc(item.room)}</td><td><input type="number" min="1" value="${item.position}" data-room-position></td>
+      return `<tr data-script-room="${esc(item.room)}"><td>${esc(item.room)}</td><td><input type="text" maxlength="6" value="${item.phach_prefix}" data-room-prefix aria-label="Đầu phách phòng ${esc(item.room)}"></td>
+        <td><input type="number" min="1" value="${item.position}" data-room-position></td>
         <td><input type="checkbox" data-room-reverse></td><td>${count}</td></tr>`;
     }).join('')}</tbody></table>`;
     message($('script-message'),`Đã tải ${cache.scriptRooms.length} phòng, ${records.length} lượt dự thi môn ${nameOf(code)}. Kiểm tra báo vắng trước khi tạo phách.`,'success');
@@ -353,11 +399,20 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!cache.scriptFinalizationId||!cache.scriptRooms.length)await loadScriptRooms();
     const roomOrder=[...$('script-room-order').querySelectorAll('[data-script-room]')].map(row=>({
       room_code:row.dataset.scriptRoom,position:Number(row.querySelector('[data-room-position]').value),
-      reverse:row.querySelector('[data-room-reverse]').checked
+      reverse:row.querySelector('[data-room-reverse]').checked,
+      phach_prefix:row.querySelector('[data-room-prefix]').value.trim().toUpperCase()
     }));
     if(new Set(roomOrder.map(row=>row.position)).size!==roomOrder.length||
       roomOrder.some(row=>!Number.isInteger(row.position)||row.position<1||row.position>roomOrder.length))
       throw new Error('Mỗi phòng phải có một thứ tự túi riêng liên tục từ 1 đến số phòng.');
+    if(roomOrder.some(row=>!/^[A-Z0-9]{1,6}$/.test(row.phach_prefix))||
+      new Set(roomOrder.map(row=>row.phach_prefix)).size!==roomOrder.length)
+      throw new Error('Đầu phách mỗi phòng phải gồm 1–6 ký tự chữ/số và không được trùng nhau.');
+    if(roomOrder.some((row,index)=>roomOrder.some((other,otherIndex)=>index!==otherIndex&&
+      (row.phach_prefix.startsWith(other.phach_prefix)||other.phach_prefix.startsWith(row.phach_prefix)))))
+      throw new Error('Đầu phách không được là tiền tố của đầu phách phòng khác.');
+    if(cache.scriptRooms.some(room=>room.count>100))
+      throw new Error('Mỗi phòng không được có quá 100 bài; hãy kiểm tra lại phương án phân phòng.');
     const{data,error}=await state.client.rpc('exam_create_script_run',{
       p_exam_id:examId,p_subject_code:$('script-subject').value,p_method:$('script-method').value,
       p_absence_mode:$('script-absence-mode').value,p_room_order:roomOrder
@@ -398,16 +453,360 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     window.XLSX.writeFile(wb,`phach-${run.exam_id}-${run.subject_code}.xlsx`,{cellStyles:true});
   }
 
+  async function exportScriptHeads(){
+    const examId=currentExam('script-exam');setAdminExam(examId);
+    if(!examId)throw new Error('Chọn kỳ thi trước khi xuất bảng đầu phách.');
+    const{data:configs,error:configError}=await state.client.from('exam_subject_assessment_configs')
+      .select('subject_code').eq('exam_id',examId).eq('is_essay',true);
+    if(configError)throw new Error(`Không tải được danh sách môn tự luận: ${configError.message}`);
+    const essaySubjects=new Set((configs||[]).map(config=>config.subject_code));
+    const{data:runs,error:runsError}=await state.client.from('exam_script_runs')
+      .select('subject_code,method,room_order,status,locked_at,created_at')
+      .eq('exam_id',examId).eq('status','locked').eq('method','room')
+      .order('locked_at',{ascending:false});
+    if(runsError)throw new Error(`Không tải được các phương án phách đã khóa: ${runsError.message}`);
+    const latestRuns=new Map();
+    for(const run of runs||[]){
+      if(essaySubjects.has(run.subject_code)&&!latestRuns.has(run.subject_code))
+        latestRuns.set(run.subject_code,run);
+    }
+    const rows=[...latestRuns.entries()].flatMap(([subjectCode,run])=>
+      (Array.isArray(run.room_order)?run.room_order:[]).map(room=>({
+        subject:nameOf(subjectCode),
+        room:String(room.room_code||''),
+        head:String(room.phach_prefix||''),
+        position:Number(room.position)||0
+      })).filter(row=>row.room&&row.head)
+        .sort((a,b)=>a.position-b.position||a.room.localeCompare(b.room,'vi',{numeric:true}))
+        .map(({subject,room,head})=>[subject,room,head])
+    ).sort((a,b)=>a[0].localeCompare(b[0],'vi')||a[1].localeCompare(b[1],'vi',{numeric:true}));
+    if(!rows.length)throw new Error('Chưa có phương án phách theo phòng đã khóa cho các môn tự luận.');
+    const wb=window.XLSX.utils.book_new();
+    const sheet=window.XLSX.utils.aoa_to_sheet([
+      ['BẢNG TỔNG HỢP ĐẦU PHÁCH THEO PHÒNG'],
+      ['Môn','Phòng','Đầu phách'],
+      ...rows
+    ]);
+    window.XLSX.utils.book_append_sheet(wb,sheet,'Tong hop dau phach');
+    window.XLSX.writeFile(wb,`bang-dau-phach-${examId}.xlsx`);
+  }
+
   async function assignGrader(){
     const examId=currentExam('script-exam');setAdminExam(examId);
     const userId=$('grader-user-id').value.trim(),subjectCode=$('grader-assign-subject').value;
     if(!uuidPattern.test(userId))throw new Error('Nhập UUID hợp lệ của tài khoản Supabase Auth.');
-    if(!subjectCode)throw new Error('Chọn môn tự luận cần phân công.');
+    if(!subjectCode)throw new Error('Chọn môn cần phân công.');
+    if(!cache.scriptConfigs.some(row=>row.subject_code===subjectCode&&row.is_essay))
+      throw new Error(`Hãy lưu thang điểm phần tự luận môn ${nameOf(subjectCode)} trước khi phân công giám khảo.`);
     const{error}=await state.client.rpc('exam_assign_grader',{
       p_exam_id:examId,p_subject_code:subjectCode,p_user_id:userId,p_active:true
     });
     if(error)throw new Error(`Không phân công được giám khảo: ${error.message}`);
-    message($('script-message'),`Đã phân công tài khoản ${userId} chấm môn ${nameOf(subjectCode)}.`, 'success');
+    const profile=cache.graderProfiles.find(row=>row.user_id===userId);
+    message($('script-message'),`Đã thêm ${profile?.full_name||profile?.email||userId} vào danh sách giám khảo môn ${nameOf(subjectCode)}.`, 'success');
+    await loadGraderAccounts();
+  }
+
+  async function toggleGraderAssignment(userId,active){
+    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    if(!examId||!subjectCode||!uuidPattern.test(userId))throw new Error('Chọn kỳ thi, môn và tài khoản hợp lệ.');
+    const{error}=await state.client.rpc('exam_assign_grader',{
+      p_exam_id:examId,p_subject_code:subjectCode,p_user_id:userId,p_active:!active
+    });
+    if(error)throw new Error(`Không cập nhật được vai trò giám khảo: ${error.message}`);
+    message($('script-message'),active?'Đã gỡ tài khoản khỏi môn.':'Đã thêm tài khoản vào môn.','success');
+    await loadGraderAccounts();
+  }
+
+  async function loadGraderAccounts(){
+    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    if(!examId||!subjectCode)return;
+    const{data,error}=await state.client.from('exam_grader_assignments').select('user_id,active')
+      .eq('exam_id',examId).eq('subject_code',subjectCode).eq('active',true).order('user_id');
+    if(error)throw new Error(`Không tải được tài khoản giám khảo theo môn: ${error.message}`);
+    cache.graderBagAssignments=data||[];
+    const{data:profiles,error:profileError}=await state.client.from('exam_user_profiles')
+      .select('user_id,email,full_name,teacher_code').order('full_name');
+    if(profileError)throw new Error(`Không tải được danh sách tài khoản. Hãy chạy migration v0.1.63. ${profileError.message}`);
+    cache.graderProfiles=profiles||[];
+    const selected=$('grader-user-id').value;
+    $('grader-user-id').innerHTML='<option value="">-- Chọn tài khoản đã đăng nhập --</option>'+cache.graderProfiles.map(profile=>
+      `<option value="${esc(profile.user_id)}">${esc([profile.teacher_code,profile.full_name,profile.email].filter(Boolean).join(' · ')||profile.user_id)}</option>`).join('');
+    if(cache.graderProfiles.some(profile=>profile.user_id===selected))$('grader-user-id').value=selected;
+    const assigned=new Set(cache.graderBagAssignments.map(row=>row.user_id));
+    $('grader-account-list').innerHTML=`<table><thead><tr><th>Mã định danh</th><th>Giáo viên</th><th>Email đăng nhập</th><th>Vai trò môn hiện tại</th><th></th></tr></thead><tbody>${cache.graderProfiles.map(profile=>
+      `<tr><td>${esc(profile.teacher_code||'—')}</td><td>${esc(profile.full_name||'—')}</td><td>${esc(profile.email||'—')}</td><td>${assigned.has(profile.user_id)?'Giám khảo':'Chưa phân công'}</td><td>${assigned.has(profile.user_id)?`<button type="button" class="small-btn danger-btn" data-grader-revoke="${esc(profile.user_id)}">Gỡ khỏi môn</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Chưa có tài khoản đăng nhập Google/email.</td></tr>'}</tbody></table>`;
+    await loadGraderGroups();
+  }
+
+  async function saveGraderProfile(){
+    const userId=$('grader-user-id').value;
+    if(!uuidPattern.test(userId))throw new Error('Chọn tài khoản giáo viên đã đăng nhập.');
+    const{error}=await state.client.rpc('exam_save_grader_profile',{
+      p_user_id:userId,p_full_name:$('grader-full-name').value.trim(),
+      p_teacher_code:$('grader-teacher-code').value.trim()
+    });
+    if(error)throw new Error(`Không lưu được thông tin giáo viên: ${error.message}`);
+    message($('script-message'),'Đã lưu tên và mã định danh giáo viên.','success');
+    await loadGraderAccounts();
+  }
+
+  async function loadGraderGroups(){
+    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    const groupSelect=$('grader-group-select'),membersSelect=$('grader-group-members');
+    cache.graderGroups=[];
+    if(!examId||!subjectCode){
+      groupSelect.innerHTML='<option value="">-- Tạo nhóm mới --</option>';
+      membersSelect.innerHTML='';
+      return;
+    }
+    const{data:groups,error}=await state.client.from('exam_grader_groups').select('id,name')
+      .eq('exam_id',examId).eq('subject_code',subjectCode).order('name');
+    if(error)throw new Error(`Không tải được nhóm giám khảo: ${error.message}`);
+    cache.graderGroups=groups||[];
+    const{data:members,error:memberError}=cache.graderGroups.length
+      ?await state.client.from('exam_grader_group_members').select('group_id,user_id')
+        .in('group_id',cache.graderGroups.map(group=>group.id))
+      :{data:[],error:null};
+    if(memberError)throw new Error(`Không tải được thành viên nhóm: ${memberError.message}`);
+    const membersByGroup=new Map();
+    for(const member of members||[]){
+      if(!membersByGroup.has(member.group_id))membersByGroup.set(member.group_id,[]);
+      membersByGroup.get(member.group_id).push(member.user_id);
+    }
+    for(const group of cache.graderGroups)group.user_ids=membersByGroup.get(group.id)||[];
+    const previous=groupSelect.value;
+    groupSelect.innerHTML='<option value="">-- Tạo nhóm mới --</option>'+cache.graderGroups.map(group=>
+      `<option value="${esc(group.id)}">${esc(group.name)}</option>`).join('');
+    if(cache.graderGroups.some(group=>group.id===previous))groupSelect.value=previous;
+    membersSelect.innerHTML=cache.graderBagAssignments.map(({user_id})=>{
+      const profile=cache.graderProfiles.find(row=>row.user_id===user_id);
+      return `<option value="${esc(user_id)}">${esc([profile?.teacher_code,profile?.full_name,profile?.email].filter(Boolean).join(' · ')||user_id)}</option>`;
+    }).join('');
+    renderSelectedGroup();
+  }
+
+  function renderSelectedGroup(){
+    const group=cache.graderGroups.find(row=>row.id===$('grader-group-select').value);
+    $('grader-group-name').value=group?.name||'';
+    $('grader-group-delete').disabled=!group;
+    const selected=new Set(group?.user_ids||[]);
+    for(const option of $('grader-group-members').options)option.selected=selected.has(option.value);
+  }
+
+  async function saveGraderGroup(){
+    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    const userIds=[...$('grader-group-members').selectedOptions].map(option=>option.value);
+    if(!examId||!subjectCode)throw new Error('Chọn kỳ thi và môn trước khi lưu nhóm.');
+    if(!userIds.length)throw new Error('Chọn ít nhất một giám khảo cùng môn cho nhóm.');
+    const{data,error}=await state.client.rpc('exam_save_grader_group',{
+      p_exam_id:examId,p_subject_code:subjectCode,
+      p_group_id:$('grader-group-select').value||null,
+      p_name:$('grader-group-name').value.trim(),p_user_ids:userIds
+    });
+    if(error)throw new Error(`Không lưu được nhóm giám khảo: ${error.message}`);
+    message($('script-message'),'Đã lưu nhóm giám khảo. Có thể giao nhóm cho túi bài trong phương án phách đã khóa.','success');
+    await loadGraderGroups();
+    $('grader-group-select').value=data;
+    renderSelectedGroup();
+  }
+
+  async function deleteGraderGroup(){
+    const group=cache.graderGroups.find(row=>row.id===$('grader-group-select').value);
+    if(!group)throw new Error('Chọn nhóm cần xóa.');
+    if(!confirm(`Xóa nhóm "${group.name}"? Nhóm đang được giao túi không thể xóa.`))return;
+    const{error}=await state.client.rpc('exam_delete_grader_group',{p_group_id:group.id});
+    if(error)throw new Error(`Không xóa được nhóm: ${error.message}`);
+    message($('script-message'),`Đã xóa nhóm ${group.name}.`,'success');
+    await loadGraderGroups();
+  }
+  async function showBagAssignments(runId){
+    const{data:run,error:runError}=await state.client.from('exam_script_runs').select('*').eq('id',runId).single();
+    if(runError)throw new Error(`Không tải được phương án phách: ${runError.message}`);
+    if(run.status!=='locked')throw new Error('Chỉ phương án phách đã khóa mới được phân công theo túi.');
+    const records=await readPages(()=>state.client.from('exam_script_records')
+      .select('room_code').eq('run_id',runId).order('room_code'));
+    const rooms=[...new Set(records.map(row=>row.room_code))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const{data:graders,error:graderError}=await state.client.from('exam_grader_assignments')
+      .select('user_id').eq('exam_id',run.exam_id).eq('subject_code',run.subject_code).eq('active',true).order('user_id');
+    if(graderError)throw new Error(`Không tải được giám khảo môn ${nameOf(run.subject_code)}: ${graderError.message}`);
+    const graderIds=[...new Set((graders||[]).map(row=>row.user_id))];
+    const{data:profiles,error:profileError}=graderIds.length
+      ?await state.client.from('exam_user_profiles').select('user_id,email,full_name,teacher_code').in('user_id',graderIds)
+      :{data:[],error:null};
+    if(profileError)throw new Error(`Không tải được thông tin giám khảo: ${profileError.message}`);
+    const{data:groups,error:groupsError}=await state.client.from('exam_grader_groups')
+      .select('id,name').eq('exam_id',run.exam_id).eq('subject_code',run.subject_code).order('name');
+    if(groupsError)throw new Error(`Không tải được nhóm giám khảo: ${groupsError.message}`);
+    const{data:assigned,error:assignedError}=await state.client.from('exam_script_bag_assignments')
+      .select('room_code,user_id,group_id,assignment_method').eq('run_id',runId);
+    if(assignedError)throw new Error(`Không tải được phân công túi. Hãy chạy migration v0.1.62. ${assignedError.message}`);
+    const assignmentByRoom=new Map((assigned||[]).map(row=>[row.room_code,{
+      value:row.user_id?`user:${row.user_id}`:row.group_id?`group:${row.group_id}`:'',
+      method:row.assignment_method
+    }]));
+    const graderOptions=graderIds.map(id=>{
+      const profile=(profiles||[]).find(item=>item.user_id===id);
+      const label=[profile?.teacher_code,profile?.full_name,profile?.email].filter(Boolean).join(' · ')||id;
+      return `<option value="user:${esc(id)}">${esc(label)}</option>`;
+    }).join('');
+    const groupOptions=(groups||[]).map(group=>`<option value="group:${esc(group.id)}">Nhóm: ${esc(group.name)}</option>`).join('');
+    const panel=$('script-bag-assignment');
+    panel.classList.remove('hidden');
+    panel.innerHTML=`<h3>Phân công giám khảo theo túi — ${esc(nameOf(run.subject_code))}</h3>
+      <p>Để “Không phân công riêng”, mọi giám khảo đã được phân môn này đều có thể nhập điểm của túi.</p>
+      <table><thead><tr><th>Túi / phòng</th><th>Giám khảo hoặc nhóm</th></tr></thead><tbody>${rooms.map(room=>
+        `<tr><td>${esc(room)}${assignmentByRoom.get(room)?.method==='draw'?' · bốc thăm':''}</td><td><select data-bag-room="${esc(room)}"><option value="">Không phân công riêng (mọi giám khảo môn này)</option>${graderOptions}${groupOptions}</select></td></tr>`).join('')}</tbody></table>
+      <div class="form-actions"><button type="button" class="btn btn-light" id="draw-bag-assignments">Bốc thăm đều cho giám khảo</button><button type="button" class="btn btn-primary" id="save-bag-assignments">Lưu phân công túi</button>
+      <button type="button" class="btn btn-light" id="close-bag-assignments">Đóng</button></div>`;
+    for(const select of panel.querySelectorAll('[data-bag-room]')){
+      const assignment=assignmentByRoom.get(select.dataset.bagRoom);
+      if(assignment)select.value=assignment.value;
+    }
+    $('close-bag-assignments').onclick=()=>panel.classList.add('hidden');
+    $('draw-bag-assignments').onclick=async event=>{
+      const button=event.currentTarget;
+      if(!confirm('Bốc thăm ngẫu nhiên, chia số túi gần như bằng nhau giữa các giám khảo đang được phân môn và thay thế mọi phân công túi hiện tại?'))return;
+      button.disabled=true;
+      try{
+        const{data,error}=await state.client.rpc('exam_draw_script_bag_assignments',{p_run_id:runId});
+        if(error)throw new Error(`Không bốc thăm được phân công: ${error.message}`);
+        message($('script-message'),`Đã bốc thăm ${data.assigned_bag_count} túi cho ${data.grader_count} giám khảo; kết quả đã được lưu nhật ký.`,'success');
+        await showBagAssignments(runId);
+      }catch(error){message($('script-message'),error?.message||String(error),'error')}
+      finally{button.disabled=false}
+    };
+    $('save-bag-assignments').onclick=async event=>{
+      const button=event.currentTarget;button.disabled=true;
+      try{
+        const rows=[...panel.querySelectorAll('[data-bag-room]')].filter(select=>select.value)
+          .map(select=>{
+            const [type,id]=select.value.split(':');
+            return {room_code:select.dataset.bagRoom,user_id:type==='user'?id:null,group_id:type==='group'?id:null};
+          });
+        const{error}=await state.client.rpc('exam_set_script_bag_assignments',{p_run_id:runId,p_rows:rows});
+        if(error)throw new Error(`Không lưu được phân công túi: ${error.message}`);
+        message($('script-message'),rows.length
+          ?`Đã phân công ${rows.length} túi cho giám khảo/nhóm. Các túi chưa gán vẫn mở cho mọi giám khảo môn này.`
+          :'Đã bỏ phân công cá nhân; mọi giám khảo môn này có thể chấm tất cả các túi.','success');
+        panel.classList.add('hidden');
+      }catch(error){message($('script-message'),error?.message||String(error),'error')}
+      finally{button.disabled=false}
+    };
+  }
+
+  async function deleteSubjectScriptRuns(subjectCode){
+    const examId=currentExam('script-exam');
+    setAdminExam(examId);
+    const confirmation=prompt(`Thao tác này xóa tất cả phương án phách và điểm tự luận của môn ${nameOf(subjectCode)}. Nhập chính xác mã môn ${subjectCode} để xác nhận:`);
+    if(confirmation===null)return;
+    if(confirmation.trim().toUpperCase()!==subjectCode)
+      throw new Error('Mã xác nhận không khớp; chưa xóa dữ liệu.');
+    const{data,error}=await state.client.rpc('exam_delete_script_runs',{
+      p_exam_id:examId,p_subject_code:subjectCode,p_confirmation:confirmation.trim().toUpperCase()
+    });
+    if(error)throw new Error(`Không xóa được phách môn ${nameOf(subjectCode)}: ${error.message}`);
+    message($('script-message'),`Đã xóa ${data.deleted_runs} phương án, ${data.deleted_records} bản ghi phách và ${data.deleted_scores} điểm tự luận của môn ${nameOf(subjectCode)}.`, 'success');
+    await loadScriptRuns();
+  }
+
+  function renderScorePreview(){
+    const rows=cache.scoreImportRows.slice(0,25);
+    $('scores-preview').innerHTML=rows.length
+      ?`<h3>Xem trước ${Math.min(25,cache.scoreImportRows.length)}/${cache.scoreImportRows.length} dòng trắc nghiệm</h3><table><thead><tr><th>SBD</th><th>Điểm trắc nghiệm</th></tr></thead><tbody>${rows.map(row=>
+        `<tr><td>${esc(row.sbd)}</td><td>${esc(row.score)}</td></tr>`).join('')}</tbody></table>`
+      :'';
+    $('scores-import').disabled=!cache.scoreImportRows.length;
+  }
+
+  async function readMultipleChoiceFile(){
+    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value;
+    setAdminExam(examId);
+    if(!subjectCode)throw new Error('Chọn môn thi cần nhập điểm.');
+    const file=$('scores-file').files?.[0];
+    if(!file)throw new Error('Chọn tệp Excel hoặc CSV kết quả trắc nghiệm.');
+    const sbdIndex=excelColumnIndex($('scores-sbd-column').value);
+    const scoreIndex=excelColumnIndex($('scores-mcq-column').value);
+    if(sbdIndex===scoreIndex)throw new Error('Cột SBD và cột điểm phải khác nhau.');
+    const firstRow=Number($('scores-first-row').value);
+    if(!Number.isInteger(firstRow)||firstRow<1)throw new Error('Dòng dữ liệu đầu tiên phải là số nguyên từ 1.');
+    const workbook=window.XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});
+    const sheet=workbook.Sheets[workbook.SheetNames[0]];
+    if(!sheet)throw new Error('Tệp không có trang tính dữ liệu.');
+    const matrix=window.XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:''});
+    const rows=[];
+    for(let index=firstRow-1;index<matrix.length;index++){
+      const cells=matrix[index]||[];
+      const rawSbd=cells[sbdIndex],rawScore=cells[scoreIndex];
+      if(String(rawSbd??'').trim()===''&&String(rawScore??'').trim()==='')continue;
+      const rowNumber=index+1,sbd=String(rawSbd??'').trim().replace(/\.0$/,'');
+      if(!/^(?:\d{6}|\d{8})$/.test(sbd))throw new Error(`SBD ở dòng ${rowNumber} phải gồm 6 hoặc 8 chữ số.`);
+      const score=parseImportedScore(rawScore,rowNumber);
+      rows.push({sbd,score});
+    }
+    if(!rows.length)throw new Error('Không tìm thấy dòng điểm nào trong vùng đã chọn.');
+    const uniqueSbd=new Set(rows.map(row=>row.sbd));
+    if(uniqueSbd.size!==rows.length)throw new Error('Tệp có SBD bị lặp; hãy sửa tệp trước khi nhập.');
+    const{data:config,error}=await state.client.from('exam_subject_assessment_configs')
+      .select('mcq_maximum_score').eq('exam_id',examId).eq('subject_code',subjectCode).single();
+    if(error)throw new Error(`Không tải được điểm tối đa trắc nghiệm. Hãy lưu cấu hình môn trước. ${error.message}`);
+    const outOfRange=rows.find(row=>row.score>Number(config.mcq_maximum_score));
+    if(outOfRange)throw new Error(`Điểm ${outOfRange.score} của SBD ${outOfRange.sbd} vượt mức tối đa ${config.mcq_maximum_score}.`);
+    cache.scoreImportRows=rows;
+    renderScorePreview();
+    message($('scores-message'),`Đã kiểm tra ${rows.length} dòng. Khi nhập, điểm hiện có của các SBD này sẽ được cập nhật theo tệp mới.`,'success');
+  }
+
+  async function importMultipleChoiceScores(){
+    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value,file=$('scores-file').files?.[0];
+    if(!cache.scoreImportRows.length||!file)throw new Error('Hãy đọc và kiểm tra tệp trước khi nhập điểm.');
+    if(!confirm(`Nhập ${cache.scoreImportRows.length} điểm trắc nghiệm môn ${nameOf(subjectCode)}? Điểm đã nhập của các SBD này sẽ bị thay bằng dữ liệu mới.`))return;
+    const{data,error}=await state.client.rpc('exam_import_mcq_scores',{
+      p_exam_id:examId,p_subject_code:subjectCode,p_source_file:file.name,
+      p_rows:cache.scoreImportRows
+    });
+    if(error)throw new Error(`Không nhập được điểm trắc nghiệm: ${error.message}`);
+    message($('scores-message'),`Đã nhập ${data.imported_count} điểm trắc nghiệm môn ${nameOf(subjectCode)}.`,'success');
+    await loadCombinedScores();
+  }
+
+  async function loadCombinedScores(){
+    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value;
+    setAdminExam(examId);
+    if(!subjectCode)throw new Error('Chọn môn thi cần tổng hợp.');
+    const{data,error}=await state.client.rpc('exam_get_combined_scores',{
+      p_exam_id:examId,p_subject_code:subjectCode
+    });
+    if(error)throw new Error(`Không tải được điểm tổng hợp: ${error.message}`);
+    cache.combinedScores=data||[];
+    const missingEssay=cache.combinedScores.filter(row=>row.essay_missing).length;
+    const missingMcq=cache.combinedScores.filter(row=>row.mcq_missing).length;
+    const complete=cache.combinedScores.filter(row=>row.total_score!==null).length;
+    $('scores-summary').innerHTML=[
+      ['Thí sinh',cache.combinedScores.length],['Đã đủ hai phần',complete],
+      ['Thiếu điểm tự luận',missingEssay],['Thiếu điểm trắc nghiệm',missingMcq]
+    ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng</th><th>Trạng thái</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
+      const completeScore=row.total_score!==null;
+      const status=row.essay_missing&&row.mcq_missing?'Thiếu cả hai phần':row.essay_missing?'Thiếu tự luận':row.mcq_missing?'Thiếu trắc nghiệm':'Đủ điểm';
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td></tr>`;
+    }).join('')||'<tr><td colspan="7" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
+    $('scores-export').disabled=!cache.combinedScores.length;
+  }
+
+  function exportCombinedScores(){
+    if(!cache.combinedScores.length)throw new Error('Chưa có điểm tổng hợp để xuất.');
+    const rows=[
+      ['SBD','Mã học sinh','Họ và tên','Lớp','Điểm tự luận','Điểm trắc nghiệm','Tổng điểm','Trạng thái'],
+      ...cache.combinedScores.map(row=>[
+        row.sbd,row.student_code,row.student_name,row.class_code,row.essay_score??'',
+        row.mcq_score??'',row.total_score??'',
+        row.essay_missing&&row.mcq_missing?'Thiếu cả hai phần':row.essay_missing?'Thiếu tự luận':row.mcq_missing?'Thiếu trắc nghiệm':'Đủ điểm'
+      ])
+    ];
+    const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
+    window.XLSX.utils.book_append_sheet(wb,ws,'Tong hop diem');
+    window.XLSX.writeFile(wb,`tong-hop-diem-${currentExam('scores-exam')}-${$('scores-subject').value}.xlsx`);
   }
 
   async function enterAsGrader(){
@@ -438,8 +837,17 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const config=selectedGraderConfig();
     if(!config)return;
     cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
+    const{data:headRows,error:headError}=await state.client.rpc('exam_get_grading_heads',{
+      p_exam_id:config.exam_id,p_subject_code:config.subject_code
+    });
+    if(headError)throw new Error(`Không tải được danh sách đầu phách: ${headError.message}`);
+    const heads=(headRows||[]).map(row=>row.phach_prefix);
+    const select=$('grader-prefix'),previous=select.value;
+    select.innerHTML='<option value="">-- Tất cả đầu phách --</option>'+heads.map(head=>
+      `<option value="${esc(head)}">${esc(head)}</option>`).join('');
+    if(heads.includes(previous))select.value=previous;
     const{data,error}=await state.client.rpc('exam_get_grading_queue',{
-      p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_prefix:$('grader-prefix').value.trim()
+      p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_prefix:$('grader-prefix').value
     });
     if(error)throw new Error(`Không tải được danh sách phách: ${error.message}`);
     cache.graderQueue=data||[];cache.graderIndex=0;
@@ -481,7 +889,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function exportGraderTemplate(){
     const wb=window.XLSX.utils.book_new();
-    const ws=window.XLSX.utils.aoa_to_sheet([['Phach','Diem'],['A001','']]);
+    const ws=window.XLSX.utils.aoa_to_sheet([['Phach','Diem'],['A1','']]);
     window.XLSX.utils.book_append_sheet(wb,ws,'Nhap diem');
     window.XLSX.writeFile(wb,'mau-nhap-diem-tu-luan.xlsx');
   }
@@ -542,27 +950,43 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       cache.scriptRooms=[];cache.scriptFinalizationId=null;$('script-room-order').innerHTML='';
       if($('script-exam').value)loadScriptConfigs().catch(error=>message($('script-message'),error.message,'error'));
     };
-    $('script-is-essay').onchange=()=>{
-      for(const id of ['script-max-score','script-score-step','script-decimals','script-default-score'])
-        $(id).disabled=!$('script-is-essay').checked;
-    };
     safeAction('script-message',saveScriptConfig,$('script-save-subject'));
+    safeAction('script-message',saveMcqMaximumScore,$('script-save-mcq-max-score'));
     safeAction('script-message',loadScriptRooms,$('script-load-rooms'));
     safeAction('script-message',createScriptRun,$('script-generate'));
+    safeAction('script-message',exportScriptHeads,$('script-export-heads'));
     safeAction('script-message',assignGrader,$('grader-assign-save'));
+    safeAction('script-message',saveGraderProfile,$('grader-profile-save'));
+    safeAction('script-message',saveGraderGroup,$('grader-group-save'));
+    safeAction('script-message',deleteGraderGroup,$('grader-group-delete'));
+    $('grader-assign-subject').onchange=()=>loadGraderAccounts().catch(error=>message($('script-message'),error.message,'error'));
+    $('grader-user-id').onchange=()=>{
+      const profile=cache.graderProfiles.find(row=>row.user_id===$('grader-user-id').value);
+      $('grader-full-name').value=profile?.full_name||'';
+      $('grader-teacher-code').value=profile?.teacher_code||'';
+    };
+    $('grader-group-select').onchange=renderSelectedGroup;
+    $('grader-account-list').addEventListener('click',event=>{
+      const button=event.target.closest('[data-grader-revoke]');
+      if(button)safeAction('script-message',()=>toggleGraderAssignment(button.dataset.graderRevoke,true),button);
+    });
     $('script-runs-body').addEventListener('click',event=>{
-      const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]');
-      const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):null;
-      const button=lock||exportButton;
+      const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),deleteButton=event.target.closest('[data-script-delete]');
+      const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
+      const button=lock||exportButton||assignButton||deleteButton;
       if(action&&button){button.disabled=true;action().catch(error=>message($('script-message'),error?.message||String(error),'error')).finally(()=>{button.disabled=false})}
     });
     $('grader-exam').onchange=()=>{
       const examId=$('grader-exam').value;
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
+      $('grader-prefix').value='';
       setSubjectOptions('grader-subject',cache.graderWork.filter(work=>work.exam_id===examId).map(work=>({code:work.subject_code,name:nameOf(work.subject_code)})));
       $('grader-subject').onchange();
     };
-    $('grader-subject').onchange=()=>loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
+    $('grader-subject').onchange=()=>{
+      $('grader-prefix').value='';
+      loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
+    };
     $('grader-prefix').onchange=()=>loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
     $('grader-table-body').addEventListener('click',event=>{
       const row=event.target.closest('[data-grader-index]');if(!row)return;
@@ -577,6 +1001,21 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('grader-export-template').onclick=exportGraderTemplate;
     safeAction('grader-message',importGraderScores,$('grader-import-scores'));
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
+    $('scores-exam').onchange=()=>{
+      cache.scoreImportRows=[];cache.combinedScores=[];
+      $('scores-preview').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';
+      $('scores-import').disabled=true;$('scores-export').disabled=true;
+      setSubjectOptions('scores-subject',allSubjectOptions());
+    };
+    $('scores-subject').onchange=()=>{
+      cache.scoreImportRows=[];cache.combinedScores=[];
+      $('scores-preview').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';
+      $('scores-import').disabled=true;$('scores-export').disabled=true;
+    };
+    safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
+    safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
+    safeAction('scores-message',loadCombinedScores,$('scores-load'));
+    $('scores-export').onclick=()=>{try{exportCombinedScores()}catch(error){message($('scores-message'),error.message,'error')}};
   }
   wire();
   return{
