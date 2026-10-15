@@ -1911,6 +1911,14 @@ async function boot(){
   }
   operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName});
   wire();wireRoomingEditor();renderSubjects();updateVersionDisplay();
+  $('setup-form').dataset.connectionHandler='ready';
+  $('setup-form').addEventListener('submit',()=>{
+    message($('setup-message'),'Đang kiểm tra kết nối tới Supabase...','info');
+    const submit=$('setup-form').querySelector('button[type=submit]');
+    setTimeout(()=>{
+      if(submit.disabled)message($('setup-message'),'Supabase chưa phản hồi sau 30 giây. Kiểm tra kết nối mạng hoặc tải lại trang rồi thử lại.','error');
+    },30000);
+  });
   const config=readConfig();
   if(!config.url||!config.key){
     showScreen('setup-screen');
