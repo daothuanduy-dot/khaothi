@@ -39,12 +39,11 @@ export function randomScriptHead(usedHeads=new Set()){
   const cryptoApi=globalThis.crypto;
   if(!cryptoApi||typeof cryptoApi.getRandomValues!=='function')
     throw new Error('Không thể tạo đầu phách ngẫu nhiên an toàn trên trình duyệt này.');
-  for(let attempt=0;attempt<100;attempt++){
-    const bytes=cryptoApi.getRandomValues(new Uint8Array(4));
-    const head=[...bytes].map(value=>String.fromCharCode(65+(value%26))).join('');
-    if(!usedHeads.has(head))return head;
-  }
-  throw new Error('Không tạo được đầu phách khác nhau; hãy tải lại danh sách phòng.');
+  const available='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(head=>!usedHeads.has(head));
+  if(!available.length)throw new Error('Không đủ chữ cái để tạo đầu phách riêng cho từng phòng (tối đa 26 phòng).');
+  const bytes=new Uint32Array(1),limit=Math.floor(0x100000000/available.length)*available.length;
+  do{cryptoApi.getRandomValues(bytes)}while(bytes[0]>=limit);
+  return available[bytes[0]%available.length];
 }
 
 export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName}){
@@ -374,13 +373,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     if(!target)throw new Error(`Chưa có phân phòng chính thức cho môn ${nameOf(code)}.`);
     cache.scriptFinalizationId=target.id;
-    const{data:existingRuns,error:runsError}=await state.client.from('exam_script_runs')
-      .select('room_order').eq('exam_id',examId);
-    if(runsError)throw new Error(`Không tải được các đầu phách đã sử dụng: ${runsError.message}`);
-    const usedHeads=new Set((existingRuns||[]).flatMap(run=>(Array.isArray(run.room_order)?run.room_order:[])
-      .map(room=>String(room.phach_prefix||'').trim().toUpperCase()).filter(Boolean)));
-    cache.scriptRooms=[...new Set(records.map(row=>row.room_code))]
-      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map((room,index)=>{
+    const roomCodes=[...new Set(records.map(row=>row.room_code))]
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    if(roomCodes.length>26)throw new Error('Mỗi môn tối đa 26 phòng để mỗi phòng có một đầu phách là chữ cái riêng.');
+    const usedHeads=new Set();
+    cache.scriptRooms=roomCodes.map((room,index)=>{
         const phach_prefix=randomScriptHead(usedHeads);
         usedHeads.add(phach_prefix);
         return {room,position:index+1,reverse:false,phach_prefix,
@@ -388,7 +385,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       });
     $('script-room-order').innerHTML=`<table><thead><tr><th>Phòng</th><th>Đầu phách</th><th>Thứ tự túi</th><th>Đảo thứ tự trong phòng</th><th>Sĩ số môn</th></tr></thead><tbody>${cache.scriptRooms.map(item=>{
       const count=records.filter(row=>row.room_code===item.room).length;
-      return `<tr data-script-room="${esc(item.room)}"><td>${esc(item.room)}</td><td><input type="text" maxlength="6" value="${item.phach_prefix}" data-room-prefix aria-label="Đầu phách phòng ${esc(item.room)}"></td>
+      return `<tr data-script-room="${esc(item.room)}"><td>${esc(item.room)}</td><td><input type="text" maxlength="1" value="${item.phach_prefix}" data-room-prefix aria-label="Đầu phách phòng ${esc(item.room)}"></td>
         <td><input type="number" min="1" value="${item.position}" data-room-position></td>
         <td><input type="checkbox" data-room-reverse></td><td>${count}</td></tr>`;
     }).join('')}</tbody></table>`;
@@ -405,12 +402,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(new Set(roomOrder.map(row=>row.position)).size!==roomOrder.length||
       roomOrder.some(row=>!Number.isInteger(row.position)||row.position<1||row.position>roomOrder.length))
       throw new Error('Mỗi phòng phải có một thứ tự túi riêng liên tục từ 1 đến số phòng.');
-    if(roomOrder.some(row=>!/^[A-Z0-9]{1,6}$/.test(row.phach_prefix))||
+    if(roomOrder.some(row=>!/^[A-Z]$/.test(row.phach_prefix))||
       new Set(roomOrder.map(row=>row.phach_prefix)).size!==roomOrder.length)
-      throw new Error('Đầu phách mỗi phòng phải gồm 1–6 ký tự chữ/số và không được trùng nhau.');
-    if(roomOrder.some((row,index)=>roomOrder.some((other,otherIndex)=>index!==otherIndex&&
-      (row.phach_prefix.startsWith(other.phach_prefix)||other.phach_prefix.startsWith(row.phach_prefix)))))
-      throw new Error('Đầu phách không được là tiền tố của đầu phách phòng khác.');
+      throw new Error('Đầu phách mỗi phòng phải là một chữ cái in hoa A–Z và không được trùng trong cùng môn.');
     if(cache.scriptRooms.some(room=>room.count>100))
       throw new Error('Mỗi phòng không được có quá 100 bài; hãy kiểm tra lại phương án phân phòng.');
     const{data,error}=await state.client.rpc('exam_create_script_run',{
