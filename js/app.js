@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.67';
-import {loadTabModules} from './module-loader.js?v=0.1.67';
-import {wireOperations} from './operations.js?v=0.1.67';
-const APP_VERSION='v0.1.67';
-const APP_BUILD='2026-10-15-single-letter-script-heads-cache-refresh';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.69';
+import {loadTabModules} from './module-loader.js?v=0.1.69';
+import {candidateClassOptions,wireOperations} from './operations.js?v=0.1.69';
+const APP_VERSION='v0.1.69';
+const APP_BUILD='2026-10-15-candidate-class-select-add';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -391,7 +391,10 @@ function updateCandidateSelection(id,checked){
 function openCandidateModal(id=null){
   resetCandidateForm();
   if(id)beginEditCandidate(id);
-  else{$('candidate-form-title').textContent='Thêm thí sinh';$('candidate-save').textContent='Thêm thí sinh';$('candidate-modal').showModal()}
+  else{
+    $('candidate-form-title').textContent='Thêm thí sinh';$('candidate-save').textContent='Thêm thí sinh';
+    populateCandidateEditClasses();$('candidate-modal').showModal()
+  }
 }
 function resetCandidateForm(){
   $('candidate-edit-form').reset();$('candidate-edit-id').value='';
@@ -406,9 +409,21 @@ function beginEditCandidate(id){
   $('candidate-edit-code').disabled=true;
   $('candidate-edit-name').value=c.student_name||'';$('candidate-edit-grade').value=String(c.grade_code||'');
   $('candidate-edit-dob').value=c.date_of_birth||'';$('candidate-edit-gender').value=c.gender||'';
-  $('candidate-edit-ethnicity').value=c.ethnicity||'';$('candidate-edit-class').value=c.class_code||'';
+  $('candidate-edit-ethnicity').value=c.ethnicity||'';
+  populateCandidateEditClasses(c.class_code||'',true);
   $('candidate-form-title').textContent='Sửa hồ sơ thí sinh';$('candidate-save').textContent='Lưu thay đổi';
   $('candidate-modal').showModal();
+}
+function populateCandidateEditClasses(selectedClass='',preserveMissing=false){
+  const grade=$('candidate-edit-grade').value,select=$('candidate-edit-class');
+  select.disabled=!grade;
+  const classes=candidateClassOptions(state.candidates,grade);
+  if(preserveMissing&&selectedClass&&!classes.includes(selectedClass))classes.push(selectedClass);
+  classes.sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+  const placeholder=!grade?'-- Chọn khối trước --':classes.length?'-- Chọn lớp --':'-- Khối này chưa có lớp --';
+  select.innerHTML=`<option value="">${placeholder}</option>`+classes.map(classCode=>
+    `<option value="${esc(classCode)}">${esc(classCode)}</option>`).join('');
+  if(classes.includes(selectedClass))select.value=selectedClass;
 }
 async function saveCandidate(event){
   event.preventDefault();
@@ -1910,6 +1925,11 @@ async function boot(){
     return;
   }
   operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName});
+  $('candidate-edit-grade').addEventListener('change',()=>{
+    const currentClass=$('candidate-edit-class').value;
+    const options=candidateClassOptions(state.candidates,$('candidate-edit-grade').value);
+    populateCandidateEditClasses(options.includes(currentClass)?currentClass:'');
+  });
   wire();wireRoomingEditor();renderSubjects();updateVersionDisplay();
   $('setup-form').dataset.connectionHandler='ready';
   $('setup-form').addEventListener('submit',()=>{
