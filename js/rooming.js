@@ -1,5 +1,9 @@
 export const SUBJECTS = [
-  {code:'ANH', name:'Tiếng Anh'},{code:'SU', name:'Lịch sử'},
+  {code:'N1', name:'Tiếng Anh'},{code:'N2', name:'Tiếng Nga'},
+  {code:'N3', name:'Tiếng Pháp'},{code:'N4', name:'Tiếng Trung Quốc'},
+  {code:'N5', name:'Tiếng Đức'},{code:'N6', name:'Tiếng Nhật'},
+  {code:'N7', name:'Tiếng Hàn'},{code:'ANH', name:'Tiếng Anh (mã cũ)'},
+  {code:'SU', name:'Lịch sử'},
   {code:'DIA', name:'Địa lí'},{code:'GDKTPL', name:'Giáo dục kinh tế và pháp luật'},
   {code:'KTPL', name:'Giáo dục kinh tế và pháp luật'},{code:'LY', name:'Vật lí'},
   {code:'HOA', name:'Hóa học'},{code:'SINH', name:'Sinh học'},{code:'TIN', name:'Tin học'}

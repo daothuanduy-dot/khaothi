@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.72';
-import {loadTabModules} from './module-loader.js?v=0.1.72';
-import {wireOperations} from './operations.js?v=0.1.72';
-const APP_VERSION='v0.1.72';
-const APP_BUILD='2026-10-16-school-students';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.75';
+import {loadTabModules} from './module-loader.js?v=0.1.75';
+import {wireOperations} from './operations.js?v=0.1.75';
+const APP_VERSION='v0.1.75';
+const APP_BUILD='2026-10-16-subject-cleanup-foreign-languages';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -10,7 +10,7 @@ let operations=null;
 let schoolStudents=[];
 const selectedSchoolStudentCodes=new Set();
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const subjectName=code=>{const key=String(code??'').trim().toUpperCase();if(!key)return '';const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];return all.find(s=>String(s.code).toUpperCase()===key)?.name||String(code)};
+const subjectName=code=>{const key=String(code??'').trim().toUpperCase();if(!key)return '';if(key==='ANH')return 'Tiếng Anh (mã cũ)';const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];return all.find(s=>String(s.code).toUpperCase()===key)?.name||String(code)};
 function candidateClassOptions(candidates,grade){
   return [...new Set((candidates||[])
     .filter(candidate=>String(candidate.grade_code||'').trim()===String(grade||'').trim())
@@ -138,6 +138,7 @@ async function loadExams(){
     previous.value=current&&state.exams.some(e=>e.id===current)?current:'';
   }
   state.selectedExam=$('rooming-exam-select').value||$('subject-exam-select').value||null;
+  if($('subject-delete-registrations'))$('subject-delete-registrations').disabled=!$('subject-exam-select').value;
   updateSelectedExamTitle();
   await loadCandidates();
 }
@@ -279,7 +280,7 @@ function updateSchoolStudentSelection(){
 function renderSchoolStudents(){
   const body=$('school-student-body'),rows=filteredSchoolStudents();
   if(!rows.length){
-    body.innerHTML=`<tr><td colspan="8" class="empty">${schoolStudents.length?'Không có học sinh khớp bộ lọc.':'Chưa có dữ liệu học sinh toàn trường. Hãy nhập danh sách Excel phía trên.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="9" class="empty">${schoolStudents.length?'Không có học sinh khớp bộ lọc.':'Chưa có dữ liệu học sinh toàn trường. Hãy nhập danh sách Excel hoặc thêm học sinh.'}</td></tr>`;
     updateSchoolStudentSelection();
     return;
   }
@@ -287,18 +288,19 @@ function renderSchoolStudents(){
     <td><input type="checkbox" data-school-student-check="${esc(student.student_code)}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(student.student_code)?'checked':''}></td>
     <td>${esc(student.student_code)}</td><td>${esc(student.student_name)}</td><td>${esc(student.date_of_birth||'—')}</td>
     <td>${esc(student.gender||'—')}</td><td>${esc(student.ethnicity||'—')}</td><td>${esc(student.grade_code)}</td><td>${esc(student.class_code)}</td>
+    <td><button class="small-btn" type="button" data-school-student-edit="${esc(student.id)}">Sửa</button> <button class="small-btn danger-btn" type="button" data-school-student-delete="${esc(student.id)}">Xóa</button></td>
   </tr>`).join('');
   updateSchoolStudentSelection();
 }
 async function loadSchoolStudents(){
   const body=$('school-student-body');
-  body.innerHTML='<tr><td colspan="8" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr>';
+  body.innerHTML='<tr><td colspan="9" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr>';
   try{
     schoolStudents=await selectAllPages(()=>state.client.from('school_students')
-      .select('student_code,student_name,date_of_birth,gender,ethnicity,grade_code,class_code')
+      .select('id,student_code,student_name,date_of_birth,gender,ethnicity,grade_code,class_code')
       .order('grade_code').order('class_code').order('student_name'));
   }catch(error){
-    body.innerHTML=`<tr><td colspan="8" class="empty">${esc(error.message||String(error))}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="9" class="empty">${esc(error.message||String(error))}</td></tr>`;
     message($('school-student-message'),`Không tải được danh sách học sinh. Hãy chạy migration v0.1.72: ${error.message||String(error)}`,'error');
     return;
   }
@@ -307,6 +309,81 @@ async function loadSchoolStudents(){
   selectedSchoolStudentCodes.forEach(code=>{if(!known.has(code))selectedSchoolStudentCodes.delete(code)});
   schoolStudentFilters();
   renderSchoolStudents();
+}
+function openSchoolStudentForm(student=null){
+  const form=$('school-student-form');
+  form.reset();
+  $('school-student-id').value=student?.id||'';
+  $('school-student-form-title').textContent=student?'Sửa thông tin học sinh':'Thêm học sinh';
+  $('school-student-save').textContent=student?'Lưu thay đổi':'Lưu học sinh';
+  if(student){
+    $('school-student-code').value=student.student_code||'';
+    $('school-student-name').value=student.student_name||'';
+    $('school-student-form-grade').value=student.grade_code||'';
+    $('school-student-form-class').value=student.class_code||'';
+    $('school-student-dob').value=student.date_of_birth||'';
+    $('school-student-gender').value=student.gender||'';
+    $('school-student-ethnicity').value=student.ethnicity||'';
+  }
+  $('school-student-dialog').showModal();
+}
+function closeSchoolStudentForm(){
+  if($('school-student-dialog').open)$('school-student-dialog').close();
+  $('school-student-form').reset();
+  $('school-student-id').value='';
+}
+async function saveSchoolStudent(event){
+  event.preventDefault();
+  const id=$('school-student-id').value;
+  const student={
+    student_code:$('school-student-code').value.trim(),
+    student_name:$('school-student-name').value.trim(),
+    grade_code:$('school-student-form-grade').value.trim().replace(/^khối\s*/i,''),
+    class_code:$('school-student-form-class').value.trim(),
+    date_of_birth:$('school-student-dob').value||null,
+    gender:$('school-student-gender').value||null,
+    ethnicity:$('school-student-ethnicity').value.trim()||null
+  };
+  if(!student.student_code||!student.student_name||!student.grade_code||!student.class_code){
+    message($('school-student-message'),'Mã học sinh, họ tên, khối và lớp là bắt buộc.','error');
+    return;
+  }
+  const button=$('school-student-save');
+  button.disabled=true;
+  try{
+    const query=id
+      ?state.client.from('school_students').update(student).eq('id',id).select('id').maybeSingle()
+      :state.client.from('school_students').insert(student).select('id').single();
+    const{data,error}=await query;
+    if(error)throw error;
+    if(!data)throw new Error('Không tìm thấy hồ sơ học sinh để cập nhật. Danh sách có thể đã thay đổi; hãy tải lại và thử lại.');
+    if(id){
+      const previous=schoolStudents.find(item=>item.id===id);
+      if(previous&&previous.student_code!==student.student_code)selectedSchoolStudentCodes.delete(previous.student_code);
+    }
+    closeSchoolStudentForm();
+    message($('school-student-message'),id?'Đã cập nhật hồ sơ trong danh sách toàn trường. Hồ sơ kỳ thi đã tạo không thay đổi.':'Đã thêm học sinh vào danh sách toàn trường.','success');
+    await loadSchoolStudents();
+  }catch(error){
+    message($('school-student-message'),`Không lưu được học sinh: ${error.message||String(error)}`,'error');
+  }finally{
+    button.disabled=false;
+  }
+}
+async function deleteSchoolStudent(id){
+  const student=schoolStudents.find(item=>item.id===id);
+  if(!student)return;
+  if(!confirm(`Xóa ${student.student_name} (${student.student_code}) khỏi danh sách học sinh toàn trường? Hồ sơ đã được tạo trong các kỳ thi sẽ được giữ nguyên.`))return;
+  try{
+    const{data,error}=await state.client.from('school_students').delete().eq('id',id).select('id');
+    if(error)throw error;
+    if(!data?.length)throw new Error('Không tìm thấy hồ sơ để xóa. Hãy tải lại danh sách.');
+    selectedSchoolStudentCodes.delete(student.student_code);
+    message($('school-student-message'),'Đã xóa học sinh khỏi danh sách toàn trường. Hồ sơ các kỳ thi cũ vẫn được giữ nguyên.','success');
+    await loadSchoolStudents();
+  }catch(error){
+    message($('school-student-message'),`Không xóa được học sinh: ${error.message||String(error)}`,'error');
+  }
 }
 async function importSchoolStudents(event){
   event.preventDefault();
@@ -388,6 +465,10 @@ async function enrollSchoolStudents(){
   }
 }
 function wireSchoolStudents(){
+  $('school-student-add').onclick=()=>openSchoolStudentForm();
+  $('school-student-form').addEventListener('submit',saveSchoolStudent);
+  $('school-student-cancel').onclick=closeSchoolStudentForm;
+  $('school-student-dialog-close').onclick=closeSchoolStudentForm;
   $('school-student-template').onclick=downloadExcelTemplate;
   $('school-student-import-form').addEventListener('submit',importSchoolStudents);
   $('school-student-grade').onchange=()=>{schoolStudentFilters();renderSchoolStudents()};
@@ -408,6 +489,15 @@ function wireSchoolStudents(){
     if(checkbox.checked)selectedSchoolStudentCodes.add(checkbox.dataset.schoolStudentCheck);
     else selectedSchoolStudentCodes.delete(checkbox.dataset.schoolStudentCheck);
     updateSchoolStudentSelection();
+  });
+  $('school-student-body').addEventListener('click',event=>{
+    const edit=event.target.closest('[data-school-student-edit]');
+    if(edit){
+      openSchoolStudentForm(schoolStudents.find(student=>student.id===edit.dataset.schoolStudentEdit));
+      return;
+    }
+    const remove=event.target.closest('[data-school-student-delete]');
+    if(remove)deleteSchoolStudent(remove.dataset.schoolStudentDelete);
   });
   $('school-student-check-all').onchange=event=>{
     filteredSchoolStudents().forEach(student=>{
@@ -660,7 +750,7 @@ async function deleteSelectedCandidates(){
   if(!ids.length)return;
   const examId=$('rooming-exam-select').value;
   if(!examId){message($('candidate-form-message'),'Hãy chọn kỳ thi trước khi xóa.','error');return}
-  if(!confirm(`Bạn sắp xóa ${ids.length} thí sinh khỏi kỳ thi hiện tại. Các đăng ký môn liên quan có thể bị xóa theo ràng buộc cơ sở dữ liệu. Thao tác không thể tự hoàn tác. Bạn có muốn tiếp tục?`))return;
+  if(!confirm(`Bạn sắp xóa ${ids.length} thí sinh khỏi kỳ thi hiện tại. Phân công trong các phương án xếp phòng lựa chọn chưa khóa sẽ bị gỡ cùng hồ sơ; dữ liệu phương án đã khóa hoặc dữ liệu nghiệp vụ khác sẽ được giữ lại và có thể ngăn xóa. Thao tác không thể tự hoàn tác. Bạn có muốn tiếp tục?`))return;
 
   const button=$('candidate-bulk-delete');
   button.disabled=true;
@@ -680,36 +770,28 @@ async function deleteSelectedCandidates(){
         count:deleted.size+failed.length,total:ids.length,
         detail:`Đã gửi yêu cầu cho ${offset} bản ghi trước đợt này; đang xử lý ${batch.length} bản ghi.`
       });
-      // Batch delete reduces HTTP requests substantially versus one request per student.
-      const {data,error}=await state.client.from('exam_candidates')
-        .delete().eq('exam_id',examId).in('id',batch).select('id');
+      // The RPC first removes references from editable elective-room plans and
+      // then deletes exam records atomically, preserving locked plans and history.
+      const {data,error}=await state.client.rpc('exam_delete_candidates_from_exam',{
+        p_exam_id:examId,p_candidate_ids:batch
+      });
       if(!error){
-        for(const row of (data||[]))deleted.add(row.id);
-        // If RLS filtered rows without an explicit error, they won't appear in returned data.
-        const returned=new Set((data||[]).map(row=>row.id));
-        for(const id of batch){
-          if(returned.has(id))continue;
-          // Check whether the row still exists; this differentiates a no-op from a deleted row.
-          const check=await state.client.from('exam_candidates').select('id').eq('id',id).eq('exam_id',examId).maybeSingle();
-          if(check.error)failed.push({id,error:check.error.message});
-          else if(check.data)failed.push({id,error:'Bản ghi vẫn tồn tại sau lệnh xóa (có thể do RLS hoặc ràng buộc dữ liệu).'});
-          else deleted.add(id);
+        if(Number(data?.deleted_count)!==batch.length){
+          for(const id of batch)failed.push({id,error:`RPC báo đã xóa ${Number(data?.deleted_count)||0}/${batch.length} hồ sơ; cần kiểm tra lại dữ liệu.`});
+        }else{
+          for(const id of batch)deleted.add(id);
         }
       }else{
-        // A batch can fail because one row is referenced by a rooming plan. Retry individually
+        // A batch can fail because one row is retained by finalized/history data. Retry individually
         // so independent records can still be deleted and the failed IDs can be reported.
         for(let i=0;i<batch.length;i++){
           const id=batch[i];
-          const {data:one,error:oneError}=await state.client.from('exam_candidates')
-            .delete().eq('id',id).eq('exam_id',examId).select('id');
+          const {data:one,error:oneError}=await state.client.rpc('exam_delete_candidates_from_exam',{
+            p_exam_id:examId,p_candidate_ids:[id]
+          });
           if(oneError)failed.push({id,error:oneError.message});
-          else if(one&&one.length)deleted.add(id);
-          else{
-            const check=await state.client.from('exam_candidates').select('id').eq('id',id).eq('exam_id',examId).maybeSingle();
-            if(check.error)failed.push({id,error:check.error.message});
-            else if(check.data)failed.push({id,error:'Bản ghi vẫn tồn tại sau lệnh xóa.'});
-            else deleted.add(id);
-          }
+          else if(Number(one?.deleted_count)===1)deleted.add(id);
+          else failed.push({id,error:'RPC không xác nhận đã xóa hồ sơ.'});
           if((i+1)%10===0||i===batch.length-1){
             setCandidateDeleteProgress({
               title:`Đang xử lý đợt ${batchNo}/${batches}`,
@@ -741,7 +823,7 @@ async function deleteSelectedCandidates(){
   }else{
     const examples=failed.slice(0,5).map(x=>`${x.id?`ID ${x.id}: `:''}${x.error}`).join(' | ');
     setCandidateDeleteProgress({title:'Đã kết thúc nhưng còn bản ghi chưa xóa',count:count,total:ids.length,detail:`Xóa thành công ${deleted.size}; thất bại ${failed.length}. Chi tiết đầu tiên: ${examples}`,kind:'failed'});
-    message($('candidate-form-message'),`Đã xóa ${deleted.size}/${ids.length} thí sinh. Còn ${failed.length} bản ghi chưa xóa. Có thể bị ràng buộc bởi phương án xếp phòng hoặc chính sách RLS. Xem chi tiết tại thanh tiến độ.`, 'error');
+    message($('candidate-form-message'),`Đã xóa ${deleted.size}/${ids.length} thí sinh. Còn ${failed.length} bản ghi chưa xóa; có thể đang được dữ liệu đã khóa hoặc dữ liệu điểm/phách tham chiếu. Xem chi tiết tại thanh tiến độ.`, 'error');
   }
 }
 async function loadPreviousScores(previousExamId){
@@ -1493,9 +1575,16 @@ function normalizeSubjectLabel(value){
 }
 function canonicalSubjectCode(value){
   const key=normalizeSubjectLabel(value);
+  if(key==='ktpl')return 'GDKTPL';
   const aliases={
     toan:'TOAN',toanhoc:'TOAN',van:'VAN',nguvan:'VAN',nguvanhoc:'VAN',
-    anh:'ANH',tienganh:'ANH',english:'ANH',
+    anh:'N1',tienganh:'N1',english:'N1',
+    tiengnga:'N2',russian:'N2',nga:'N2',
+    tiengphap:'N3',french:'N3',phap:'N3',
+    tiengtrungquoc:'N4',tiengtrung:'N4',chinese:'N4',trungquoc:'N4',
+    tiengduc:'N5',german:'N5',duc:'N5',
+    tiengnhat:'N6',japanese:'N6',nhat:'N6',
+    tienghan:'N7',korean:'N7',han:'N7',
     ly:'LY',vatli:'LY',vatly:'LY',vatlyhoc:'LY',physics:'LY',
     hoa:'HOA',hoahoc:'HOA',chemistry:'HOA',
     su:'SU',lichsu:'SU',history:'SU',
@@ -1510,8 +1599,43 @@ function canonicalSubjectCode(value){
   }
   return aliases[key]||'';
 }
-function importSubjectCode(value){const raw=String(value??'').trim().toUpperCase().replace(/[.\s_-]+/g,'');const code=raw==='KTPL'?'GDKTPL':raw;return ['ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
-function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('')}
+function importSubjectCode(value){const raw=String(value??'').trim().toUpperCase().replace(/[.\s_-]+/g,'');const code=raw==='KTPL'?'GDKTPL':raw==='ANH'?'N1':raw;return ['N1','N2','N3','N4','N5','N6','N7','SU','DIA','GDKTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
+function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('');initSubjectDeleteSelector()}
+function initSubjectDeleteSelector(){
+  $('subject-delete-code').innerHTML='<option value="">Tất cả môn thi</option>'+[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS]
+    .map(subject=>`<option value="${esc(subject.code)}">${esc(subject.name)} (${esc(subject.code)})</option>`).join('');
+  $('subject-delete-registrations').disabled=!$('subject-exam-select').value;
+  $('subject-delete-registrations').onclick=deleteSubjectRegistrations;
+  $('subject-exam-select').addEventListener('change',()=>{
+    $('subject-delete-registrations').disabled=!$('subject-exam-select').value;
+    $('subject-delete-message').classList.add('hidden');
+  });
+}
+async function deleteSubjectRegistrations(){
+  const examId=$('subject-exam-select').value;
+  if(!examId){message($('subject-delete-message'),'Hãy chọn kỳ thi trước.','error');return}
+  const subjectCode=$('subject-delete-code').value||null;
+  const subjectText=subjectCode?`${subjectName(subjectCode)} (${subjectCode})`:'tất cả các môn';
+  const exam=state.exams.find(item=>item.id===examId);
+  if(!confirm(`Xóa đăng ký ${subjectText} của tất cả học sinh trong kỳ thi "${exam?.name||examId}"? Thao tác chỉ xóa lượt đăng ký/phân công môn; không xóa hồ sơ học sinh, cấu hình môn, điểm hoặc lịch sử chấm. Không thể tự hoàn tác.`))return;
+  const button=$('subject-delete-registrations');
+  button.disabled=true;
+  try{
+    const{data,error}=await state.client.rpc('exam_delete_subject_registrations',{
+      p_exam_id:examId,p_subject_code:subjectCode
+    });
+    if(error)throw error;
+    const count=Number(data?.deleted_count);
+    if(!Number.isInteger(count)||count<0)throw new Error('CSDL không trả về số lượt đăng ký đã xóa hợp lệ.');
+    message($('subject-delete-message'),`Đã xóa ${count} lượt đăng ký ${subjectText} của kỳ thi. Hồ sơ học sinh, cấu hình môn và dữ liệu điểm/phách được giữ nguyên.`, 'success');
+    await loadSubjectRegistrations();
+    await loadRosterData();
+  }catch(error){
+    message($('subject-delete-message'),`Không xóa được đăng ký môn: ${error.message||String(error)}`,'error');
+  }finally{
+    button.disabled=!$('subject-exam-select').value;
+  }
+}
 function normalizeSubjectChoiceRows(rows){
   const cleanKey=v=>String(v??'').trim().toLocaleLowerCase('vi-VN').normalize('NFD')
     .replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]/g,'');
@@ -1540,8 +1664,8 @@ function normalizeSubjectChoiceRows(rows){
       if(!studentCode) throw new Error(`Dòng ${i+2}: thiếu Mã DD Bộ GD&ĐT.`);
       if(!s1||!s2) throw new Error(`Dòng ${i+2}: cần nhập đủ Môn 1 và Môn 2.`);
       const c1=importSubjectCode(s1), c2=importSubjectCode(s2);
-      if(!c1) throw new Error(`Dòng ${i+2}: Môn 1 phải là mã môn hợp lệ (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không dùng tên môn. Giá trị hiện tại: "${s1}".`);
-      if(!c2) throw new Error(`Dòng ${i+2}: Môn 2 phải là mã môn hợp lệ (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không dùng tên môn. Giá trị hiện tại: "${s2}".`);
+      if(!c1) throw new Error(`Dòng ${i+2}: Môn 1 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s1}".`);
+      if(!c2) throw new Error(`Dòng ${i+2}: Môn 2 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s2}".`);
       if(c1===c2){invalidRows.push({line:i+2,code:studentCode,name:studentName,reason:`trùng môn ${c1}`});continue;}
       result.push({student_code:studentCode,student_name:studentName,subject_code:c1,subject_order:1,subject_type:'elective'});
       result.push({student_code:studentCode,student_name:studentName,subject_code:c2,subject_order:2,subject_type:'elective'});
@@ -1551,7 +1675,7 @@ function normalizeSubjectChoiceRows(rows){
     const subjectCode=get(row,aliases.subject_code)||String(row.subject_code??'').trim();
     if(subjectCode){
       const normalized=importSubjectCode(subjectCode);
-      if(!normalized) throw new Error(`Dòng ${i+2}: cột subject_code phải chứa mã môn hợp lệ (ANH, SU, DIA, GDKTPL, LY, HOA, SINH, TIN), không dùng tên môn.`);
+      if(!normalized) throw new Error(`Dòng ${i+2}: cột subject_code phải chứa mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn.`);
       result.push({
         student_code:studentCode,
         student_name:studentName,
@@ -1687,7 +1811,7 @@ async function applySubject(){
       targets=targets.map(st=>({candidate_id:st.id,subject_code:selectedCode,subject_order:selectedOrder,subject_type:type}));
     }
     if(!targets.length)throw new Error('Không tìm thấy học sinh phù hợp với phạm vi áp dụng.');
-    const allowed=new Set(['TOAN','VAN','ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN']);
+    const allowed=new Set(['TOAN','VAN','N1','N2','N3','N4','N5','N6','N7','ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN']);
     for(const t of targets){
       t.subject_code=canonicalSubjectCode(t.subject_code)||String(t.subject_code||'').trim().toUpperCase();
       if(!allowed.has(t.subject_code))throw new Error(`Mã môn "${t.subject_code}" không nằm trong danh mục CSDL cho phép.`);
@@ -1984,7 +2108,7 @@ async function importRosterElectivesFromExcel(){
 }
 function downloadRosterExcelTemplate(){
   if(!window.XLSX){message($('roster-message'),'Không tải được thư viện Excel.','error');return}
-  const rows=[['Mã DD Bộ GD&ĐT','Họ tên','Môn 1','Môn 2'],['3153467643','Phạm Hoàng An','HOA','SINH'],['3156126154','Tạ Ngọc Song An','ANH','LY']];
+  const rows=[['Mã DD Bộ GD&ĐT','Họ tên','Môn 1','Môn 2'],['3153467643','Phạm Hoàng An','HOA','SINH'],['3156126154','Tạ Ngọc Song An','N1','LY']];
   const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=[{wch:22},{wch:28},{wch:14},{wch:14}];window.XLSX.utils.book_append_sheet(wb,ws,'Mon lua chon');
   window.XLSX.writeFile(wb,'Mau_nap_mon_lua_chon.xlsx');
