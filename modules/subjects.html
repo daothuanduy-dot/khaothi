@@ -18,10 +18,18 @@
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
         <div class="notice notice-info">Lưu ý: nhập danh sách môn lựa chọn từ Excel tại duy nhất mục “Quản lý môn lựa chọn theo lớp” bên dưới. Khu vực này chỉ dùng để cấu hình môn thi hoặc quản lý đăng ký từng môn, tránh nhập trùng qua nhiều luồng.</div>
+        <section class="panel" aria-labelledby="subject-delete-heading">
+          <div class="section-heading"><div><h3 id="subject-delete-heading">Xóa đăng ký / phân công môn thi</h3><p>Chỉ xóa các lượt đăng ký môn của kỳ thi; không xóa hồ sơ học sinh, cấu hình môn, điểm hoặc lịch sử chấm.</p></div></div>
+          <div class="form-grid">
+            <label>Phạm vi môn<select id="subject-delete-code"><option value="">Tất cả môn thi</option></select></label>
+            <div class="form-actions"><button id="subject-delete-registrations" class="btn danger-btn" type="button" disabled>Xóa đăng ký</button></div>
+          </div>
+          <div id="subject-delete-message" class="notice hidden" role="status" aria-live="polite"></div>
+        </section>
         <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
           <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
           <div class="roster-import-box">
-            <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; Môn 1/Môn 2 phải là mã môn như ANH, LY, HOA, SINH.</span></label>
+            <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; môn ngoại ngữ dùng mã N1–N7, các môn khác dùng mã trong danh mục.</span></label>
             <div class="roster-import-controls">
               <input id="roster-excel-file" type="file" accept=".xlsx,.csv">
               <button id="roster-import-btn" type="button" class="btn btn-primary">Nạp Excel vào danh sách</button>
