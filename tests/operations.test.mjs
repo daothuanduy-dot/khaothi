@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../js/operations.js', import.meta.url), 'utf8');
-const { parseQuickScore, validateEssayScore, excelColumnIndex, parseImportedScore } = await import(
+const { parseQuickScore, validateEssayScore, excelColumnIndex, parseImportedScore, randomScriptHead, candidateClassOptions } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 );
 
@@ -34,6 +34,38 @@ test('Excel column and score parsing supports flexible import mappings', () => {
   assert.throws(() => parseImportedScore('n/a', 5), /dòng 5/);
 });
 
+test('random script heads use one uppercase letter and remain unique within a subject', () => {
+  const used = new Set();
+  for (let index = 0; index < 26; index++) {
+    const head = randomScriptHead(used);
+    assert.match(head, /^[A-Z]$/);
+    assert.equal(used.has(head), false);
+    used.add(head);
+  }
+  assert.throws(() => randomScriptHead(used), /tối đa 26 phòng/);
+});
+
+test('candidate class dropdown options are unique, grade-specific, and naturally sorted', () => {
+  const candidates = [
+    { grade_code: '12', class_code: '12A10' },
+    { grade_code: '12', class_code: '12A2' },
+    { grade_code: '12', class_code: '12A2' },
+    { grade_code: '11', class_code: '11A1' },
+    { grade_code: '12', class_code: '' }
+  ];
+  assert.deepEqual(candidateClassOptions(candidates, '12'), ['12A2', '12A10']);
+  assert.deepEqual(candidateClassOptions(candidates, '11'), ['11A1']);
+});
+
+test('candidate edit form chooses a class from the dropdown', async () => {
+  const candidates = await readFile(new URL('../modules/candidates.html', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(candidates, /<label>Lớp<select id="candidate-edit-class" required disabled>/);
+  assert.doesNotMatch(candidates, /id="candidate-edit-class"[^>]*type="text"/);
+  assert.match(app, /populateCandidateEditClasses\(\);[\s\S]*?candidate-modal'\)\.showModal\(\)/);
+  assert.match(app, /-- Khối này chưa có lớp --/);
+});
+
 test('every operations DOM lookup has a matching static control', async () => {
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const moduleNames = ['forms', 'absences', 'scripts', 'scores'];
@@ -49,10 +81,24 @@ test('every operations DOM lookup has a matching static control', async () => {
 
 test('Supabase connection errors are distinct from application initialization errors', async () => {
   const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const moduleLoader = await readFile(new URL('../js/module-loader.js', import.meta.url), 'utf8');
+  const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(app, /async function openConnectedApp\(\)/);
   assert.match(app, /function showConnectionFailure\(error\)[\s\S]*?if\(state\.client\)[\s\S]*?Đã kết nối Supabase nhưng không khởi tạo được ứng dụng/);
   assert.match(app, /await connect\(url,key\);saveConfig\(url,key\);await openConnectedApp\(\)/);
   assert.match(app, /await connect\(config\.url,config\.key\);await openConnectedApp\(\)/);
+  assert.match(app, /operations\.js\?v=0\.1\.72/);
+  assert.match(moduleLoader, /MODULE_VERSION = '0\.1\.72'/);
+  assert.doesNotMatch(app, /import\s*\{\s*candidateClassOptions/);
+  assert.match(app, /\$\('setup-form'\)\.dataset\.connectionHandler='ready'/);
+  assert.match(app, /Đang kiểm tra kết nối tới Supabase/);
+  assert.match(app, /Supabase chưa phản hồi sau 30 giây/);
+  assert.match(index, /Ứng dụng chưa khởi tạo xong nên chưa thể kết nối/);
+  assert.match(index, /js\/app\.js\?v=0\.1\.72/);
+  assert.match(app, /candidate-edit-grade'\)\.addEventListener\('change'/);
+  assert.match(app, /populateCandidateEditClasses\(c\.class_code\|\|''\,true\)/);
+  assert.match(app, /function ensureCandidateClassDropdown\(\)[\s\S]*?createElement\('select'\)[\s\S]*?control\.replaceWith\(select\)/);
+  assert.match(app, /await loadTabModules\(\);\s*ensureCandidateClassDropdown\(\)/);
 });
 
 test('the script subject selector is populated before exams and configs finish loading', async () => {
@@ -77,6 +123,19 @@ test('the script subject selector is populated before exams and configs finish l
   assert.doesNotMatch(scripts, /script-is-essay|Môn có bài tự luận, cần đánh phách/);
   assert.match(source, /data-room-prefix/);
   assert.match(scripts, /đầu phách/i);
+  assert.match(source, /randomScriptHead\(usedHeads\)/);
+  assert.match(source, /async function exportScriptHeads\(\)/);
+  assert.match(source, /eq\('is_essay',true\)/);
+  assert.match(scripts, /id="script-export-heads"/);
+  const headMigration = await readFile(new URL('../sql/v0.1.65_random_unique_script_heads.sql', import.meta.url), 'utf8');
+  assert.match(headMigration, /\^\[A-Za-z0-9\]\{1,6\}\$/);
+  const singleLetterMigration = await readFile(new URL('../sql/v0.1.66_single_letter_script_heads.sql', import.meta.url), 'utf8');
+  assert.match(singleLetterMigration, /\^\[A-Z\]\$/);
+  assert.match(singleLetterMigration, /drop trigger if exists exam_validate_script_subject_heads/);
+  assert.match(source, /maxlength="1"/);
+  assert.match(source, /!\/\^\[A-Z\]\$\/\.test/);
+  assert.match(source, /available='ABCDEFGHIJKLMNOPQRSTUVWXYZ'/);
+  assert.match(source, /randomScriptHead\(usedHeads\)/);
   assert.match(source, /data-script-assign/);
   assert.match(source, /Không phân công riêng/);
 });
