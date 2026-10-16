@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.75';
-import {loadTabModules} from './module-loader.js?v=0.1.75';
-import {wireOperations} from './operations.js?v=0.1.75';
-const APP_VERSION='v0.1.75';
-const APP_BUILD='2026-10-16-subject-cleanup-foreign-languages';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.76';
+import {loadTabModules} from './module-loader.js?v=0.1.76';
+import {wireOperations} from './operations.js?v=0.1.76';
+const APP_VERSION='v0.1.76';
+const APP_BUILD='2026-10-16-exam-delete-diagnostics';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -91,6 +91,39 @@ function updateSelectedExamTitle(){
 function notifyExamSelected(exam,created=false){
   if(!exam)return;
   window.alert(`${created?'Đã tạo và chọn kỳ thi':'Đã chọn kỳ thi'}: ${exam.name} (${exam.school_year}).`);
+}
+const examDeleteTableActions={
+  exam_elective_room_plans:'Xử lý phương án xếp phòng môn lựa chọn đang lưu. Kiểm tra tab Xếp phòng thi; nếu không có nút xóa phương án, cần chức năng dọn phương án an toàn trước khi xóa kỳ thi.',
+  exam_rooming_plan_snapshots:'Xử lý bản chụp phương án xếp phòng. Hãy lưu trữ hoặc dọn theo quy trình quản lý xếp phòng.',
+  exam_rooming_finalizations:'Đây là phân phòng chính thức được bảo vệ. Cần xử lý/đóng hồ sơ phân phòng theo quy trình lưu trữ trước khi xóa kỳ thi.',
+  exam_room_assignments:'Đây là danh sách phân phòng chính thức. Cần lưu trữ hoặc gỡ phân phòng theo quy trình quản lý xếp phòng.',
+  exam_candidates:'Còn hồ sơ thí sinh trong kỳ thi. Xóa hồ sơ thí sinh trước; nếu CSDL chặn, xử lý các bản ghi điểm, phách, báo vắng hoặc phân phòng đang tham chiếu.',
+  exam_candidate_subjects:'Còn lượt đăng ký môn. Dùng mục Xóa đăng ký / phân công môn thi trong tab Môn thi.',
+  exam_absences:'Còn dữ liệu báo vắng. Xóa hoặc lưu trữ dữ liệu báo vắng trước khi thử lại.',
+  exam_script_runs:'Còn đợt đánh phách. Xử lý dữ liệu phách và điểm liên quan theo quy trình quản lý phách trước.',
+  exam_subject_assessment_configs:'Còn cấu hình chấm môn. Xóa hoặc lưu trữ cấu hình chấm trước khi xóa kỳ thi.',
+  exam_grader_assignments:'Còn phân công giám khảo. Gỡ phân công giám khảo trước khi thử lại.',
+  exam_grader_groups:'Còn nhóm giám khảo. Xóa nhóm sau khi xử lý thành viên và các phân công túi bài liên quan.',
+  exam_mcq_scores:'Còn điểm trắc nghiệm. Lưu trữ hoặc xóa bảng điểm theo quy trình quản lý điểm trước.',
+  exam_script_records:'Còn bản ghi bài thi đã đánh phách. Xử lý các bản ghi phách/điểm theo quy trình quản lý phách.',
+  exam_script_bag_assignments:'Còn phân công túi bài. Gỡ phân công túi bài và xử lý dữ liệu phách liên quan trước.'
+};
+async function examDeleteBlockerMessage(examId,deleteError){
+  const original=deleteError?.message||String(deleteError);
+  try{
+    const{data,error}=await state.client.rpc('exam_get_delete_blockers',{p_exam_id:examId});
+    if(error)throw error;
+    const blockers=Array.isArray(data?.blockers)?data.blockers:[];
+    if(!blockers.length)return `Không xóa được kỳ thi: ${original}\nCSDL không trả về danh sách khóa ngoại đang chặn. Hãy chạy migration v0.1.76 để bật chẩn đoán chi tiết, sau đó tải lại và thử xóa.`;
+    const steps=blockers.map((blocker,index)=>{
+      const table=String(blocker.table_name||'bảng chưa xác định');
+      const action=examDeleteTableActions[table]||`Xử lý các bản ghi ở bảng ${table} theo nghiệp vụ tương ứng; không xóa trực tiếp nếu cần giữ lịch sử.`;
+      return `${index+1}. ${action} (còn ${Number(blocker.row_count)||0} bản ghi; bảng ${table}; ràng buộc ${blocker.constraint_name||'không rõ'}).`;
+    });
+    return `Chưa xóa được kỳ thi "${state.exams.find(exam=>exam.id===examId)?.name||examId}". Lý do CSDL: ${original}\nViệc cần làm trước khi thử lại:\n${steps.join('\n')}\nSau khi xử lý các mục trên, nhấn Xóa kỳ thi lần nữa. Không xóa dữ liệu trực tiếp nếu cần bảo toàn hồ sơ chính thức.`;
+  }catch(diagnosticError){
+    return `Không xóa được kỳ thi: ${original}\nKhông lấy được danh sách việc cần xử lý (${diagnosticError?.message||String(diagnosticError)}). Hãy chạy migration v0.1.76 rồi thử lại để xem các bảng và số bản ghi đang chặn.`;
+  }
 }
 async function enterApp(user){
   state.session={user};
@@ -2192,13 +2225,15 @@ function wire(){ $('google-login').onclick=async()=>{const button=$('google-logi
   if(deleteBtn){
     const exam=state.exams.find(x=>x.id===deleteBtn.dataset.deleteExam);
     if(!exam)return;
-    const ok=confirm(`Bạn sắp xóa kỳ thi "${exam.name}" (${exam.school_year}). Thao tác có thể bị CSDL từ chối nếu kỳ thi đang có dữ liệu liên quan. Bạn có chắc chắn muốn xóa?`);
+    const ok=confirm(`Bạn sắp xóa kỳ thi "${exam.name}" (${exam.school_year}) cùng các dữ liệu không bị ràng buộc bảo vệ. Nếu còn hồ sơ chính thức, điểm/phách hoặc phương án xếp phòng, CSDL sẽ chặn và hiển thị danh sách việc cần làm. Bạn có chắc chắn muốn tiếp tục?`);
     if(!ok)return;
     const {error}=await state.client.from('exam_sessions').delete().eq('id',exam.id);
     if(error){
-      message($('global-message'),`Không xóa được kỳ thi: ${error.message}. Có thể kỳ thi còn hồ sơ, đăng ký môn hoặc dữ liệu xếp phòng liên quan; hãy kiểm tra khóa ngoại trước khi xóa.`, 'error');
+      message($('global-message'),await examDeleteBlockerMessage(exam.id,error),'error');
+      $('global-message').style.whiteSpace='pre-line';
       return;
     }
+    $('global-message').style.whiteSpace='';
     if(state.selectedExam===exam.id)state.selectedExam=null;
     message($('global-message'),'Đã xóa kỳ thi.','success');
     await loadExams();
