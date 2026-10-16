@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.78';
-import {loadTabModules} from './module-loader.js?v=0.1.78';
-import {wireOperations} from './operations.js?v=0.1.78';
-const APP_VERSION='v0.1.78';
-const APP_BUILD='2026-10-16-school-student-filter-fix';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.79';
+import {loadTabModules} from './module-loader.js?v=0.1.79';
+import {wireOperations} from './operations.js?v=0.1.79';
+const APP_VERSION='v0.1.79';
+const APP_BUILD='2026-10-16-school-student-filters-selection-fix2';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -276,41 +276,47 @@ async function parseUploadFile(file){
   return rows;
 }
 
-function normalizeSchoolStudentValue(value){
-  return String(value??'').trim().replace(/^khối\s*/i,'').toLocaleLowerCase('vi');
+function schoolStudentNorm(value){
+  return String(value??'').normalize('NFKC').trim().replace(/\s+/g,'');
+}
+function schoolStudentCode(student){
+  return String(student?.student_code??'').trim();
 }
 function schoolStudentSort(a,b){
-  return String(a.grade_code||'').localeCompare(String(b.grade_code||''),'vi',{numeric:true})
-    ||String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})
+  return schoolStudentNorm(a.grade_code).localeCompare(schoolStudentNorm(b.grade_code),'vi',{numeric:true})
+    ||schoolStudentNorm(a.class_code).localeCompare(schoolStudentNorm(b.class_code),'vi',{numeric:true})
     ||String(a.student_name||'').localeCompare(String(b.student_name||''),'vi');
 }
-function schoolStudentFilters(){
+function schoolStudentFilters({resetClass=false}={}){
   const grade=$('school-student-grade'),classSelect=$('school-student-class');
-  const selectedGrade=grade.value,selectedClass=classSelect.value;
-  const grades=[...new Set(schoolStudents.map(student=>String(student.grade_code||'').trim().replace(/^khối\s*/i,'')).filter(Boolean))]
+  const selectedGrade=schoolStudentNorm(grade.value);
+  const selectedClass=resetClass?'':schoolStudentNorm(classSelect.value);
+  const grades=[...new Set(schoolStudents.map(student=>schoolStudentNorm(student.grade_code)).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   grade.innerHTML='<option value="">Tất cả các khối</option>'+grades.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
   grade.value=grades.includes(selectedGrade)?selectedGrade:'';
-  const classes=[...new Set(schoolStudents.filter(student=>!grade.value||normalizeSchoolStudentValue(student.grade_code)===normalizeSchoolStudentValue(grade.value))
-    .map(student=>String(student.class_code||'').trim()).filter(Boolean))]
+  const classes=[...new Set(schoolStudents
+    .filter(student=>!grade.value||schoolStudentNorm(student.grade_code)===grade.value)
+    .map(student=>schoolStudentNorm(student.class_code)).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
   classSelect.value=classes.includes(selectedClass)?selectedClass:'';
 }
 function filteredSchoolStudents(){
-  const grade=$('school-student-grade').value,classCode=$('school-student-class').value;
+  const grade=schoolStudentNorm($('school-student-grade').value);
+  const classCode=schoolStudentNorm($('school-student-class').value);
   const query=$('school-student-search').value.trim().toLocaleLowerCase('vi');
   return schoolStudents.filter(student=>
-    (!grade||normalizeSchoolStudentValue(student.grade_code)===normalizeSchoolStudentValue(grade))
-    &&(!classCode||normalizeSchoolStudentValue(student.class_code)===normalizeSchoolStudentValue(classCode))
-    &&(!query||[student.student_code,student.student_name].some(value=>String(value||'').toLocaleLowerCase('vi').includes(query)))
+    (!grade||schoolStudentNorm(student.grade_code)===grade)
+    &&(!classCode||schoolStudentNorm(student.class_code)===classCode)
+    &&(!query||[student.student_code,student.student_name].some(value=>String(value??'').trim().toLocaleLowerCase('vi').includes(query)))
   );
 }
 function updateSchoolStudentSelection(){
   const visible=filteredSchoolStudents();
   $('school-student-enroll').disabled=!visible.length||!selectedSchoolStudentCodes.size||!$('school-student-exam').value;
-  $('school-student-check-all').checked=visible.length>0&&visible.every(student=>selectedSchoolStudentCodes.has(student.student_code));
-  $('school-student-check-all').indeterminate=visible.some(student=>selectedSchoolStudentCodes.has(student.student_code))&&!$('school-student-check-all').checked;
+  $('school-student-check-all').checked=visible.length>0&&visible.every(student=>selectedSchoolStudentCodes.has(schoolStudentCode(student)));
+  $('school-student-check-all').indeterminate=visible.some(student=>selectedSchoolStudentCodes.has(schoolStudentCode(student)))&&!$('school-student-check-all').checked;
   $('school-student-enroll').textContent=`Thêm đã chọn (${selectedSchoolStudentCodes.size}) vào kỳ thi`;
 }
 function renderSchoolStudents(){
@@ -320,12 +326,14 @@ function renderSchoolStudents(){
     updateSchoolStudentSelection();
     return;
   }
-  body.innerHTML=rows.map(student=>`<tr>
-    <td><input type="checkbox" data-school-student-check="${esc(student.student_code)}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(student.student_code)?'checked':''}></td>
-    <td>${esc(student.student_code)}</td><td>${esc(student.student_name)}</td><td>${esc(student.date_of_birth||'—')}</td>
+  body.innerHTML=rows.map(student=>{
+    const code=schoolStudentCode(student);
+    return `<tr>
+    <td><input type="checkbox" data-school-student-check="${esc(code)}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(code)?'checked':''}></td>
+    <td>${esc(code)}</td><td>${esc(student.student_name)}</td><td>${esc(student.date_of_birth||'—')}</td>
     <td>${esc(student.gender||'—')}</td><td>${esc(student.ethnicity||'—')}</td><td>${esc(student.grade_code)}</td><td>${esc(student.class_code)}</td>
     <td><button class="small-btn" type="button" data-school-student-edit="${esc(student.id)}">Sửa</button> <button class="small-btn danger-btn" type="button" data-school-student-delete="${esc(student.id)}">Xóa</button></td>
-  </tr>`).join('');
+  </tr>`}).join('');
   updateSchoolStudentSelection();
 }
 async function loadSchoolStudents(){
@@ -341,7 +349,7 @@ async function loadSchoolStudents(){
     return;
   }
   schoolStudents.sort(schoolStudentSort);
-  const known=new Set(schoolStudents.map(student=>student.student_code));
+  const known=new Set(schoolStudents.map(schoolStudentCode));
   selectedSchoolStudentCodes.forEach(code=>{if(!known.has(code))selectedSchoolStudentCodes.delete(code)});
   schoolStudentFilters();
   renderSchoolStudents();
@@ -414,7 +422,7 @@ async function deleteSchoolStudent(id){
     const{data,error}=await state.client.from('school_students').delete().eq('id',id).select('id');
     if(error)throw error;
     if(!data?.length)throw new Error('Không tìm thấy hồ sơ để xóa. Hãy tải lại danh sách.');
-    selectedSchoolStudentCodes.delete(student.student_code);
+    selectedSchoolStudentCodes.delete(schoolStudentCode(student));
     message($('school-student-message'),'Đã xóa học sinh khỏi danh sách toàn trường. Hồ sơ các kỳ thi cũ vẫn được giữ nguyên.','success');
     await loadSchoolStudents();
   }catch(error){
@@ -507,13 +515,8 @@ function wireSchoolStudents(){
   $('school-student-dialog-close').onclick=closeSchoolStudentForm;
   $('school-student-template').onclick=downloadExcelTemplate;
   $('school-student-import-form').addEventListener('submit',importSchoolStudents);
-  $('school-student-grade').onchange=()=>{
-    const previousClass=$('school-student-class').value;
-    schoolStudentFilters();
-    if(previousClass!==$('school-student-class').value)selectedSchoolStudentCodes.clear();
-    renderSchoolStudents();
-  };
-  $('school-student-class').onchange=()=>{renderSchoolStudents()};
+  $('school-student-grade').onchange=()=>{schoolStudentFilters({resetClass:true});renderSchoolStudents()};
+  $('school-student-class').onchange=renderSchoolStudents;
   $('school-student-search').oninput=renderSchoolStudents;
   $('school-student-exam').onchange=()=>{
     const examId=$('school-student-exam').value||null;
@@ -527,7 +530,7 @@ function wireSchoolStudents(){
   $('school-student-body').addEventListener('change',event=>{
     const checkbox=event.target.closest('[data-school-student-check]');
     if(!checkbox)return;
-    if(checkbox.checked)selectedSchoolStudentCodes.add(checkbox.dataset.schoolStudentCheck);
+    if(checkbox.checked)selectedSchoolStudentCodes.add(String(checkbox.dataset.schoolStudentCheck||'').trim());
     else selectedSchoolStudentCodes.delete(checkbox.dataset.schoolStudentCheck);
     updateSchoolStudentSelection();
   });
@@ -542,13 +545,13 @@ function wireSchoolStudents(){
   });
   $('school-student-check-all').onchange=event=>{
     filteredSchoolStudents().forEach(student=>{
-      if(event.target.checked)selectedSchoolStudentCodes.add(student.student_code);
-      else selectedSchoolStudentCodes.delete(student.student_code);
+      if(event.target.checked)selectedSchoolStudentCodes.add(schoolStudentCode(student));
+      else selectedSchoolStudentCodes.delete(schoolStudentCode(student));
     });
     renderSchoolStudents();
   };
   $('school-student-select-visible').onclick=()=>{
-    filteredSchoolStudents().forEach(student=>selectedSchoolStudentCodes.add(student.student_code));
+    filteredSchoolStudents().forEach(student=>selectedSchoolStudentCodes.add(schoolStudentCode(student)));
     renderSchoolStudents();
   };
   $('school-student-clear-selection').onclick=()=>{selectedSchoolStudentCodes.clear();renderSchoolStudents()};
