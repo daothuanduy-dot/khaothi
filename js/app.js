@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.77';
-import {loadTabModules} from './module-loader.js?v=0.1.77';
-import {wireOperations} from './operations.js?v=0.1.77';
-const APP_VERSION='v0.1.77';
-const APP_BUILD='2026-10-16-exam-delete-diagnostics';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.78';
+import {loadTabModules} from './module-loader.js?v=0.1.78';
+import {wireOperations} from './operations.js?v=0.1.78';
+const APP_VERSION='v0.1.78';
+const APP_BUILD='2026-10-16-school-student-filter-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -276,6 +276,9 @@ async function parseUploadFile(file){
   return rows;
 }
 
+function normalizeSchoolStudentValue(value){
+  return String(value??'').trim().replace(/^khối\s*/i,'').toLocaleLowerCase('vi');
+}
 function schoolStudentSort(a,b){
   return String(a.grade_code||'').localeCompare(String(b.grade_code||''),'vi',{numeric:true})
     ||String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})
@@ -284,11 +287,11 @@ function schoolStudentSort(a,b){
 function schoolStudentFilters(){
   const grade=$('school-student-grade'),classSelect=$('school-student-class');
   const selectedGrade=grade.value,selectedClass=classSelect.value;
-  const grades=[...new Set(schoolStudents.map(student=>String(student.grade_code||'').trim()).filter(Boolean))]
+  const grades=[...new Set(schoolStudents.map(student=>String(student.grade_code||'').trim().replace(/^khối\s*/i,'')).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   grade.innerHTML='<option value="">Tất cả các khối</option>'+grades.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
   grade.value=grades.includes(selectedGrade)?selectedGrade:'';
-  const classes=[...new Set(schoolStudents.filter(student=>!grade.value||String(student.grade_code)===grade.value)
+  const classes=[...new Set(schoolStudents.filter(student=>!grade.value||normalizeSchoolStudentValue(student.grade_code)===normalizeSchoolStudentValue(grade.value))
     .map(student=>String(student.class_code||'').trim()).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
   classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
@@ -298,8 +301,8 @@ function filteredSchoolStudents(){
   const grade=$('school-student-grade').value,classCode=$('school-student-class').value;
   const query=$('school-student-search').value.trim().toLocaleLowerCase('vi');
   return schoolStudents.filter(student=>
-    (!grade||String(student.grade_code)===grade)
-    &&(!classCode||String(student.class_code)===classCode)
+    (!grade||normalizeSchoolStudentValue(student.grade_code)===normalizeSchoolStudentValue(grade))
+    &&(!classCode||normalizeSchoolStudentValue(student.class_code)===normalizeSchoolStudentValue(classCode))
     &&(!query||[student.student_code,student.student_name].some(value=>String(value||'').toLocaleLowerCase('vi').includes(query)))
   );
 }
@@ -504,8 +507,13 @@ function wireSchoolStudents(){
   $('school-student-dialog-close').onclick=closeSchoolStudentForm;
   $('school-student-template').onclick=downloadExcelTemplate;
   $('school-student-import-form').addEventListener('submit',importSchoolStudents);
-  $('school-student-grade').onchange=()=>{schoolStudentFilters();renderSchoolStudents()};
-  $('school-student-class').onchange=renderSchoolStudents;
+  $('school-student-grade').onchange=()=>{
+    const previousClass=$('school-student-class').value;
+    schoolStudentFilters();
+    if(previousClass!==$('school-student-class').value)selectedSchoolStudentCodes.clear();
+    renderSchoolStudents();
+  };
+  $('school-student-class').onchange=()=>{renderSchoolStudents()};
   $('school-student-search').oninput=renderSchoolStudents;
   $('school-student-exam').onchange=()=>{
     const examId=$('school-student-exam').value||null;

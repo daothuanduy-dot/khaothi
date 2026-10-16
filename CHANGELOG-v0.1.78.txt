@@ -1,0 +1,27 @@
+KHAOTHI v0.1.78 — School student filter fix
+
+Mục tiêu:
+- Khắc phục việc lọc học sinh theo khối/lớp không nhất quán khi dữ liệu có khoảng trắng hoặc tiền tố "Khối".
+- Bump query version để trình duyệt tải lại JavaScript/module mới thay vì dùng cache v0.1.77.
+
+Tệp thay đổi:
+- index.html: cập nhật nhãn phiên bản/build và cache-busting URL app.js.
+- js/app.js: chuẩn hóa khối/lớp trước khi lọc; cập nhật xử lý đổi khối/lớp.
+- js/module-loader.js: cập nhật phiên bản cache của module HTML.
+
+Tệp không thay đổi:
+- modules/school-students.html
+- js/operations.js
+- js/rooming.js
+- mọi tệp khác không có trong gói overlay.
+
+SQL:
+- Không có thay đổi SQL/migration. Không thay đổi cơ sở dữ liệu.
+
+Kiểm thử:
+- node --check js/app.js: đạt.
+- node --check js/module-loader.js: đạt.
+- Bộ test đầy đủ: 22 test đạt, 7 test không đạt do ZIP nguồn không có các tệp SQL mà tests/modules.test.mjs và tests/operations.test.mjs yêu cầu (các migration v0.1.72, v0.1.55, v0.1.60, v0.1.63 và verify_rooming_persistence.sql). Không xem các lỗi thiếu tệp SQL này là lỗi phát sinh từ thay đổi v0.1.78.
+
+Cài đặt:
+Giải nén gói này vào thư mục gốc repository, giữ nguyên cấu trúc thư mục và ghi đè đúng 3 tệp được cung cấp. Sau đó commit/push lên nhánh main và tải lại trang bằng Ctrl+F5.
