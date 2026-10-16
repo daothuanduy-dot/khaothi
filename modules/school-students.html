@@ -1,0 +1,25 @@
+<section class="tab-panel hidden" id="tab-school-students">
+  <div class="section-heading"><div><h2>Danh sách học sinh toàn trường</h2><p>Đây là hồ sơ gốc, độc lập với danh sách thí sinh từng kỳ thi. Cập nhật Excel theo mã học sinh sẽ bổ sung hoặc cập nhật hồ sơ.</p></div><button id="school-student-template" class="btn btn-light" type="button">Tải Excel mẫu</button></div>
+  <div class="notice notice-info">Cột bắt buộc: student_code, student_name, grade_code, class_code. Có thể thêm date_of_birth, gender, ethnicity. Mã học sinh và ngày sinh phải nhập dạng Text để tránh mất số 0 đầu hoặc đảo ngày tháng; ngày sinh dùng dd/MM/yyyy hoặc yyyy-MM-dd. Sau khi chạy migration, hãy nhập danh sách toàn trường chính thức; hồ sơ các kỳ thi cũ được giữ nguyên và không tự chọn lớp từ dữ liệu lịch sử.</div>
+  <form id="school-student-import-form" class="inline-form">
+    <label>File học sinh toàn trường<input id="school-student-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label>
+    <button class="btn btn-primary" type="submit">Kiểm tra danh sách</button>
+  </form>
+  <div id="school-student-import-preview" class="table-wrap"></div>
+  <div class="section-heading subheading candidate-toolbar">
+    <div><h3>Chọn học sinh đưa vào kỳ thi</h3><p>Lọc theo khối, lớp hoặc tìm từng học sinh; tích chọn rồi thêm vào danh sách thí sinh của kỳ thi.</p></div>
+  </div>
+  <div class="form-grid">
+    <label>Kỳ thi<select id="school-student-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <label>Khối<select id="school-student-grade"><option value="">Tất cả các khối</option></select></label>
+    <label>Lớp<select id="school-student-class"><option value="">Tất cả các lớp</option></select></label>
+    <label>Tìm học sinh<input id="school-student-search" type="search" placeholder="Mã học sinh hoặc họ tên"></label>
+    <div class="form-actions">
+      <button id="school-student-select-visible" class="btn btn-light" type="button">Chọn tất cả đang lọc</button>
+      <button id="school-student-clear-selection" class="btn btn-light" type="button">Bỏ chọn</button>
+      <button id="school-student-enroll" class="btn btn-primary" type="button" disabled>Thêm đã chọn vào kỳ thi</button>
+    </div>
+  </div>
+  <div id="school-student-message" class="notice hidden" role="status" aria-live="polite"></div>
+  <div class="table-wrap"><table><thead><tr><th><input id="school-student-check-all" type="checkbox" aria-label="Chọn tất cả học sinh đang lọc"></th><th>Mã học sinh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th></tr></thead><tbody id="school-student-body"><tr><td colspan="8" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr></tbody></table></div>
+</section>
