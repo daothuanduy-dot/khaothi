@@ -1,5 +1,5 @@
 <section class="tab-panel hidden" id="tab-school-students">
-  <div class="section-heading"><div><h2>Danh sách học sinh toàn trường</h2><p>Đây là hồ sơ gốc, độc lập với danh sách thí sinh từng kỳ thi. Cập nhật Excel theo mã học sinh sẽ bổ sung hoặc cập nhật hồ sơ.</p></div><button id="school-student-template" class="btn btn-light" type="button">Tải Excel mẫu</button></div>
+  <div class="section-heading"><div><h2>Danh sách học sinh toàn trường</h2><p>Đây là hồ sơ gốc, độc lập với danh sách thí sinh từng kỳ thi. Cập nhật Excel theo mã học sinh sẽ bổ sung hoặc cập nhật hồ sơ.</p></div><div class="form-actions"><button id="school-student-add" class="btn btn-primary" type="button">+ Thêm học sinh</button><button id="school-student-template" class="btn btn-light" type="button">Tải Excel mẫu</button></div></div>
   <div class="notice notice-info">Cột bắt buộc: student_code, student_name, grade_code, class_code. Có thể thêm date_of_birth, gender, ethnicity. Mã học sinh và ngày sinh phải nhập dạng Text để tránh mất số 0 đầu hoặc đảo ngày tháng; ngày sinh dùng dd/MM/yyyy hoặc yyyy-MM-dd. Sau khi chạy migration, hãy nhập danh sách toàn trường chính thức; hồ sơ các kỳ thi cũ được giữ nguyên và không tự chọn lớp từ dữ liệu lịch sử.</div>
   <form id="school-student-import-form" class="inline-form">
     <label>File học sinh toàn trường<input id="school-student-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label>
@@ -10,10 +10,10 @@
     <div><h3>Chọn học sinh đưa vào kỳ thi</h3><p>Lọc theo khối, lớp hoặc tìm từng học sinh; tích chọn rồi thêm vào danh sách thí sinh của kỳ thi.</p></div>
   </div>
   <div class="form-grid">
-    <label>Kỳ thi<select id="school-student-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
-    <label>Khối<select id="school-student-grade"><option value="">Tất cả các khối</option></select></label>
-    <label>Lớp<select id="school-student-class"><option value="">Tất cả các lớp</option></select></label>
-    <label>Tìm học sinh<input id="school-student-search" type="search" placeholder="Mã học sinh hoặc họ tên"></label>
+    <label>Kỳ thi<select id="school-student-exam" autocomplete="off"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <label>Khối<select id="school-student-grade" autocomplete="off"><option value="">Tất cả các khối</option></select></label>
+    <label>Lớp<select id="school-student-class" autocomplete="off"><option value="">Tất cả các lớp</option></select></label>
+    <label>Tìm học sinh<input id="school-student-search" type="search" autocomplete="off" placeholder="Mã học sinh hoặc họ tên"></label>
     <div class="form-actions">
       <button id="school-student-select-visible" class="btn btn-light" type="button">Chọn tất cả đang lọc</button>
       <button id="school-student-clear-selection" class="btn btn-light" type="button">Bỏ chọn</button>
@@ -21,5 +21,21 @@
     </div>
   </div>
   <div id="school-student-message" class="notice hidden" role="status" aria-live="polite"></div>
-  <div class="table-wrap"><table><thead><tr><th><input id="school-student-check-all" type="checkbox" aria-label="Chọn tất cả học sinh đang lọc"></th><th>Mã học sinh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th></tr></thead><tbody id="school-student-body"><tr><td colspan="8" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th><input id="school-student-check-all" type="checkbox" aria-label="Chọn tất cả học sinh đang lọc"></th><th>Mã học sinh</th><th>Họ tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Dân tộc</th><th>Khối</th><th>Lớp</th><th>Thao tác</th></tr></thead><tbody id="school-student-body"><tr><td colspan="9" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr></tbody></table></div>
+  <dialog id="school-student-dialog" class="candidate-modal">
+    <form id="school-student-form">
+      <div class="modal-heading"><div><h3 id="school-student-form-title">Thêm học sinh</h3><p>Thông tin tại đây chỉ cập nhật danh sách gốc, không thay đổi hồ sơ kỳ thi đã tạo.</p></div><button id="school-student-dialog-close" class="modal-close" type="button" aria-label="Đóng">×</button></div>
+      <input id="school-student-id" type="hidden">
+      <div class="form-grid">
+        <label>Mã học sinh<input id="school-student-code" required maxlength="100" placeholder="Mã học sinh"></label>
+        <label>Họ và tên<input id="school-student-name" required maxlength="200" placeholder="Họ và tên đầy đủ"></label>
+        <label>Khối<input id="school-student-form-grade" required maxlength="30" placeholder="Ví dụ: 10"></label>
+        <label>Lớp<input id="school-student-form-class" required maxlength="50" placeholder="Ví dụ: 10A1"></label>
+        <label>Ngày sinh<input id="school-student-dob" type="date"></label>
+        <label>Giới tính<select id="school-student-gender"><option value="">-- Chọn --</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
+        <label>Dân tộc<input id="school-student-ethnicity" maxlength="100" placeholder="Ví dụ: Kinh"></label>
+      </div>
+      <div class="modal-actions"><button id="school-student-cancel" class="btn btn-light" type="button">Hủy</button><button id="school-student-save" class="btn btn-primary" type="submit">Lưu học sinh</button></div>
+    </form>
+  </dialog>
 </section>
