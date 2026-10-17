@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.80';
-import {loadTabModules} from './module-loader.js?v=0.1.80';
-import {wireOperations} from './operations.js?v=0.1.80';
-const APP_VERSION='v0.1.80';
-const APP_BUILD='2026-10-18-school-student-controls';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.81';
+import {loadTabModules} from './module-loader.js?v=0.1.81';
+import {wireOperations} from './operations.js?v=0.1.81';
+const APP_VERSION='v0.1.81';
+const APP_BUILD='2026-10-18-school-student-init';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -2333,7 +2333,18 @@ async function boot(){
     const options=candidateClassOptions(state.candidates,$('candidate-edit-grade').value);
     populateCandidateEditClasses(options.includes(currentClass)?currentClass:'');
   });
-  wire();wireSchoolStudents();wireRoomingEditor();renderSubjects();updateVersionDisplay();
+  // Initialize the school roster independently first. If another module has
+  // a missing control or initialization error, roster filters and actions must
+  // still be usable instead of leaving the whole tab with inert controls.
+  wireSchoolStudents();
+  try{
+    wire();
+    wireRoomingEditor();
+  }catch(error){
+    console.error('Không khởi tạo được một hoặc nhiều module nghiệp vụ:',error);
+    message($('global-message'),`Một số chức năng khác chưa khởi tạo được: ${error?.message||String(error)}. Danh sách học sinh vẫn có thể sử dụng.`,'error');
+  }
+  renderSubjects();updateVersionDisplay();
   $('setup-form').dataset.connectionHandler='ready';
   $('setup-form').addEventListener('submit',()=>{
     message($('setup-message'),'Đang kiểm tra kết nối tới Supabase...','info');
