@@ -64,6 +64,8 @@ test('whole-school roster applies normalized grade, class, and search filters an
   assert.match(app, /selectedSchoolStudentCodes\.has\(schoolStudentSelectionKey\(student\.student_code\)\)/);
   assert.match(app, /const loadToken=\+\+schoolStudentLoadToken/);
   assert.match(app, /if\(loadToken!==schoolStudentLoadToken\)return/);
+  assert.match(app, /wireSchoolStudents\(\);\s*try\{\s*wire\(\);/);
+  assert.match(app, /Danh sách học sinh vẫn có thể sử dụng/);
 });
 
 test('candidate deletion clears editable elective-plan references and preserves locked plans', async () => {
