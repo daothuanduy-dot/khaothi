@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.84';
-import {loadTabModules} from './module-loader.js?v=0.1.84';
-import {wireOperations} from './operations.js?v=0.1.84';
-const APP_VERSION='v0.1.84';
-const APP_BUILD='2026-10-18-school-student-initial-filter';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.85';
+import {loadTabModules} from './module-loader.js?v=0.1.85';
+import {wireOperations} from './operations.js?v=0.1.85';
+const APP_VERSION='v0.1.85';
+const APP_BUILD='2026-10-18-school-student-filter-consistency';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -329,6 +329,14 @@ function schoolStudentFilters(){
   classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
   const selectedClassValue=normalizedSchoolStudentValue(selectedClass);
   classSelect.value=classes.find(value=>normalizedSchoolStudentValue(value)===selectedClassValue)||'';
+  return {grade:grade.value.trim(),classCode:classSelect.value.trim()};
+}
+function schoolStudentFilterValues(){
+  return {
+    grade:$('school-student-grade').value.trim(),
+    classCode:$('school-student-class').value.trim(),
+    query:$('school-student-search').value.trim()
+  };
 }
 const schoolStudentColumns='id,student_code,student_name,date_of_birth,gender,ethnicity,grade_code,class_code';
 function buildSchoolStudentQuery({grade='',classCode='',query='',searchField=''}={}){
@@ -339,10 +347,8 @@ function buildSchoolStudentQuery({grade='',classCode='',query='',searchField=''}
   if(query&&searchField)request=request.ilike(searchField,`%${query}%`);
   return request;
 }
-async function queryFilteredSchoolStudents(){
-  const grade=$('school-student-grade').value.trim();
-  const classCode=$('school-student-class').value.trim();
-  const query=$('school-student-search').value.trim();
+async function queryFilteredSchoolStudents(filters=schoolStudentFilterValues()){
+  const {grade,classCode,query}=filters;
   if(!query){
     return selectAllPages(()=>buildSchoolStudentQuery({grade,classCode}));
   }
@@ -356,14 +362,18 @@ async function queryFilteredSchoolStudents(){
 }
 function scheduleSchoolStudentFilterRefresh(){
   schoolStudentFilters();
+  ++schoolStudentLoadToken;
+  schoolStudents=[];
+  renderSchoolStudents();
   clearTimeout(schoolStudentFilterTimer);
   schoolStudentFilterTimer=setTimeout(()=>refreshSchoolStudentsFromDatabase(),180);
 }
 async function refreshSchoolStudentsFromDatabase(){
   if(!schoolStudentsLoaded)return;
   const loadToken=++schoolStudentLoadToken;
+  const filters=schoolStudentFilterValues();
   try{
-    const rows=await queryFilteredSchoolStudents();
+    const rows=(await queryFilteredSchoolStudents(filters)).filter(student=>schoolStudentMatches(student,filters));
     if(loadToken!==schoolStudentLoadToken)return;
     schoolStudents=rows;
     renderSchoolStudents();
