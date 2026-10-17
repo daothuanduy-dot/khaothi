@@ -1,14 +1,16 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.79';
-import {loadTabModules} from './module-loader.js?v=0.1.79';
-import {wireOperations} from './operations.js?v=0.1.79';
-const APP_VERSION='v0.1.79';
-const APP_BUILD='2026-10-18-school-student-filter';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.80';
+import {loadTabModules} from './module-loader.js?v=0.1.80';
+import {wireOperations} from './operations.js?v=0.1.80';
+const APP_VERSION='v0.1.80';
+const APP_BUILD='2026-10-18-school-student-controls';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
 let operations=null;
 let schoolStudents=[];
 let schoolStudentLoadToken=0;
+let schoolStudentsLoaded=false;
+let schoolStudentsLoading=false;
 const selectedSchoolStudentCodes=new Set();
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const subjectName=code=>{const key=String(code??'').trim().toUpperCase();if(!key)return '';if(key==='ANH')return 'Tiếng Anh (mã cũ)';const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];return all.find(s=>String(s.code).toUpperCase()===key)?.name||String(code)};
@@ -208,7 +210,18 @@ function syncSubjectExamMode(){
     ?'Đây là kỳ thi lựa chọn: có thể đăng ký môn bắt buộc và môn lựa chọn cho lớp hoặc từng học sinh.'
     :'Đây là kỳ thi mặc định: chỉ cấu hình môn bắt buộc theo khối/lớp. Muốn đăng ký môn lựa chọn, hãy tạo/chọn kỳ thi loại “Kỳ thi lựa chọn”.';
 }
-function switchTab(tab){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('hidden',p.id!==`tab-${tab}`));if(tab==='school-students')loadSchoolStudents();if(tab==='candidates')loadCandidates();if(tab==='subjects'){loadSubjectRegistrations();loadRosterData()}if(tab==='scripts')operations?.refreshScriptConfigs();if(tab==='sbd'){/* SBD is managed independently from rooming */}}
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('hidden',p.id!==`tab-${tab}`));
+  if(tab==='school-students'){
+    if(!schoolStudentsLoaded)loadSchoolStudents();
+    else renderSchoolStudents();
+  }
+  if(tab==='candidates')loadCandidates();
+  if(tab==='subjects'){loadSubjectRegistrations();loadRosterData()}
+  if(tab==='scripts')operations?.refreshScriptConfigs();
+  if(tab==='sbd'){/* SBD is managed independently from rooming */}
+}
 function renderSubjects(){$('subject-catalog').innerHTML='<div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Toán</strong><small>Lịch thi cứng, cấu hình riêng.</small></div><div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Ngữ văn</strong><small>Lịch thi cứng, cấu hình riêng.</small></div>'+SUBJECTS.map(s=>`<div class="subject-card"><span class="tag">LỰA CHỌN</span><strong>${esc(s.name)}</strong><small>Mã môn: <code>${s.code}</code></small></div>`).join('')}
 function parseCsv(text){
   const rows=[];let row=[],cell='',quoted=false;
@@ -280,6 +293,9 @@ async function parseUploadFile(file){
 function normalizedSchoolStudentValue(value){
   return String(value??'').normalize('NFKC').trim().toLocaleLowerCase('vi');
 }
+function schoolStudentSelectionKey(value){
+  return normalizedSchoolStudentValue(value);
+}
 function schoolStudentMatches(student,{grade='',classCode='',query=''}={}){
   const normalizedGrade=normalizedSchoolStudentValue(grade);
   const normalizedClass=normalizedSchoolStudentValue(classCode);
@@ -322,8 +338,8 @@ function filteredSchoolStudents(){
 function updateSchoolStudentSelection(){
   const visible=filteredSchoolStudents();
   $('school-student-enroll').disabled=!visible.length||!selectedSchoolStudentCodes.size||!$('school-student-exam').value;
-  $('school-student-check-all').checked=visible.length>0&&visible.every(student=>selectedSchoolStudentCodes.has(student.student_code));
-  $('school-student-check-all').indeterminate=visible.some(student=>selectedSchoolStudentCodes.has(student.student_code))&&!$('school-student-check-all').checked;
+  $('school-student-check-all').checked=visible.length>0&&visible.every(student=>selectedSchoolStudentCodes.has(schoolStudentSelectionKey(student.student_code)));
+  $('school-student-check-all').indeterminate=visible.some(student=>selectedSchoolStudentCodes.has(schoolStudentSelectionKey(student.student_code)))&&!$('school-student-check-all').checked;
   $('school-student-enroll').textContent=`Thêm đã chọn (${selectedSchoolStudentCodes.size}) vào kỳ thi`;
 }
 function renderSchoolStudents(){
@@ -334,7 +350,7 @@ function renderSchoolStudents(){
     return;
   }
   body.innerHTML=rows.map(student=>`<tr>
-    <td><input type="checkbox" data-school-student-check="${esc(student.student_code)}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(student.student_code)?'checked':''}></td>
+    <td><input type="checkbox" data-school-student-check="${esc(schoolStudentSelectionKey(student.student_code))}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(schoolStudentSelectionKey(student.student_code))?'checked':''}></td>
     <td>${esc(student.student_code)}</td><td>${esc(student.student_name)}</td><td>${esc(student.date_of_birth||'—')}</td>
     <td>${esc(student.gender||'—')}</td><td>${esc(student.ethnicity||'—')}</td><td>${esc(student.grade_code)}</td><td>${esc(student.class_code)}</td>
     <td><button class="small-btn" type="button" data-school-student-edit="${esc(student.id)}">Sửa</button> <button class="small-btn danger-btn" type="button" data-school-student-delete="${esc(student.id)}">Xóa</button></td>
@@ -342,7 +358,10 @@ function renderSchoolStudents(){
   updateSchoolStudentSelection();
 }
 async function loadSchoolStudents(){
+  if(schoolStudentsLoading)return;
+  schoolStudentsLoading=true;
   const loadToken=++schoolStudentLoadToken;
+  schoolStudentsLoaded=false;
   const body=$('school-student-body');
   body.innerHTML='<tr><td colspan="9" class="empty">Đang tải danh sách học sinh toàn trường...</td></tr>';
   try{
@@ -351,13 +370,16 @@ async function loadSchoolStudents(){
       .order('grade_code').order('class_code').order('student_name'));
   }catch(error){
     if(loadToken!==schoolStudentLoadToken)return;
+    schoolStudentsLoading=false;
     body.innerHTML=`<tr><td colspan="9" class="empty">${esc(error.message||String(error))}</td></tr>`;
     message($('school-student-message'),`Không tải được danh sách học sinh. Hãy chạy migration v0.1.72: ${error.message||String(error)}`,'error');
     return;
   }
   if(loadToken!==schoolStudentLoadToken)return;
+  schoolStudentsLoading=false;
+  schoolStudentsLoaded=true;
   schoolStudents.sort(schoolStudentSort);
-  const known=new Set(schoolStudents.map(student=>student.student_code));
+  const known=new Set(schoolStudents.map(student=>schoolStudentSelectionKey(student.student_code)));
   selectedSchoolStudentCodes.forEach(code=>{if(!known.has(code))selectedSchoolStudentCodes.delete(code)});
   schoolStudentFilters();
   renderSchoolStudents();
@@ -411,7 +433,7 @@ async function saveSchoolStudent(event){
     if(!data)throw new Error('Không tìm thấy hồ sơ học sinh để cập nhật. Danh sách có thể đã thay đổi; hãy tải lại và thử lại.');
     if(id){
       const previous=schoolStudents.find(item=>item.id===id);
-      if(previous&&previous.student_code!==student.student_code)selectedSchoolStudentCodes.delete(previous.student_code);
+      if(previous&&previous.student_code!==student.student_code)selectedSchoolStudentCodes.delete(schoolStudentSelectionKey(previous.student_code));
     }
     closeSchoolStudentForm();
     message($('school-student-message'),id?'Đã cập nhật hồ sơ trong danh sách toàn trường. Hồ sơ kỳ thi đã tạo không thay đổi.':'Đã thêm học sinh vào danh sách toàn trường.','success');
@@ -430,7 +452,7 @@ async function deleteSchoolStudent(id){
     const{data,error}=await state.client.from('school_students').delete().eq('id',id).select('id');
     if(error)throw error;
     if(!data?.length)throw new Error('Không tìm thấy hồ sơ để xóa. Hãy tải lại danh sách.');
-    selectedSchoolStudentCodes.delete(student.student_code);
+    selectedSchoolStudentCodes.delete(schoolStudentSelectionKey(student.student_code));
     message($('school-student-message'),'Đã xóa học sinh khỏi danh sách toàn trường. Hồ sơ các kỳ thi cũ vẫn được giữ nguyên.','success');
     await loadSchoolStudents();
   }catch(error){
@@ -487,7 +509,8 @@ async function importSchoolStudents(event){
   }
 }
 async function enrollSchoolStudents(){
-  const examId=$('school-student-exam').value,codes=[...selectedSchoolStudentCodes];
+  const examId=$('school-student-exam').value;
+  const codes=[...selectedSchoolStudentCodes].map(key=>schoolStudents.find(student=>schoolStudentSelectionKey(student.student_code)===key)?.student_code||key);
   if(!examId){message($('school-student-message'),'Hãy chọn kỳ thi trước khi thêm học sinh.','error');return}
   if(!codes.length){message($('school-student-message'),'Hãy tích chọn ít nhất một học sinh.','error');return}
   const button=$('school-student-enroll');button.disabled=true;
@@ -538,7 +561,7 @@ function wireSchoolStudents(){
   $('school-student-body').addEventListener('change',event=>{
     const checkbox=event.target.closest('[data-school-student-check]');
     if(!checkbox)return;
-    if(checkbox.checked)selectedSchoolStudentCodes.add(checkbox.dataset.schoolStudentCheck);
+    if(checkbox.checked)selectedSchoolStudentCodes.add(schoolStudentSelectionKey(checkbox.dataset.schoolStudentCheck));
     else selectedSchoolStudentCodes.delete(checkbox.dataset.schoolStudentCheck);
     updateSchoolStudentSelection();
   });
@@ -553,13 +576,14 @@ function wireSchoolStudents(){
   });
   $('school-student-check-all').onchange=event=>{
     filteredSchoolStudents().forEach(student=>{
-      if(event.target.checked)selectedSchoolStudentCodes.add(student.student_code);
-      else selectedSchoolStudentCodes.delete(student.student_code);
+      const key=schoolStudentSelectionKey(student.student_code);
+      if(event.target.checked)selectedSchoolStudentCodes.add(key);
+      else selectedSchoolStudentCodes.delete(key);
     });
     renderSchoolStudents();
   };
   $('school-student-select-visible').onclick=()=>{
-    filteredSchoolStudents().forEach(student=>selectedSchoolStudentCodes.add(student.student_code));
+    filteredSchoolStudents().forEach(student=>selectedSchoolStudentCodes.add(schoolStudentSelectionKey(student.student_code)));
     renderSchoolStudents();
   };
   $('school-student-clear-selection').onclick=()=>{selectedSchoolStudentCodes.clear();renderSchoolStudents()};
