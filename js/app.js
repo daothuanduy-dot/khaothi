@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.89';
-import {loadTabModules} from './module-loader.js?v=0.1.89';
-import {wireOperations} from './operations.js?v=0.1.89';
-const APP_VERSION='v0.1.89';
-const APP_BUILD='2026-10-18-normalize-ktpl-code';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.90';
+import {loadTabModules} from './module-loader.js?v=0.1.90';
+import {wireOperations} from './operations.js?v=0.1.90';
+const APP_VERSION='v0.1.90';
+const APP_BUILD='2026-10-18-class-roster-print';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -2280,11 +2280,14 @@ function printRosterChoices(){
  const rows=state.rosterCandidates.filter(c=>(!grade||String(c.grade_code)===grade)&&(!cls||String(c.class_code)===cls)&&(!q||[c.student_code,c.student_name,c.class_code].some(v=>String(v||'').toLocaleLowerCase('vi').includes(q)))&&($('roster-show-overage').checked||!c.is_overage)).sort((a,b)=>String(a.class_code).localeCompare(String(b.class_code),'vi',{numeric:true})||String(a.student_name).localeCompare(String(b.student_name),'vi'));
  if(!rows.length){message($('roster-message'),'Không có học sinh trong bộ lọc để in.','error');return}
  const codeName=code=>{const item=ROSTER_ELECTIVES.find(x=>x.code===String(code||'').toUpperCase());return item?`${item.name} (${item.code})`:code||'Chưa chọn'};
- const body=rows.map((c,i)=>{const regs=rosterStudentRegs(c.id),draft=state.rosterDirty.get(String(c.id));const m1=draft?draft.m1:regs.find(r=>Number(r.subject_order)===1)?.subject_code||'',m2=draft?draft.m2:regs.find(r=>Number(r.subject_order)===2)?.subject_code||'';return `<tr><td>${i+1}</td><td>${esc(c.student_code||'')}</td><td>${esc(c.student_name||'')}</td><td>${esc(c.class_code||'')}</td><td>${esc(codeName(m1))}</td><td>${esc(codeName(m2))}</td><td>${m1&&m2&&m1!==m2?'Đủ 2 môn':'Cần rà soát'}</td></tr>`}).join('');
+ const groups=new Map();
+ for(const row of rows){const key=String(row.class_code||'Chưa xếp lớp');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row)}
+ const examTitle=(state.exams.find(e=>e.id===examId)||{}).name||examId;
  const title=`Danh sách môn lựa chọn${cls?' — lớp '+cls:grade?' — khối '+grade:''}`;
  const w=window.open('','_blank','width=1100,height=800');
  if(!w){message($('roster-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
- w.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;color:#111;padding:20px}h2,h3,p{text-align:center;margin:6px}table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}th,td{border:1px solid #555;padding:7px;text-align:left}th{background:#eee}.meta{margin-top:14px;text-align:left}@media print{button{display:none}body{padding:0}}</style></head><body><h2>TRƯỜNG THPT LÊ HỒNG PHONG</h2><h3>${esc(title)}</h3><p>Kỳ thi: ${esc((state.exams.find(e=>e.id===examId)||{}).name||examId)}</p><p class="meta">Tổng số: ${rows.length} học sinh. Toán và Ngữ văn là môn bắt buộc; bảng dưới đây thống kê hai môn lựa chọn.</p><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Trạng thái</th></tr></thead><tbody>${body}</tbody></table><p style="text-align:right;margin-top:24px">Ngày in: ${new Date().toLocaleDateString('vi-VN')}</p><script>window.onload=()=>window.print()</script></body></html>`);
+ const pages=[...groups.entries()].map(([classCode,classRows],pageIndex)=>{const body=classRows.map((c,i)=>{const regs=rosterStudentRegs(c.id),draft=state.rosterDirty.get(String(c.id));const m1=draft?draft.m1:regs.find(r=>Number(r.subject_order)===1)?.subject_code||'',m2=draft?draft.m2:regs.find(r=>Number(r.subject_order)===2)?.subject_code||'';return `<tr><td>${i+1}</td><td>${esc(c.student_code||'')}</td><td>${esc(c.student_name||'')}</td><td>${esc(c.class_code||'')}</td><td>${esc(codeName(m1))}</td><td>${esc(codeName(m2))}</td><td></td></tr>`}).join('');return `<section class="class-page${pageIndex===groups.size-1?' last':''}"><h2>TRƯỜNG THPT LÊ HỒNG PHONG</h2><h3>Danh sách môn lựa chọn — lớp ${esc(classCode)}</h3><p>Kỳ thi: ${esc(examTitle)}</p><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${body}</tbody></table><p class="date">Ngày in: ${new Date().toLocaleDateString('vi-VN')}</p></section>`}).join('');
+ w.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.class-page{min-height:calc(100vh - 16mm);page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}.class-page.last{page-break-after:auto;break-after:auto}h2,h3,p{text-align:center;margin:4px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:9px}th,td{border:1px solid #555;padding:4px;text-align:left;line-height:1.1}th{background:#eee}.date{text-align:right;margin-top:10px}@media screen{body{padding:20px}.class-page{border-bottom:1px dashed #999;margin-bottom:20px;padding-bottom:20px}}@media print{button{display:none}}</style></head><body>${pages}<script>window.onload=()=>window.print()</script></body></html>`);
  w.document.close();
 }
 
