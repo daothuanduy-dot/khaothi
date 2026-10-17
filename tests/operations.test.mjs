@@ -79,6 +79,17 @@ test('every operations DOM lookup has a matching static control', async () => {
   for (const id of lookups) assert.ok(ids.has(id) || dynamicIds.has(id), `Missing DOM control #${id}`);
 });
 
+test('absence tab provides live reports for whole-exam and subject absences', async () => {
+  const absences = await readFile(new URL('../modules/absences.html', import.meta.url), 'utf8');
+  assert.match(absences, /id="absence-report-filter"/);
+  assert.match(absences, /value="\*"[^>]*>Vắng toàn kỳ/);
+  assert.match(absences, /id="absence-report-body"/);
+  assert.match(source, /codes\.map\(code=>`<option value="\$\{esc\(code\)\}">Vắng môn/);
+  assert.match(source, /return candidate\.absentAll\|\|candidate\.absentSubjects\.includes\(filter\)/);
+  assert.match(source, /absence-report-filter'\)\.onchange=renderAbsenceReport/);
+  assert.match(source, /absence-search'\)\.oninput=applyAbsenceFilters/);
+});
+
 test('Supabase connection errors are distinct from application initialization errors', async () => {
   const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
   const moduleLoader = await readFile(new URL('../js/module-loader.js', import.meta.url), 'utf8');
@@ -87,14 +98,14 @@ test('Supabase connection errors are distinct from application initialization er
   assert.match(app, /function showConnectionFailure\(error\)[\s\S]*?if\(state\.client\)[\s\S]*?Đã kết nối Supabase nhưng không khởi tạo được ứng dụng/);
   assert.match(app, /await connect\(url,key\);saveConfig\(url,key\);await openConnectedApp\(\)/);
   assert.match(app, /await connect\(config\.url,config\.key\);await openConnectedApp\(\)/);
-  assert.match(app, /operations\.js\?v=0\.1\.72/);
-  assert.match(moduleLoader, /MODULE_VERSION = '0\.1\.72'/);
+  assert.match(app, /operations\.js\?v=0\.1\.80/);
+  assert.match(moduleLoader, /MODULE_VERSION = '0\.1\.80'/);
   assert.doesNotMatch(app, /import\s*\{\s*candidateClassOptions/);
   assert.match(app, /\$\('setup-form'\)\.dataset\.connectionHandler='ready'/);
   assert.match(app, /Đang kiểm tra kết nối tới Supabase/);
   assert.match(app, /Supabase chưa phản hồi sau 30 giây/);
   assert.match(index, /Ứng dụng chưa khởi tạo xong nên chưa thể kết nối/);
-  assert.match(index, /js\/app\.js\?v=0\.1\.72/);
+  assert.match(index, /js\/app\.js\?v=0\.1\.80/);
   assert.match(app, /candidate-edit-grade'\)\.addEventListener\('change'/);
   assert.match(app, /populateCandidateEditClasses\(c\.class_code\|\|''\,true\)/);
   assert.match(app, /function ensureCandidateClassDropdown\(\)[\s\S]*?createElement\('select'\)[\s\S]*?control\.replaceWith\(select\)/);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, isValidSbd, optimizeElectiveRooms, optimizeMandatoryRooms } from '../js/rooming.js';
+import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, isValidSbd, optimizeElectiveRooms, optimizeMandatoryRooms, restoreRoomingPlan, roomExportRowPositions } from '../js/rooming.js';
 
 test('SBD validation accepts only six or eight digits', () => {
   assert.equal(isValidSbd('315001'), true);
@@ -8,6 +8,13 @@ test('SBD validation accepts only six or eight digits', () => {
   assert.equal(isValidSbd('3150122352'), false);
   assert.equal(isValidSbd(' 315001'), false);
   assert.equal(isValidSbd(''), false);
+});
+
+test('spreadsheet record and total row indexes keep the last candidate row intact', () => {
+  const rows = roomExportRowPositions(3, 24);
+
+  assert.deepEqual(rows, { dataStart: 4, dataEnd: 27, totalRow: 28 });
+  assert.equal(rows.totalRow, rows.dataEnd + 1);
 });
 
 test('changing any room count offsets the balancing room and preserves the planned total', () => {
@@ -75,6 +82,57 @@ test('mandatory rooming includes the full roster and never exceeds room capacity
     roomPrefix: 'M',
     firstRoomNumber: 1,
     subjectCode: 'TOAN'
+  });
+
+  test('restoring a persisted official rooming record reconstructs candidate and room details', () => {
+    const candidates = [
+      { id: 'c1', sbd: '310001', student_name: 'Student One', class_code: '12A1' },
+      { id: 'c2', sbd: '310002', student_name: 'Student Two', class_code: '12A2' }
+    ];
+    const restored = restoreRoomingPlan([
+      { room_code: 'P01', room_number: 1, capacity: 2, student_count: 2 }
+    ], [
+      { candidate_id: 'c1', room_code: 'P01', sbd: '310001', ca1_subject_code: 'ANH', ca2_subject_code: 'DIA' },
+      { candidate_id: 'c2', room_code: 'P01', sbd: '310002', ca1_subject_code: 'ANH', ca2_subject_code: 'DIA' }
+    ], candidates, { planType: 'elective', capacity: 2 });
+
+    assert.equal(restored.ok, true);
+    assert.equal(restored.result.summary.candidate_count, 2);
+    assert.deepEqual(restored.result.rooms[0].candidate_ids, ['c1', 'c2']);
+    assert.equal(restored.result.rooms[0].sbd_first, '310001');
+    assert.equal(restored.result.rooms[0].ca1_subject_codes.includes('ANH'), true);
+    assert.equal(restored.result.assignments[0].student_name, 'Student One');
+  });
+
+  test('restoring a persisted rooming record rejects missing candidates and inconsistent room counts', () => {
+    const candidates = [
+      { id: 'c1', sbd: '310001', student_name: 'Student One' },
+      { id: 'c2', sbd: '310002', student_name: 'Student Two' }
+    ];
+    const room = [{ room_code: 'P01', room_number: 1, capacity: 2, student_count: 1 }];
+
+    const missingCandidate = restoreRoomingPlan(room, [
+      { candidate_id: 'missing', room_code: 'P01', sbd: '310002' }
+    ], candidates, { planType: 'mandatory' });
+    const inconsistentCount = restoreRoomingPlan(room, [
+      { candidate_id: 'c1', room_code: 'P01', sbd: '310001' },
+      { candidate_id: 'c2', room_code: 'P01', sbd: '310002' }
+    ], candidates, { planType: 'mandatory' });
+
+    assert.equal(missingCandidate.ok, false);
+    assert.equal(inconsistentCount.ok, false);
+  });
+
+  test('saved snapshots retain displayable student details when the current roster changed', () => {
+    const restored = restoreRoomingPlan([
+      { room_code: 'P01', room_number: 1, capacity: 2, student_count: 1 }
+    ], [
+      { candidate_id: 'removed-candidate', room_code: 'P01', sbd: '310009', student_name: 'Archived Student', class_code: '12A9' }
+    ], [], { planType: 'mandatory', subjectCode: 'TOAN', allowMissingCandidates: true });
+
+    assert.equal(restored.ok, true);
+    assert.equal(restored.result.assignments[0].student_name, 'Archived Student');
+    assert.equal(restored.result.assignments[0].sbd, '310009');
   });
 
   test('rooming never substitutes student_code for a missing SBD', () => {

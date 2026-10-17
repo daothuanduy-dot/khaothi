@@ -36,6 +36,90 @@ test('whole-school roster is independent and enrolls checked students without ov
   assert.doesNotMatch(schemaAndPolicies, /from public\.exam_candidates/);
 });
 
+test('whole-school roster supports create, edit, and delete with exam history preserved', async () => {
+  const roster = await readFile(new URL('../modules/school-students.html', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../sql/v0.1.72_school_students.sql', import.meta.url), 'utf8');
+
+  assert.match(roster, /id="school-student-add"/);
+  assert.match(roster, /id="school-student-dialog"/);
+  assert.match(app, /data-school-student-edit/);
+  assert.match(app, /data-school-student-delete/);
+  assert.match(app, /async function saveSchoolStudent\(event\)/);
+  assert.match(app, /from\('school_students'\)\.update\(student\)/);
+  assert.match(app, /from\('school_students'\)\.insert\(student\)/);
+  assert.match(app, /from\('school_students'\)\.delete\(\)/);
+  assert.match(migration, /grant select,insert,update,delete on public\.school_students to authenticated/);
+});
+
+test('whole-school roster applies normalized grade, class, and search filters and ignores stale loads', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.match(app, /function normalizedSchoolStudentValue\(value\)/);
+  assert.match(app, /function schoolStudentMatches\(student,\{grade='',classCode='',query=''\}=\{\}\)/);
+  assert.match(app, /return schoolStudents\.filter\(student=>schoolStudentMatches\(student,\{/);
+  assert.match(app, /let schoolStudentLoadToken=0/);
+  assert.match(app, /let schoolStudentsLoaded=false/);
+  assert.match(app, /let schoolStudentsLoading=false/);
+  assert.match(app, /function schoolStudentSelectionKey\(value\)/);
+  assert.match(app, /selectedSchoolStudentCodes\.has\(schoolStudentSelectionKey\(student\.student_code\)\)/);
+  assert.match(app, /const loadToken=\+\+schoolStudentLoadToken/);
+  assert.match(app, /if\(loadToken!==schoolStudentLoadToken\)return/);
+});
+
+test('candidate deletion clears editable elective-plan references and preserves locked plans', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../sql/v0.1.74_candidate_delete_room_plan_fix.sql', import.meta.url), 'utf8');
+
+  assert.match(app, /rpc\('exam_delete_candidates_from_exam'/);
+  assert.match(migration, /public\.exam_elective_room_plan_candidates/);
+  assert.match(migration, /p\.status='locked'[\s\S]*?raise exception/);
+  assert.match(migration, /p\.status<>'locked'/);
+  assert.match(migration, /delete from public\.exam_candidates/);
+  assert.match(migration, /grant execute on function public\.exam_delete_candidates_from_exam\(uuid,uuid\[\]\) to authenticated/);
+});
+
+test('subject registration cleanup supports all subjects or a selected subject', async () => {
+  const subjects = await readFile(new URL('../modules/subjects.html', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../sql/v0.1.75_subject_registrations_and_foreign_languages.sql', import.meta.url), 'utf8');
+
+  assert.match(subjects, /id="subject-delete-code"/);
+  assert.match(subjects, /id="subject-delete-registrations"/);
+  assert.match(app, /rpc\('exam_delete_subject_registrations'/);
+  assert.match(migration, /if v_subject_code is null then\s+delete from public\.exam_candidate_subjects where exam_id=p_exam_id/);
+  assert.match(migration, /where exam_id=p_exam_id and upper\(btrim\(subject_code\)\)=v_subject_code/);
+  assert.match(migration, /grant execute on function public\.exam_delete_subject_registrations\(uuid,text\) to authenticated/);
+});
+
+test('foreign-language catalog provides N1 through N7 and preserves legacy English records', async () => {
+  const rooming = await readFile(new URL('../js/rooming.js', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../sql/v0.1.75_subject_registrations_and_foreign_languages.sql', import.meta.url), 'utf8');
+
+  for (const [code, language] of [
+    ['N1', 'Tiếng Anh'], ['N2', 'Tiếng Nga'], ['N3', 'Tiếng Pháp'],
+    ['N4', 'Tiếng Trung Quốc'], ['N5', 'Tiếng Đức'], ['N6', 'Tiếng Nhật'], ['N7', 'Tiếng Hàn']
+  ]) {
+    assert.match(rooming, new RegExp(`code:'${code}', name:'${language}'`));
+    assert.match(migration, new RegExp(`when '${code}' then '${language}'`));
+  }
+  assert.match(app, /raw==='ANH'\?'N1'/);
+  assert.match(migration, /'ANH'::text/);
+});
+
+test('exam deletion reports live blocking tables and the UI provides actionable steps', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../sql/v0.1.76_exam_delete_blocker_diagnostics.sql', import.meta.url), 'utf8');
+
+  assert.match(app, /rpc\('exam_get_delete_blockers'/);
+  assert.match(app, /exam_elective_room_plans:'Xử lý phương án xếp phòng môn lựa chọn/);
+  assert.match(app, /Việc cần làm trước khi thử lại/);
+  assert.match(migration, /c\.confrelid='public\.exam_sessions'::regclass/);
+  assert.match(migration, /c\.confdeltype in \('a','r'\)/);
+  assert.match(migration, /'row_count',v_row_count/);
+  assert.match(migration, /grant execute on function public\.exam_get_delete_blockers\(uuid\) to authenticated/);
+});
+
 test('candidate class control is a dropdown, including legacy module markup at runtime', async () => {
   const candidates = await readFile(new URL('../modules/candidates.html', import.meta.url), 'utf8');
   const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
