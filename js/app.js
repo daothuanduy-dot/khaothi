@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.83';
-import {loadTabModules} from './module-loader.js?v=0.1.83';
-import {wireOperations} from './operations.js?v=0.1.83';
-const APP_VERSION='v0.1.83';
-const APP_BUILD='2026-10-18-school-student-db-filter';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.84';
+import {loadTabModules} from './module-loader.js?v=0.1.84';
+import {wireOperations} from './operations.js?v=0.1.84';
+const APP_VERSION='v0.1.84';
+const APP_BUILD='2026-10-18-school-student-initial-filter';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -425,7 +425,10 @@ async function loadSchoolStudents(){
   const known=new Set(schoolStudentCatalog.map(student=>schoolStudentSelectionKey(student.student_code)));
   selectedSchoolStudentCodes.forEach(code=>{if(!known.has(code))selectedSchoolStudentCodes.delete(code)});
   schoolStudentFilters();
-  renderSchoolStudents();
+  // The browser may restore grade/class/checkbox values before the data load
+  // finishes. Re-query using those values before the first render so the
+  // controls and table can never describe different datasets.
+  await refreshSchoolStudentsFromDatabase();
 }
 function openSchoolStudentForm(student=null){
   const form=$('school-student-form');
