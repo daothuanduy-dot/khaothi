@@ -62,10 +62,15 @@ test('whole-school roster applies normalized grade, class, and search filters an
   assert.match(app, /let schoolStudentsLoading=false/);
   assert.match(app, /function schoolStudentSelectionKey\(value\)/);
   assert.match(app, /selectedSchoolStudentCodes\.has\(schoolStudentSelectionKey\(student\.student_code\)\)/);
+  assert.match(app, /function buildSchoolStudentQuery\(\{grade='',classCode='',query='',searchField=''\}=\{\}\)/);
+  assert.match(app, /request=request\.eq\('grade_code',grade\)/);
+  assert.match(app, /request=request\.eq\('class_code',classCode\)/);
+  assert.match(app, /request=request\.ilike\(searchField,`%\$\{query\}%`\)/);
+  assert.match(app, /rpc\('exam_add_school_students_to_exam'/);
   assert.match(app, /const loadToken=\+\+schoolStudentLoadToken/);
   assert.match(app, /if\(loadToken!==schoolStudentLoadToken\)return/);
-  assert.match(app, /wireSchoolStudents\(\);\s*try\{\s*wire\(\);/);
-  assert.match(app, /Danh sách học sinh vẫn có thể sử dụng/);
+  assert.match(app, /try\{\s*wire\(\);[\s\S]*?wireSchoolStudents\(\);/);
+  assert.match(app, /Không khởi tạo được danh sách học sinh/);
 });
 
 test('candidate deletion clears editable elective-plan references and preserves locked plans', async () => {
