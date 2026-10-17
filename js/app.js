@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.86';
-import {loadTabModules} from './module-loader.js?v=0.1.86';
-import {wireOperations} from './operations.js?v=0.1.86';
-const APP_VERSION='v0.1.86';
-const APP_BUILD='2026-10-18-school-student-grade-class-sync';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.87';
+import {loadTabModules} from './module-loader.js?v=0.1.87';
+import {wireOperations} from './operations.js?v=0.1.87';
+const APP_VERSION='v0.1.87';
+const APP_BUILD='2026-10-18-roster-import-feedback';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -2157,10 +2157,17 @@ async function loadRosterData(){
 }
 
 async function importRosterElectivesFromExcel(){
+  const importStatus=(text,type='info')=>{
+    const status=$('roster-import-status');
+    if(!status)return;
+    status.textContent=text;
+    status.style.color=type==='error'?'#b42318':type==='success'?'#166534':'#64748b';
+  };
   const examId=rosterExamId(),file=$('roster-excel-file').files?.[0];
-  if(!examId){message($('roster-message'),'Hãy chọn kỳ thi trước khi nạp Excel.','error');return}
-  if(!file){message($('roster-message'),'Hãy chọn file Excel/CSV cần nạp.','error');return}
+  if(!examId){importStatus('Chưa thực hiện: hãy chọn kỳ thi trước.','error');message($('roster-message'),'Hãy chọn kỳ thi trước khi nạp Excel.','error');return}
+  if(!file){importStatus('Chưa thực hiện: hãy chọn file Excel hoặc CSV.','error');message($('roster-message'),'Hãy chọn file Excel/CSV cần nạp.','error');return}
   const btn=$('roster-import-btn');btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra...';
+  importStatus(`Đang đọc và kiểm tra ${file.name}...`,'info');
   try{
     if(rosterLoadedExamId!==examId || !state.rosterCandidates.length || state.rosterCandidates.some(c=>!Object.prototype.hasOwnProperty.call(c,'id'))) await loadRosterData();
     if(rosterLoadedExamId!==examId || !state.rosterCandidates.length)throw new Error('Không tải được danh sách thí sinh của kỳ thi. Hãy kiểm tra kỳ thi đang chọn và thông báo tải danh sách ở phía trên trước khi nhập Excel.');
@@ -2211,11 +2218,14 @@ async function importRosterElectivesFromExcel(){
       payload.push({exam_id:examId,candidate_id:id,subject_code:item.m2,subject_type:'elective',subject_order:2});
     }
     message($('roster-message'),`Đã kiểm tra ${byCandidate.size} học sinh, ${payload.length} lượt môn. Đang lưu vào Supabase...`,'info');
+    importStatus(`Đã kiểm tra ${byCandidate.size} học sinh. Đang ghi ${payload.length} lượt môn vào CSDL...`,'info');
     for(let offset=0;offset<payload.length;offset+=100){
       const batch=payload.slice(offset,offset+100);
       const {error}=await state.client.from('exam_candidate_subjects').upsert(batch,{onConflict:'exam_id,candidate_id,subject_code'});
       if(error)throw new Error(`Supabase từ chối dữ liệu ở lô ${Math.floor(offset/100)+1}: ${error.message}${error.details?` (${error.details})`:''}`);
-      message($('roster-message'),`Đang lưu môn lựa chọn ${Math.min(offset+batch.length,payload.length)}/${payload.length}...`,'info');
+      const saved=Math.min(offset+batch.length,payload.length);
+      message($('roster-message'),`Đang lưu môn lựa chọn ${saved}/${payload.length}...`,'info');
+      importStatus(`Đang ghi vào CSDL: ${saved}/${payload.length} lượt môn...`,'info');
     }
     // Remove old elective subjects no longer present for each imported student, preserving required subjects.
     let deleted=0;
@@ -2234,9 +2244,16 @@ async function importRosterElectivesFromExcel(){
     const counts={};for(const p of payload)counts[p.subject_code]=(counts[p.subject_code]||0)+1;
     const summary=Object.entries(counts).sort((a,b)=>a[0].localeCompare(b[0])).map(([code,n])=>`${code}: ${n}`).join(', ');
     const warning=[missingWarning,invalidRows.length?` CẦN KIỂM TRA ${invalidRows.length} học sinh/dòng do thiếu hoặc trùng môn: ${invalidRows.slice(0,10).join('; ')}${invalidRows.length>10?'…':''}. Các dòng này được giữ nguyên, không bị ghi đè.`:''].filter(Boolean).join(' ');
-    message($('roster-message'),`NẠP THÀNH CÔNG: ${validCandidates.length} học sinh, ${payload.length} lượt đăng ký đã được lưu và tải xác minh lại từ Supabase. ${deleted} đăng ký cũ không còn trong file đã được loại bỏ. Thống kê theo mã môn: ${summary}.${warning}`,invalidRows.length?'error':'success');
+    const resultType=invalidRows.length?'error':'success';
+    const resultText=`NẠP THÀNH CÔNG: ${validCandidates.length} học sinh, ${payload.length} lượt đăng ký đã được lưu và tải xác minh lại từ Supabase. ${deleted} đăng ký cũ không còn trong file đã được loại bỏ. Thống kê theo mã môn: ${summary}.${warning}`;
+    message($('roster-message'),resultText,resultType);
+    importStatus(invalidRows.length?`Đã lưu xong nhưng cần kiểm tra ${invalidRows.length} dòng bị bỏ qua.`:`Nạp thành công: đã lưu ${validCandidates.length} học sinh và ${payload.length} lượt môn.` ,resultType);
     $('roster-excel-file').value='';
-  }catch(e){message($('roster-message'),`Không nạp được Excel: ${e?.message||String(e)}`,'error')}
+  }catch(e){
+    const detail=e?.message||String(e);
+    importStatus(`Nạp thất bại: ${detail}`,'error');
+    message($('roster-message'),`Không nạp được Excel: ${detail}`,'error')
+  }
   finally{btn.disabled=false;btn.textContent=old}
 }
 function downloadRosterExcelTemplate(){
