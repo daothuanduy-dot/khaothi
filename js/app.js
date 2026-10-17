@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.87';
-import {loadTabModules} from './module-loader.js?v=0.1.87';
-import {wireOperations} from './operations.js?v=0.1.87';
-const APP_VERSION='v0.1.87';
-const APP_BUILD='2026-10-18-roster-import-feedback';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.89';
+import {loadTabModules} from './module-loader.js?v=0.1.89';
+import {wireOperations} from './operations.js?v=0.1.89';
+const APP_VERSION='v0.1.89';
+const APP_BUILD='2026-10-18-normalize-ktpl-code';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1708,7 +1708,7 @@ function normalizeSubjectLabel(value){
 }
 function canonicalSubjectCode(value){
   const key=normalizeSubjectLabel(value);
-  if(key==='ktpl')return 'GDKTPL';
+  if(key==='ktpl'||key==='gdktpl')return 'KTPL';
   const aliases={
     toan:'TOAN',toanhoc:'TOAN',van:'VAN',nguvan:'VAN',nguvanhoc:'VAN',
     anh:'N1',tienganh:'N1',english:'N1',
@@ -1724,7 +1724,7 @@ function canonicalSubjectCode(value){
     dia:'DIA',diali:'DIA',dialy:'DIA',geography:'DIA',
     sinh:'SINH',sinhhoc:'SINH',biology:'SINH',
     tin:'TIN',tinhoc:'TIN',informatics:'TIN',
-    gdktpl:'GDKTPL',giaoduckinhtephapluat:'GDKTPL'
+    gdktpl:'KTPL',giaoduckinhtephapluat:'KTPL'
   };
   const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];
   for(const item of all){
@@ -1732,7 +1732,7 @@ function canonicalSubjectCode(value){
   }
   return aliases[key]||'';
 }
-function importSubjectCode(value){const raw=String(value??'').trim().toUpperCase().replace(/[.\s_-]+/g,'');const code=raw==='KTPL'?'GDKTPL':raw==='ANH'?'N1':raw;return ['N1','N2','N3','N4','N5','N6','N7','SU','DIA','GDKTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
+function importSubjectCode(value){const raw=String(value??'').trim().toUpperCase().replace(/[.\s_-]+/g,'');const code=['KTPL','GDKTPL'].includes(raw)?'KTPL':raw==='ANH'?'N1':raw;return ['N1','N2','N3','N4','N5','N6','N7','SU','DIA','KTPL','LY','HOA','SINH','TIN'].includes(code)?code:''}
 function initSubjectCatalog(){const select=$('subject-code');const all=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];select.innerHTML=all.map(s=>`<option value=\"${s.code}\">${s.name} (${s.code})</option>`).join('');initSubjectDeleteSelector()}
 function initSubjectDeleteSelector(){
   $('subject-delete-code').innerHTML='<option value="">Tất cả môn thi</option>'+[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS]
@@ -1797,8 +1797,8 @@ function normalizeSubjectChoiceRows(rows){
       if(!studentCode) throw new Error(`Dòng ${i+2}: thiếu Mã DD Bộ GD&ĐT.`);
       if(!s1||!s2) throw new Error(`Dòng ${i+2}: cần nhập đủ Môn 1 và Môn 2.`);
       const c1=importSubjectCode(s1), c2=importSubjectCode(s2);
-      if(!c1) throw new Error(`Dòng ${i+2}: Môn 1 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s1}".`);
-      if(!c2) throw new Error(`Dòng ${i+2}: Môn 2 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s2}".`);
+      if(!c1) throw new Error(`Dòng ${i+2}: Môn 1 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, KTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s1}".`);
+      if(!c2) throw new Error(`Dòng ${i+2}: Môn 2 phải là mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, KTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn. Giá trị hiện tại: "${s2}".`);
       if(c1===c2){invalidRows.push({line:i+2,code:studentCode,name:studentName,reason:`trùng môn ${c1}`});continue;}
       result.push({student_code:studentCode,student_name:studentName,subject_code:c1,subject_order:1,subject_type:'elective'});
       result.push({student_code:studentCode,student_name:studentName,subject_code:c2,subject_order:2,subject_type:'elective'});
@@ -1808,7 +1808,7 @@ function normalizeSubjectChoiceRows(rows){
     const subjectCode=get(row,aliases.subject_code)||String(row.subject_code??'').trim();
     if(subjectCode){
       const normalized=importSubjectCode(subjectCode);
-      if(!normalized) throw new Error(`Dòng ${i+2}: cột subject_code phải chứa mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, GDKTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn.`);
+      if(!normalized) throw new Error(`Dòng ${i+2}: cột subject_code phải chứa mã môn hợp lệ (N1–N7 cho ngoại ngữ; SU, DIA, KTPL, LY, HOA, SINH, TIN cho các môn khác), không dùng tên môn.`);
       result.push({
         student_code:studentCode,
         student_name:studentName,
@@ -1944,7 +1944,7 @@ async function applySubject(){
       targets=targets.map(st=>({candidate_id:st.id,subject_code:selectedCode,subject_order:selectedOrder,subject_type:type}));
     }
     if(!targets.length)throw new Error('Không tìm thấy học sinh phù hợp với phạm vi áp dụng.');
-    const allowed=new Set(['TOAN','VAN','N1','N2','N3','N4','N5','N6','N7','ANH','SU','DIA','GDKTPL','LY','HOA','SINH','TIN']);
+    const allowed=new Set(['TOAN','VAN','N1','N2','N3','N4','N5','N6','N7','ANH','SU','DIA','KTPL','LY','HOA','SINH','TIN']);
     for(const t of targets){
       t.subject_code=canonicalSubjectCode(t.subject_code)||String(t.subject_code||'').trim().toUpperCase();
       if(!allowed.has(t.subject_code))throw new Error(`Mã môn "${t.subject_code}" không nằm trong danh mục CSDL cho phép.`);
@@ -2251,8 +2251,11 @@ async function importRosterElectivesFromExcel(){
     $('roster-excel-file').value='';
   }catch(e){
     const detail=e?.message||String(e);
-    importStatus(`Nạp thất bại: ${detail}`,'error');
-    message($('roster-message'),`Không nạp được Excel: ${detail}`,'error')
+    const hint=/exam_candidate_subjects_subject_code_check/i.test(detail)
+      ?' CSDL chưa chạy migration v0.1.89 để chuẩn hóa GDKTPL về KTPL và cho phép mã môn hiện hành.'
+      :'';
+    importStatus(`Nạp thất bại: ${detail}${hint}`,'error');
+    message($('roster-message'),`Không nạp được Excel: ${detail}${hint}`,'error')
   }
   finally{btn.disabled=false;btn.textContent=old}
 }
