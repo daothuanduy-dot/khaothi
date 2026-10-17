@@ -65,7 +65,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.86</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.87</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -142,7 +142,7 @@
 .room-editor-columns option{padding:5px}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.86 · build 2026-10-18-school-student-grade-class-sync</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.87 · build 2026-10-18-roster-import-feedback</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM TỰ LUẬN</div><h1>Chấm bài theo phách</h1><p>Tài khoản chỉ được xem phách và điểm của kỳ thi/môn được phân công.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
@@ -160,7 +160,7 @@
     <div id="grader-score-rules" class="notice notice-info">Điểm được kiểm tra theo cấu hình của môn.</div>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Phách</th><th>Điểm</th><th>Cập nhật</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="4" class="empty">Chọn kỳ thi và môn được phân công.</td></tr></tbody></table></div>
   </section>
-  <script type="module" src="./js/app.js?v=0.1.86"></script>
+  <script type="module" src="./js/app.js?v=0.1.87"></script>
   <script>
     (() => {
       const form = document.getElementById('setup-form');
