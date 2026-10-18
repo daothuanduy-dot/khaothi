@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.90';
-import {loadTabModules} from './module-loader.js?v=0.1.90';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.91';
+import {loadTabModules} from './module-loader.js?v=0.1.91';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.90';
-const APP_BUILD='2026-10-18-class-roster-print';
+const APP_VERSION='v0.1.91';
+const APP_BUILD='2026-10-18-round-rooming-manual';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -978,7 +978,31 @@ async function loadPreviousScores(previousExamId){
  }
  throw new Error('Không thể sắp xếp theo kết quả kỳ thi trước. '+lastError+' Hãy xác nhận tên bảng kết quả và các cột mã học sinh, điểm trong Supabase.');
 }
-async function findCurrentRoomingFinalization(examId,planType,subjectCode){
+function selectedRoomingRound(){return Number($('rooming-round')?.value||1)}
+function selectedRoomingMode(){return $('rooming-adjustment-mode')?.value||'automatic'}
+function roomingSubjectFilter(query,planType,subjectCode){return planType==='mandatory'?query.eq('subject_code',subjectCode):query.is('subject_code',null)}
+async function findCurrentRoundPlan(examId,roundNo,planType,subjectCode,status){
+ let query=state.client.from('exam_rooming_round_plans').select('*')
+  .eq('exam_id',examId).eq('round_no',roundNo).eq('plan_type',planType).eq('status',status);
+ query=roomingSubjectFilter(query,planType,subjectCode);
+ const{data,error}=await query.order('created_at',{ascending:false}).limit(1).maybeSingle();
+ if(error)throw new Error(`Khong doc duoc phuong an dot ${roundNo}. Hay chay migration SQL v0.1.91. ${error.message}`);
+ return data||null;
+}
+async function findOfficialRoundCandidateIds(examId){
+ const{data,error}=await state.client.from('exam_rooming_round_plans').select('assignments')
+  .eq('exam_id',examId).eq('round_no',1).eq('status','official');
+ if(error)throw new Error(`Khong kiem tra duoc thi sinh da thi dot 1. Hay chay migration SQL v0.1.91. ${error.message}`);
+ const ids=new Set((data||[]).flatMap(row=>Array.isArray(row.assignments)?row.assignments:[]).map(row=>String(row.candidate_id||'')));
+ if(ids.size)return ids;
+ const legacy=await selectAllPages(()=>state.client.from('exam_rooming_finalizations').select('id').eq('exam_id',examId).eq('is_current',true));
+ if(legacy.length){const assignments=await selectAllPages(()=>state.client.from('exam_room_assignments').select('candidate_id').in('finalization_id',legacy.map(row=>row.id)));for(const row of assignments)ids.add(String(row.candidate_id||''));}
+ return ids;
+}
+async function findCurrentRoomingFinalization(examId,planType,subjectCode,roundNo=1){
+ const roundPlan=await findCurrentRoundPlan(examId,roundNo,planType,subjectCode,'official');
+ if(roundPlan)return {record:{...roundPlan,finalization_id:roundPlan.id,assignment_count:roundPlan.assignments.length,room_count:roundPlan.rooms.length},assignments:roundPlan.assignments,roundPlan:true};
+ if(roundNo!==1)return null;
  let query=state.client.from('exam_rooming_finalizations').select('*')
   .eq('exam_id',examId).eq('plan_type',planType).eq('is_current',true);
  query=planType==='mandatory'?query.eq('subject_code',subjectCode):query.is('subject_code',null);
@@ -992,7 +1016,10 @@ async function findCurrentRoomingFinalization(examId,planType,subjectCode){
   throw new Error(`Hồ sơ phân phòng ${data.id} khai báo ${data.assignment_count} thí sinh nhưng chỉ đọc được ${assignments.length} phân công. Không tiếp tục bằng dữ liệu thiếu.`);
  return{record:data,assignments};
 }
-async function findLatestRoomingSnapshot(examId,planType,subjectCode){
+async function findLatestRoomingSnapshot(examId,planType,subjectCode,roundNo=1){
+ const roundPlan=await findCurrentRoundPlan(examId,roundNo,planType,subjectCode,'saved');
+ if(roundPlan)return {...roundPlan,source_plan_id:roundPlan.id,assignment_count:roundPlan.assignments.length,room_count:roundPlan.rooms.length};
+ if(roundNo!==1)return null;
  let query=state.client.from('exam_rooming_plan_snapshots').select('*')
   .eq('exam_id',examId).eq('plan_type',planType);
  query=planType==='mandatory'?query.eq('subject_code',subjectCode):query.is('subject_code',null);
@@ -1000,7 +1027,7 @@ async function findLatestRoomingSnapshot(examId,planType,subjectCode){
  if(error)throw new Error(`Không đọc được phương án phân phòng đã lưu. Hãy kiểm tra migration v0.1.45 và quyền xem hồ sơ trong Supabase. ${error.message}`);
  return data||null;
 }
-function restoreSavedRooming(record,assignments,candidates,{examId,planType,subjectCode,finalized,pool}){
+function restoreSavedRooming(record,assignments,candidates,{examId,planType,subjectCode,roundNo=1,adjustmentMode='automatic',finalized,pool}){
  const restored=restoreRoomingPlan(record.rooms,assignments,candidates,{
   planType,subjectCode,capacity:record.capacity,allowMissingCandidates:!finalized
  });
@@ -1016,8 +1043,9 @@ function restoreSavedRooming(record,assignments,candidates,{examId,planType,subj
  $('room-prefix').value=roomPrefix;
  $('first-room-number').value=firstRoomNumber;
  const saved=finalized?{snapshot_id:record.source_plan_id}:record;
+ $('rooming-round').value=String(roundNo);$('rooming-adjustment-mode').value=record.adjustment_mode||adjustmentMode;
  state.preview={
-  examId,planType,subjectCode:subjectCode||null,
+  examId,roundNo,planType,subjectCode:subjectCode||null,adjustmentMode:record.adjustment_mode||adjustmentMode,
   pool:finalized?restored.result.assignments.map(assignment=>assignment):pool,
   options:{capacity:Number(record.capacity),roomPrefix,firstRoomNumber,sortMode:'sbd',previousExamId:null},
   result:restored.result,assignmentsCreated:true,suggestionValid:true,
@@ -1039,6 +1067,7 @@ async function previewRooming(){
  message($('rooming-message'),'Đang tải thí sinh và lập phương án sĩ số phòng...','info');
  try{
   const planType=$('room-plan-type')?.value||'elective';
+  const roundNo=selectedRoomingRound(),adjustmentMode=selectedRoomingMode();
   const subjectCode=planType==='mandatory'?$('mandatory-subject')?.value||'TOAN':null;
   const candidates=await selectAllPages(()=>state.client.from('exam_candidates')
     .select('id,sbd,student_code,student_name,class_code,grade_code,date_of_birth').eq('exam_id',examId).order('sbd').order('id'));
@@ -1055,24 +1084,25 @@ async function previewRooming(){
   if(new Set(sbdValues).size!==sbdValues.length)throw new Error('Phát hiện SBD trùng trong kỳ thi. Hãy cấp lại SBD trước khi xếp phòng.');
   candidates.sort((a,b)=>String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}));
   if(!creatingNewPlan){
-   const current=await findCurrentRoomingFinalization(examId,planType,subjectCode);
+   const current=await findCurrentRoomingFinalization(examId,planType,subjectCode,roundNo);
    if(current){
     restoreSavedRooming(current.record,current.assignments,candidates,{
-     examId,planType,subjectCode,finalized:true,pool:null
+      examId,roundNo,planType,subjectCode,adjustmentMode,finalized:true,pool:null
     });
     const count=current.assignments.length,roomCount=current.record.room_count;
     message($('rooming-message'),`Đã khôi phục phân phòng chính thức từ CSDL: ${count} thí sinh tại ${roomCount} phòng. Hồ sơ này vẫn được giữ nguyên; bấm “Lập phương án mới” nếu cần lập phương án thay thế.`,'success');
     return;
    }
   }
-  const requestedCapacity=Number($('room-capacity').value);if(!Number.isInteger(requestedCapacity)||requestedCapacity<1||requestedCapacity>25)throw new Error('Sức chứa phòng phải từ 1 đến 25 học sinh.');
+  const requestedCapacity=Number($('room-capacity').value);if(!Number.isInteger(requestedCapacity)||requestedCapacity<1)throw new Error('Sức chứa phòng phải là số nguyên dương do người xếp phòng nhập.');
   const sortMode='sbd';
   let sortedCandidates=[...candidates];
+  if(roundNo===2){const roundOneIds=await findOfficialRoundCandidateIds(examId);sortedCandidates=sortedCandidates.filter(candidate=>!roundOneIds.has(String(candidate.id)));}
   // SBD đã phản ánh quy tắc sắp xếp được chọn ở bước cấp số; không sắp xếp lại ở bước xếp phòng.
   let result,invalid=[];
   if(planType==='mandatory'){
     const otherMandatorySubject=subjectCode==='TOAN'?'VAN':'TOAN';
-    const fixedSeatPlan=await findCurrentRoomingFinalization(examId,'mandatory',otherMandatorySubject);
+    const fixedSeatPlan=await findCurrentRoomingFinalization(examId,'mandatory',otherMandatorySubject,roundNo);
     if(fixedSeatPlan){
       const restored=restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
         planType,subjectCode,capacity:fixedSeatPlan.record.capacity
@@ -1093,7 +1123,7 @@ async function previewRooming(){
       $('room-prefix').value=roomPrefix;
       $('first-room-number').value=firstRoomNumber;
       state.preview={
-        examId,planType,subjectCode,pool:sortedCandidates,
+        examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,
         options:{capacity:Number(fixedSeatPlan.record.capacity),roomPrefix,firstRoomNumber,sortMode,previousExamId:null,fixedSeats:true},
         result,assignmentsCreated:true,suggestionValid:true
       };
@@ -1102,9 +1132,9 @@ async function previewRooming(){
       return;
     }
     if(!creatingNewPlan){
-      const snapshot=await findLatestRoomingSnapshot(examId,planType,subjectCode);
+      const snapshot=await findLatestRoomingSnapshot(examId,planType,subjectCode,roundNo);
       if(snapshot){
-        restoreSavedRooming(snapshot,snapshot.assignments,candidates,{examId,planType,subjectCode,finalized:false,pool:sortedCandidates});
+        restoreSavedRooming(snapshot,snapshot.assignments,candidates,{examId,roundNo,planType,subjectCode,adjustmentMode,finalized:false,pool:sortedCandidates});
         const matches=state.preview.assignmentRosterMatches;
         message($('rooming-message'),matches
           ?`Đã khôi phục phương án phân công đã lưu từ CSDL: ${snapshot.assignments.length} thí sinh tại ${snapshot.rooms.length} phòng. Có thể phân phòng chính thức.`
@@ -1113,13 +1143,13 @@ async function previewRooming(){
         return;
       }
     }
-    result=optimizeMandatoryRooms(sortedCandidates,{capacity:Math.min(25,Number($('room-capacity').value)),roomPrefix:$('room-prefix').value||'M',
+    result=optimizeMandatoryRooms(sortedCandidates,{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value||'M',
       firstRoomNumber:$('first-room-number').value,sortMode,subjectCode});
     if(!result.ok)throw new Error((result.errors||['Không tạo được phương án môn bắt buộc.']).join('\n'));
-    state.preview={examId,planType,subjectCode,pool:sortedCandidates,options:{capacity:Math.min(25,Number($('room-capacity').value)),roomPrefix:$('room-prefix').value||'M',
+    state.preview={examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value||'M',
       firstRoomNumber:Number($('first-room-number').value),sortMode,previousExamId:$('room-previous-exam')?.value||null},result};
   }else{
-    const savedSnapshot=creatingNewPlan?null:await findLatestRoomingSnapshot(examId,planType,null);
+    const savedSnapshot=creatingNewPlan?null:await findLatestRoomingSnapshot(examId,planType,null,roundNo);
     const regs=await selectAllPages(()=>state.client.from('exam_candidate_subjects')
       .select('candidate_id,subject_code,subject_order,subject_type').eq('exam_id',examId).eq('subject_type','elective').order('subject_order').order('candidate_id'));
     const byCandidate=new Map();
@@ -1134,7 +1164,7 @@ async function previewRooming(){
     }
     if(!eligible.length&&!savedSnapshot)throw new Error(`Không có thí sinh đủ điều kiện xếp phòng môn lựa chọn. Tổng ${candidates.length}; ${invalid.length} chưa đủ hai môn khác nhau. Ví dụ: ${invalid.slice(0,10).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>10?'…':''}`);
     if(savedSnapshot){
-        restoreSavedRooming(savedSnapshot,savedSnapshot.assignments,candidates,{examId,planType,subjectCode:null,finalized:false,pool:eligible});
+        restoreSavedRooming(savedSnapshot,savedSnapshot.assignments,candidates,{examId,roundNo,planType,subjectCode:null,adjustmentMode,finalized:false,pool:eligible});
         const matches=state.preview.assignmentRosterMatches;
         message($('rooming-message'),matches
           ?`Đã khôi phục phương án phân công đã lưu từ CSDL: ${savedSnapshot.assignments.length} thí sinh tại ${savedSnapshot.rooms.length} phòng. Có thể phân phòng chính thức.`
@@ -1143,10 +1173,10 @@ async function previewRooming(){
         return;
     }
     if(!eligible.length)throw new Error(`Không có thí sinh đủ điều kiện xếp phòng môn lựa chọn. Tổng ${candidates.length}; ${invalid.length} chưa đủ hai môn khác nhau. Ví dụ: ${invalid.slice(0,10).map(x=>`${x.code} (${x.reason})`).join('; ')}${invalid.length>10?'…':''}`);
-    result=optimizeElectiveRooms(eligible,{capacity:Math.min(25,Number($('room-capacity').value)),roomPrefix:$('room-prefix').value,
+    result=optimizeElectiveRooms(eligible,{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value,
       firstRoomNumber:$('first-room-number').value,sortMode});
     if(!result.ok)throw new Error((result.errors||['Không tạo được phương án xếp phòng.']).join('\n'));
-    state.preview={examId,planType,pool:eligible,options:{capacity:Math.min(25,Number($('room-capacity').value)),roomPrefix:$('room-prefix').value,
+    state.preview={examId,roundNo,planType,adjustmentMode,pool:eligible,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value,
       firstRoomNumber:Number($('first-room-number').value),sortMode,previousExamId:$('room-previous-exam')?.value||null},result};
   }
   const preview=state.preview;
@@ -1213,8 +1243,8 @@ function renderRooming(result,planType='elective'){
  $('add-room-plan').disabled=!preview||preview.assignmentsCreated||preview.finalized||preview.saving||preview.finalizing;
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=planType==='mandatory'
-  ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th></tr>'
-  :'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th></tr>';
+  ?`<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th>${preview?.adjustmentMode==='manual'&&!preview?.finalized?'<th>Điều chỉnh</th>':''}</tr>`
+  :`<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Ca 1</th><th>Ca 2</th>${preview?.adjustmentMode==='manual'&&!preview?.finalized?'<th>Điều chỉnh</th>':''}</tr>`;
  const seatNumbers=new Map();
  if(planType==='mandatory'){
   for(const room of result.rooms){
@@ -1223,9 +1253,10 @@ function renderRooming(result,planType='elective'){
     .forEach((assignment,index)=>seatNumbers.set(String(assignment.candidate_id),index+1));
   }
  }
+ const roomPicker=preview?.adjustmentMode==='manual'&&!preview?.finalized?assignment=>`<select data-room-assignment="${esc(assignment.candidate_id)}" aria-label="Phòng của ${esc(assignment.student_name)}">${result.rooms.map(room=>`<option value="${esc(room.room_code)}" ${room.room_code===assignment.room_code?'selected':''}>${esc(room.room_code)}</option>`).join('')}</select>`:'';
  $('assignment-table-body').innerHTML=result.assignments.length?result.assignments.map(a=>planType==='mandatory'
-  ?`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${seatNumbers.get(String(a.candidate_id))??''}</td></tr>`
-  :`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td></tr>`).join('')
+  ?`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${seatNumbers.get(String(a.candidate_id))??''}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`
+  :`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`).join('')
   :`<tr><td colspan="${planType==='mandatory'?5:6}" class="empty">Chưa gán thí sinh. Điều chỉnh sĩ số phòng rồi bấm “Lưu phân bổ phòng”.</td></tr>`;
  const planned=preview?.result.rooms.reduce((sum,room)=>sum+Number(room.student_count||0),0)||0;
  $('room-plan-status').textContent=preview
@@ -1256,6 +1287,29 @@ function syncRoomingResult(result,planType){
  result.summary.partial_rooms=occupiedRooms.filter(r=>r.student_count<r.capacity).length;
  if(planType==='elective')result.summary.subject_count=result.rooms.reduce((sum,r)=>sum+r.ca1_subject_codes.length+r.ca2_subject_codes.length,0);
 }
+function rebuildRoomingFromAssignments(preview){
+ const assignments=preview.result.assignments||[],byRoom=new Map(preview.result.rooms.map(room=>[room.room_code,{...room,student_count:0,candidate_ids:[],ca1_subject_codes:[],ca2_subject_codes:[]}]))
+ for(const assignment of assignments){
+  const room=byRoom.get(String(assignment.room_code));if(!room)continue;
+  room.student_count++;room.candidate_ids.push(assignment.candidate_id);
+  if(preview.planType==='elective'){if(assignment.ca1_subject_code&&!room.ca1_subject_codes.includes(assignment.ca1_subject_code))room.ca1_subject_codes.push(assignment.ca1_subject_code);if(assignment.ca2_subject_code&&!room.ca2_subject_codes.includes(assignment.ca2_subject_code))room.ca2_subject_codes.push(assignment.ca2_subject_code)}
+ }
+ preview.result.rooms=[...byRoom.values()].map(room=>({...room,ca1_subject_codes:room.ca1_subject_codes.sort(),ca2_subject_codes:room.ca2_subject_codes.sort(),ca1_subject_name:room.ca1_subject_codes.map(subjectName).join(', '),ca2_subject_name:room.ca2_subject_codes.map(subjectName).join(', ')||'—'}));
+ syncRoomingResult(preview.result,preview.planType);
+}
+function validateRoomingPlan(preview){
+ if(!preview)return {ok:false,errors:['Chưa có phương án xếp phòng.']};
+ const errors=[],rooms=preview.result.rooms||[],assignments=preview.result.assignments||[],poolIds=new Set((preview.pool||[]).map(poolCandidateId)),roomMap=new Map();
+ if(!rooms.length)errors.push('Phương án chưa có phòng.');
+ for(const room of rooms){const count=Number(room.student_count);if(!room.room_code||roomMap.has(room.room_code))errors.push(`Mã phòng ${room.room_code||'(trống)'} bị trùng hoặc trống.`);if(!Number.isInteger(count)||count<1)errors.push(`Sĩ số phòng ${room.room_code||'(trống)'} phải là số nguyên dương.`);if(Number.isInteger(preview.options.capacity)&&count>preview.options.capacity)errors.push(`Phòng ${room.room_code} vượt sĩ số nhập là ${preview.options.capacity}.`);roomMap.set(room.room_code,room)}
+ const seen=new Set(),countByRoom=new Map();
+ for(const assignment of assignments){const id=String(assignment.candidate_id||'');if(!poolIds.has(id))errors.push(`Thí sinh ${assignment.student_code||assignment.sbd||id} không thuộc danh sách đợt này.`);if(seen.has(id))errors.push(`Thí sinh ${assignment.student_code||assignment.sbd||id} bị xếp trùng phòng.`);seen.add(id);const room=roomMap.get(assignment.room_code);if(!room)errors.push(`Thí sinh ${assignment.student_code||assignment.sbd||id} chưa có phòng hợp lệ.`);countByRoom.set(assignment.room_code,(countByRoom.get(assignment.room_code)||0)+1);
+  if(preview.planType==='mandatory'){if(String(assignment.subject_code||'').toUpperCase()!==String(preview.subjectCode||'').toUpperCase())errors.push(`Thí sinh ${assignment.student_code||assignment.sbd||id} không khớp môn bắt buộc.`)}else{const candidate=(preview.pool||[]).find(item=>poolCandidateId(item)===id),registered=new Set(candidate?.elective_subjects||[]),c1=String(assignment.ca1_subject_code||''),c2=String(assignment.ca2_subject_code||'');if(!c1||!c2||c1===c2||!registered.has(c1)||!registered.has(c2))errors.push(`Cặp môn của thí sinh ${assignment.student_code||assignment.sbd||id} không khớp đăng ký.`)}
+ }
+ if(seen.size!==(preview.pool||[]).length)errors.push(`Đã phân ${seen.size}/${(preview.pool||[]).length} thí sinh; còn thiếu ${Math.max(0,(preview.pool||[]).length-seen.size)} thí sinh.`);
+ for(const room of rooms){const actual=countByRoom.get(room.room_code)||0;if(actual!==Number(room.student_count))errors.push(`Phòng ${room.room_code} khai báo ${room.student_count} nhưng thực tế có ${actual} thí sinh.`);if(preview.planType==='elective'){const c1=new Set(assignments.filter(a=>a.room_code===room.room_code).map(a=>a.ca1_subject_code).filter(Boolean)),c2=new Set(assignments.filter(a=>a.room_code===room.room_code).map(a=>a.ca2_subject_code).filter(Boolean));for(const code of c1)if(c2.has(code))errors.push(`Môn ${subjectName(code)} đang xuất hiện ở cả Ca 1 và Ca 2 trong phòng ${room.room_code}.`)}}
+ return {ok:errors.length===0,errors:[...new Set(errors)]};
+}
 function updateRoomingActions(){
  const preview=state.preview;
  const planned=(preview?.result.rooms||[]).reduce((sum,room)=>sum+Number(room.student_count||0),0);
@@ -1266,7 +1320,8 @@ function updateRoomingActions(){
   new Set(preview.result.assignments.map(assignment=>String(assignment.candidate_id))).size===total&&
   preview.pool.every(candidate=>preview.result.assignments.some(assignment=>String(assignment.candidate_id)===poolCandidateId(candidate))));
  const saved=Boolean(preview?.saved),finalized=Boolean(preview?.finalized);
- $('save-rooming').disabled=!preview||!planMatchesRoster||!assignmentsMatchRoster||preview?.assignmentRosterMatches===false||saved||finalized||preview?.saving||preview?.finalizing;
+ const manualValidation=preview?.adjustmentMode==='manual'?validateRoomingPlan(preview):{ok:true,errors:[]};
+ $('save-rooming').disabled=!preview||!planMatchesRoster||!assignmentsMatchRoster||!manualValidation.ok||preview?.assignmentRosterMatches===false||saved||finalized||preview?.saving||preview?.finalizing;
  $('lock-rooming').disabled=!preview||!saved||!assigned||!assignmentsMatchRoster||preview?.assignmentRosterMatches===false||finalized||preview?.finalizing;
  $('lock-rooming').textContent=finalized?'Đã phân phòng chính thức':'Phân phòng chính thức';
  $('export-rooming').disabled=!finalized;
@@ -1365,39 +1420,26 @@ function assignRoomingCandidates(){
 }
 async function saveRooming(){
  if(!state.preview){message($('rooming-message'),'Hãy tạo phương án xem trước trước.','error');return}
- if(!state.preview.assignmentsCreated&&!assignRoomingCandidates())return;
+ if(state.preview.adjustmentMode==='manual'){
+  const validation=validateRoomingPlan(state.preview);
+  if(!validation.ok){message($('rooming-message'),`Chưa thể lưu phương án thủ công:\n${validation.errors.join('\n')}`,'error');return}
+  state.preview.assignmentsCreated=true;rebuildRoomingFromAssignments(state.preview);renderRooming(state.preview.result,state.preview.planType);
+ }else if(!state.preview.assignmentsCreated&&!assignRoomingCandidates())return;
+ const preSaveValidation=validateRoomingPlan(state.preview);
+ if(!preSaveValidation.ok){message($('rooming-message'),`Chưa thể lưu phương án:\n${preSaveValidation.errors.join('\n')}`,'error');return}
  const preview=state.preview;if(preview.saving)return;
  preview.saving=true;updateRoomingActions();
  $('preview-rooming').disabled=true;$('rooming-exam-select').disabled=true;$('room-plan-type').disabled=true;
  try{
-  const{examId,planType,subjectCode,options,result}=preview;
+  const{examId,roundNo,planType,subjectCode,adjustmentMode,options,result}=preview;
   const rooms=result.rooms.filter(room=>room.student_count>0);
-  let rpcName,payload;
-  if(planType==='mandatory'){
-   rpcName='exam_save_mandatory_room_plan';
-   payload={p_exam_id:examId,p_subject_code:subjectCode,p_capacity:options.capacity,p_room_prefix:options.roomPrefix,
-    p_first_room_number:options.firstRoomNumber,p_rooms:rooms,p_assignments:result.assignments,p_lock:false};
-  }else{
-   rpcName='exam_save_elective_room_plan';
-   payload={p_exam_id:examId,p_capacity:options.capacity,p_room_prefix:options.roomPrefix,p_first_room_number:options.firstRoomNumber,
-    p_rooms:rooms,p_assignments:result.assignments,p_lock:false};
-  }
-  const{data,error}=await state.client.rpc(rpcName,payload);
-  if(error)throw new Error(`Không lưu được phương án ${planType==='mandatory'?'môn bắt buộc':'môn lựa chọn'}. ${planType==='mandatory'?'Hãy chạy migration SQL v0.1.39. ':'Nếu là môn lựa chọn, hãy xác nhận đã chạy migration SQL v0.1.53. '}${error.message}`);
-  const sourcePlanId=data?.plan_id;
-  if(typeof sourcePlanId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sourcePlanId))
-   throw new Error('RPC lưu phương án không trả về plan_id hợp lệ. Phương án đã gửi nhưng chưa thể phân phòng chính thức.');
-  const{data:snapshot,error:snapshotError}=await state.client.rpc('exam_save_rooming_plan_snapshot',{
-   p_exam_id:examId,p_plan_type:planType,p_subject_code:subjectCode||null,p_capacity:options.capacity,
-   p_rooms:rooms,p_assignments:result.assignments,p_source_plan_id:sourcePlanId
-  });
-  if(snapshotError)throw new Error(`Phương án nền đã lưu nhưng không tạo được snapshot để phân phòng chính thức. Hãy chạy migration v0.1.45. ${snapshotError.message}`);
-  const snapshotId=snapshot?.snapshot_id;
-  if(typeof snapshotId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(snapshotId))
-   throw new Error('RPC không trả về snapshot_id hợp lệ; chưa thể phân phòng chính thức.');
+  const{data,error}=await state.client.rpc('exam_save_rooming_round_plan',{p_exam_id:examId,p_round_no:roundNo,p_plan_type:planType,p_subject_code:subjectCode||null,p_adjustment_mode:adjustmentMode||'automatic',p_capacity:options.capacity,p_room_prefix:options.roomPrefix,p_first_room_number:options.firstRoomNumber,p_rooms:rooms,p_assignments:result.assignments,p_lock:false});
+  if(error)throw new Error(`Không lưu được phương án đợt ${roundNo}. Hãy chạy migration SQL v0.1.91. ${error.message}`);
+  const snapshotId=data?.plan_id;
+  if(typeof snapshotId!=='string')throw new Error('RPC không trả về plan_id hợp lệ; chưa thể phân phòng chính thức.');
   if(state.preview!==preview)return;
-  preview.saved=snapshot;preview.sourcePlanId=snapshotId;preview.finalized=null;
-  message($('rooming-message'),`Đã lưu snapshot phân bổ phòng ${snapshotId}. Kiểm tra danh sách, sau đó chọn “Phân phòng chính thức”.`,'success');
+  preview.saved={...data,plan_id:snapshotId};preview.sourcePlanId=snapshotId;preview.finalized=null;
+  message($('rooming-message'),`Đã lưu phân bổ đợt ${roundNo} (${adjustmentMode==='manual'?'thủ công':'tự động'}). Kiểm tra danh sách, sau đó chọn “Phân phòng chính thức”.`,'success');
  }catch(error){
   if(state.preview===preview)message($('rooming-message'),error.message||String(error),'error');
  }finally{
@@ -1409,6 +1451,8 @@ async function saveRooming(){
 async function finalizeRooming(){
  const preview=state.preview;
  if(!preview)return;
+ const finalValidation=validateRoomingPlan(preview);
+ if(!finalValidation.ok){message($('rooming-message'),`Chưa thể phân phòng chính thức:\n${finalValidation.errors.join('\n')}`,'error');return}
  if(preview.assignmentRosterMatches===false){
   message($('rooming-message'),'Roster đã thay đổi so với phương án đã lưu. Hồ sơ cũ được giữ nguyên; hãy lập phương án mới trước khi phân phòng chính thức.','error');return;
  }
@@ -1423,15 +1467,8 @@ async function finalizeRooming(){
  $('preview-rooming').disabled=true;$('rooming-exam-select').disabled=true;$('room-plan-type').disabled=true;
  try{
   const occupiedRooms=preview.result.rooms.filter(room=>room.student_count>0);
-  const {data,error}=await state.client.rpc('exam_finalize_rooming_plan',{
-   p_exam_id:preview.examId,p_plan_type:preview.planType,p_subject_code:preview.subjectCode||null,
-   p_capacity:preview.options.capacity,p_rooms:occupiedRooms,p_assignments:preview.result.assignments,
-   p_source_plan_id:preview.sourcePlanId
-  });
-  if(error){
-   const missingFinalizeFunction=error.code==='42883'||error.code==='PGRST202';
-   throw new Error(`Không thể phân phòng chính thức.${missingFinalizeFunction?' Hãy chạy migration v0.1.45 trên đúng project Supabase.':''} ${error.message}`);
-  }
+  const {data,error}=await state.client.rpc('exam_finalize_rooming_round_plan',{p_plan_id:preview.sourcePlanId});
+  if(error)throw new Error(`Không thể phân phòng chính thức đợt ${preview.roundNo||1}. Hãy chạy migration SQL v0.1.91. ${error.message}`);
   preview.result.rooms=occupiedRooms;
   preview.finalized=data;
   updateRoomingActions();
@@ -2372,6 +2409,8 @@ $('room-plan-type').onchange=()=>{const mandatory=$('room-plan-type').value==='m
   $('roster-import-btn').onclick=importRosterElectivesFromExcel;$('roster-print-btn').onclick=printRosterChoices;$('roster-template-btn').onclick=downloadRosterExcelTemplate;$('roster-reload').onclick=loadRosterData;$('roster-grade').onchange=()=>{syncRosterClassFilters();state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-class').onchange=()=>{state.rosterPage=0;renderRosterTable();renderRosterStats()};$('roster-search').oninput=()=>{state.rosterPage=0;renderRosterTable()};$('roster-show-overage').onchange=renderRosterTable;$('roster-prev').onclick=()=>{state.rosterPage=Math.max(0,state.rosterPage-1);renderRosterTable()};$('roster-next').onclick=()=>{state.rosterPage++;renderRosterTable()};$('roster-table-body').addEventListener('change',e=>{if(e.target.matches('[data-roster-subject]')){const tr=e.target.closest('tr'),sels=[...tr.querySelectorAll('[data-roster-subject]')];const id=String(tr.dataset.candidateId);state.rosterDirty.set(id,{m1:sels[0].value,m2:sels[1].value});tr.classList.add('roster-dirty');renderRosterTable();}});$('roster-table-body').addEventListener('click',async e=>{const btn=e.target.closest('[data-roster-save]');if(btn){btn.disabled=true;const ok=await saveRosterStudent(btn.dataset.rosterSave);if(ok){renderRosterTable();renderRosterStats();message($('roster-message'),'Đã lưu môn lựa chọn cho học sinh.','success')}btn.disabled=false}});$('roster-save-all').onclick=saveRosterAll;$('overage-grade').onchange=syncOverageClassFilters;$('overage-class').onchange=syncOverageStudents;$('overage-add').onclick=addOverageStudent;$('roster-stats-refresh').onclick=renderRosterStats;$('roster-stats-scope').onchange=()=>{if($('roster-stats-scope').value==='all'){$('roster-stats-grade').disabled=true;$('roster-stats-class').disabled=true}else{$('roster-stats-grade').disabled=false;$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class'||!$('roster-stats-grade').value}renderRosterStats()};$('roster-stats-grade').onchange=()=>{syncRosterStatsClass();$('roster-stats-class').disabled=$('roster-stats-scope').value!=='class';renderRosterStats()};$('roster-stats-class').onchange=renderRosterStats;
 }
 function wireRoomingEditor(){
+ $('rooming-round').onchange=()=>{state.preview=null;$('preview-rooming').textContent='Xem trước phương án phòng';clearRoomingPreview();message($('rooming-message'),'Đã chuyển sang đợt thi mới. Hãy lập hoặc khôi phục phương án của đợt này.','info')};
+ $('rooming-adjustment-mode').onchange=()=>{if(state.preview&&!state.preview.finalized){state.preview.adjustmentMode=selectedRoomingMode();state.preview.assignmentsCreated=false;state.preview.saved=null;state.preview.sourcePlanId=null;renderRooming(state.preview.result,state.preview.planType);updateRoomingActions();message($('rooming-message'),state.preview.adjustmentMode==='manual'?'Đã chọn điều chỉnh thủ công. Có thể chuyển từng thí sinh giữa các phòng rồi kiểm tra và lưu.':'Đã chọn điều chỉnh tự động theo thuật toán.','info')}};
  $('rooming-exam-select').onchange=()=>{
   state.selectedExam=$('rooming-exam-select').value||null;state.preview=null;
   $('preview-rooming').textContent='Xem trước phương án phòng';
@@ -2393,6 +2432,18 @@ function wireRoomingEditor(){
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
+ $('assignment-table-body').addEventListener('change',event=>{
+  const select=event.target.closest('[data-room-assignment]'),preview=state.preview;
+  if(!select||!preview||preview.adjustmentMode!=='manual'||preview.finalized)return;
+  const assignment=preview.result.assignments.find(item=>String(item.candidate_id)===String(select.dataset.roomAssignment));
+  if(!assignment)return;
+  assignment.room_code=select.value;
+  preview.assignmentsCreated=false;preview.saved=null;preview.finalized=null;preview.sourcePlanId=null;preview.suggestionValid=false;
+  rebuildRoomingFromAssignments(preview);
+  renderRooming(preview.result,preview.planType);
+  const validation=validateRoomingPlan(preview);
+  message($('rooming-message'),validation.ok?'Phương án thủ công hợp lệ, có thể lưu.':`Chưa thể lưu phương án thủ công:\n${validation.errors.join('\n')}`,validation.ok?'success':'error');
+ });
  $('rooming-table-body').addEventListener('click',event=>{
   const button=event.target.closest('[data-remove-room]');
   if(button)removeRoomFromPlan(button.dataset.removeRoom);
