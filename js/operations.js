@@ -91,13 +91,25 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const previous=roundSelect.value;
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>';
     if(!examId)return;
-    let rounds=checkResult(await state.client.from('exam_rounds').select('round_no,name,is_active')
-      .eq('exam_id',examId).eq('is_active',true).order('round_no'),'Không tải được danh sách đợt thi');
-    if(!rounds?.length){
-      const fallback=checkResult(await state.client.from('exam_rooming_round_plans').select('round_no')
-        .eq('exam_id',examId).eq('status','official').order('round_no'),'Không tải được các đợt đã phân phòng');
-      rounds=[...new Map((fallback||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
+    let rounds=[];
+    let roundsError=null;
+    const configured=await state.client.from('exam_rounds').select('round_no,name,is_active')
+      .eq('exam_id',examId).eq('is_active',true).order('round_no');
+    if(configured.error)roundsError=configured.error;
+    else rounds=configured.data||[];
+    if(!rounds.length){
+      const official=await state.client.from('exam_rooming_round_plans').select('round_no')
+        .eq('exam_id',examId).eq('status','official').order('round_no');
+      if(official.error)roundsError=roundsError||official.error;
+      else rounds=[...new Map((official.data||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
     }
+    if(!rounds.length){
+      const candidates=await state.client.from('exam_round_candidates').select('round_no')
+        .eq('exam_id',examId).order('round_no');
+      if(candidates.error)roundsError=roundsError||candidates.error;
+      else rounds=[...new Map((candidates.data||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
+    }
+    if(!rounds.length&&roundsError)throw new Error(`Không tải được danh sách đợt thi. Hãy kiểm tra migration v0.1.92 và quyền đọc dữ liệu. ${roundsError.message}`);
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
       `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
     const available=rounds.map(round=>String(round.round_no));
@@ -105,7 +117,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function loadForms(){
-    const examId=currentExam('forms-exam'),roundValue=$('forms-round')?.value||'';
+    const examId=currentExam('forms-exam');
+    if(examId&&$('forms-round')&&$('forms-round').options.length<=1)await loadFormRounds(examId);
+    const roundValue=$('forms-round')?.value||'';
     const roundNo=roundValue?Number(roundValue):null;
     cache.forms=null;
     $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
