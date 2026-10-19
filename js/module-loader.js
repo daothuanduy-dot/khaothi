@@ -1,6 +1,7 @@
 const TAB_MODULES = ['exams', 'school-students', 'candidates', 'subjects', 'sbd', 'rooming', 'forms', 'absences', 'scripts', 'scores', 'settings'];
 // Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
-const MODULE_VERSION = '0.1.98';
+const MODULE_VERSION = '0.1.99';
+// Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
 
 export async function loadTabModules() {
   const modules = await Promise.all(TAB_MODULES.map(async name => {

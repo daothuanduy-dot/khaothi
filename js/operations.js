@@ -64,6 +64,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         `<option value="${esc(exam.id)}">${esc(exam.name)} (${esc(exam.school_year)})</option>`).join('');
       select.value=state.selectedExam||current||'';
     }
+    const formsExam=$('forms-exam')?.value;
+    if(formsExam&&$('forms-round'))loadFormRounds(formsExam)
+      .catch(error=>message($('forms-message'),error.message,'error'));
   };
   const currentExam=select=>$(select).value;
   const setSubjectOptions=(element,options=subjects,includeBlank=true)=>{

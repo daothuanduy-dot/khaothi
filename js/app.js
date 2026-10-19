@@ -1,8 +1,8 @@
 import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.98';
 import {loadTabModules} from './module-loader.js?v=0.1.98';
-import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.98';
-const APP_BUILD='2026-10-19-elective-rooming-validation';
+import {wireOperations} from './operations.js?v=0.1.99';
+const APP_VERSION='v0.1.99';
+const APP_BUILD='2026-10-19-forms-round-rooming-plans';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
