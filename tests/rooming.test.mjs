@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, isValidSbd, optimizeElectiveRooms, optimizeMandatoryRooms, restoreRoomingPlan, roomExportRowPositions } from '../js/rooming.js';
+import { adjustRoomPlanCount, allocateCandidatesToRoomPlan, assignElectiveCandidateToRoom, buildElectiveSbdPlan, isValidSbd, optimizeElectiveRooms, optimizeMandatoryRooms, restoreRoomingPlan, roomExportRowPositions, validateElectiveRoomSessions } from '../js/rooming.js';
 
 test('SBD validation accepts only six or eight digits', () => {
   assert.equal(isValidSbd('315001'), true);
@@ -68,6 +68,35 @@ test('elective rooming assigns every candidate once, respects capacity, and keep
       room.ca2_subject_codes.includes(row.ca2_subject_code)
     ));
   }
+});
+
+test('elective grouping sorts each subject block by given name, middle name, family name', () => {
+  const candidates = [
+    { id: '1', student_name: 'Tran Van Binh', elective_subjects: ['ANH', 'LY'] },
+    { id: '2', student_name: 'Nguyen Thi An', elective_subjects: ['ANH', 'LY'] },
+    { id: '3', student_name: 'Le Duc An', elective_subjects: ['ANH', 'LY'] }
+  ];
+  const result = buildElectiveSbdPlan(candidates, { capacity: 10, prefix: '31', totalLength: 6 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.assignments.map(row => row.student_name), [
+    'Le Duc An', 'Nguyen Thi An', 'Tran Van Binh'
+  ]);
+  assert.deepEqual(result.assignments.map(row => row.sbd), ['310001', '310002', '310003']);
+  assert.deepEqual(result.assignments.map(row => row.room_code), ['P01', 'P01', 'P01']);
+});
+
+test('a room rejects a subject appearing in both exam sessions', () => {
+  assert.deepEqual(validateElectiveRoomSessions([
+    { ca1_subject_code: 'ANH', ca2_subject_code: 'LY' },
+    { ca1_subject_code: 'SU', ca2_subject_code: 'ANH' }
+  ]), {
+    ok: false,
+    error: 'Không được xếp cùng một môn ở cả ca trước và ca sau trong một phòng.'
+  });
+  assert.deepEqual(validateElectiveRoomSessions([
+    { ca1_subject_code: 'ANH', ca2_subject_code: 'LY' },
+    { ca1_subject_code: 'SU', ca2_subject_code: 'DIA' }
+  ]), { ok: true });
 });
 
 test('mandatory rooming includes the full roster and never exceeds room capacity', () => {
@@ -234,7 +263,7 @@ test('candidate assignment happens only against room quotas that exactly match t
 });
 
 test('elective allocation rebalances a 533-candidate plan of seventeen 24-seat and five 25-seat rooms', () => {
-  const subjects = ['ANH', 'SU', 'DIA', 'LY', 'HOA', 'SINH', 'TIN', 'KTPL', 'GDKTPL'];
+  const subjects = ['ANH', 'SU', 'DIA', 'LY', 'HOA', 'SINH', 'TIN', 'KTPL'];
   let seed = 20261015;
   const randomValue = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;

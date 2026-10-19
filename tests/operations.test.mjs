@@ -98,9 +98,10 @@ test('Supabase connection errors are distinct from application initialization er
   assert.match(app, /function showConnectionFailure\(error\)[\s\S]*?if\(state\.client\)[\s\S]*?Đã kết nối Supabase nhưng không khởi tạo được ứng dụng/);
   assert.match(app, /await connect\(url,key\);saveConfig\(url,key\);await openConnectedApp\(\)/);
   assert.match(app, /await connect\(config\.url,config\.key\);await openConnectedApp\(\)/);
-  assert.match(app, /operations\.js\?v=0\.1\.100/);
-  assert.match(app, /module-loader\.js\?v=0\.1\.100/);
-  assert.match(app, /rooming\.js\?v=0\.1\.100/);
+  const version=app.match(/const APP_VERSION='v([^']+)'/)[1];
+  for(const module of ['operations','module-loader','rooming','rounds'])assert.ok(app.includes(`${module}.js?v=${version}`));
+  assert.ok(moduleLoader.includes(`MODULE_VERSION = '${version}'`));
+  assert.ok(index.includes(`./js/app.js?v=${version}`));
   assert.match(moduleLoader, /MODULE_VERSION = '0\.1.90'/);
   assert.doesNotMatch(app, /import\s*\{\s*candidateClassOptions/);
   assert.match(app, /\$\('setup-form'\)\.dataset\.connectionHandler='ready'/);
