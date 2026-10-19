@@ -1209,6 +1209,16 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   wire();
   return{
     refreshExamSelectors:setExamOptions,
+    refreshFormRounds:async examId=>{
+      const selectedExamId=examId||$('forms-exam')?.value||'';
+      await loadFormRounds(selectedExamId);
+      return selectedExamId;
+    },
+    refreshForms:async examId=>{
+      const selectedExamId=examId||$('forms-exam')?.value||'';
+      await loadFormRounds(selectedExamId);
+      await loadForms();
+    },
     refreshScriptConfigs:()=>{
       if($('script-exam').value)loadScriptConfigs().catch(error=>message($('script-message'),error?.message||String(error),'error'));
     },

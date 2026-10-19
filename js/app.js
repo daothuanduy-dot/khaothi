@@ -1,7 +1,7 @@
 import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.98';
 import {loadTabModules} from './module-loader.js?v=0.1.98';
-import {wireOperations} from './operations.js?v=0.1.99';
-const APP_VERSION='v0.1.99';
+import {wireOperations} from './operations.js?v=0.1.100';
+const APP_VERSION='v0.1.100';
 const APP_BUILD='2026-10-19-forms-round-rooming-plans';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -178,6 +178,8 @@ async function loadExams(){
   state.selectedExam=$('rooming-exam-select').value||$('subject-exam-select').value||null;
   if($('subject-delete-registrations'))$('subject-delete-registrations').disabled=!$('subject-exam-select').value;
   updateSelectedExamTitle();
+  if($('forms-exam').value)await operations?.refreshFormRounds?.($('forms-exam').value)
+    .catch(error=>message($('forms-message'),error.message,'error'));
   await loadCandidates();
 }
 async function createExam(event){
@@ -221,6 +223,8 @@ function switchTab(tab){
   }
   if(tab==='candidates')loadCandidates();
   if(tab==='subjects'){loadSubjectRegistrations();loadRosterData()}
+  if(tab==='forms')operations?.refreshForms?.($('forms-exam').value)
+    .catch(error=>message($('forms-message'),error.message,'error'));
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='sbd'){/* SBD is managed independently from rooming */}
 }
