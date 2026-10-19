@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.94';
-import {loadTabModules} from './module-loader.js?v=0.1.94';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.95';
+import {loadTabModules} from './module-loader.js?v=0.1.95';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.94';
-const APP_BUILD='2026-10-19-round-candidate-picker';
+const APP_VERSION='v0.1.95';
+const APP_BUILD='2026-10-19-round-candidate-picker-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -2506,7 +2506,13 @@ function wireRoomingEditor(){
  const refreshRoomingTypeControls=()=>{const type=$('room-plan-type').value,subjectPlan=type==='subject';$('mandatory-subject-wrap').classList.toggle('hidden',type!=='mandatory');$('subject-rooming-wrap').classList.toggle('hidden',!subjectPlan);$('rooming-distribution-wrap').classList.remove('hidden');if(subjectPlan)$('room-prefix').value='P'};
  $('room-plan-type').addEventListener('change',refreshRoomingTypeControls);refreshRoomingTypeControls();
  if(!$('configure-rooming-round')){const b=document.createElement('button');b.id='configure-rooming-round';b.type='button';b.className='btn btn-light';b.textContent='Nạp thí sinh vào đợt đang chọn';$('preview-rooming').parentElement.prepend(b)}
- $('configure-rooming-round').onclick=()=>safeAction('rooming-message',openRoundCandidateDialog,$('configure-rooming-round'));
+ $('configure-rooming-round').onclick=async()=>{
+  const button=$('configure-rooming-round');
+  if(button.dataset.busy==='1')return;
+  button.dataset.busy='1';button.disabled=true;
+  try{await openRoundCandidateDialog()}catch(error){message($('rooming-message'),error.message||String(error),'error')}
+  finally{button.dataset.busy='0';button.disabled=false}
+ };
  $('rooming-round').onchange=()=>{state.preview=null;$('preview-rooming').textContent='Xem trước phương án phòng';clearRoomingPreview();refreshRoomingSubjectOptions().catch(()=>{});message($('rooming-message'),'Đã chuyển sang đợt thi mới. Hãy lập hoặc khôi phục phương án của đợt này.','info')};
  $('rooming-adjustment-mode').onchange=()=>{if(state.preview&&!state.preview.finalized){state.preview.adjustmentMode=selectedRoomingMode();state.preview.assignmentsCreated=false;state.preview.saved=null;state.preview.sourcePlanId=null;renderRooming(state.preview.result,state.preview.planType);updateRoomingActions();message($('rooming-message'),state.preview.adjustmentMode==='manual'?'Đã chọn điều chỉnh thủ công. Có thể chuyển từng thí sinh giữa các phòng rồi kiểm tra và lưu.':'Đã chọn điều chỉnh tự động theo thuật toán.','info')}};
  $('rooming-exam-select').onchange=()=>{
