@@ -1,9 +1,9 @@
-import {buildElectiveSbdPlan,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.110';
-import {loadTabModules} from './module-loader.js?v=0.1.110';
-import {wireOperations} from './operations.js?v=0.1.110';
-import {loadExamRounds} from './rounds.js?v=0.1.110';
-const APP_VERSION='v0.1.110';
-const APP_BUILD='2026-10-19-elective-room-sbd';
+import {buildElectiveSbdPlan,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.111';
+import {loadTabModules} from './module-loader.js?v=0.1.111';
+import {wireOperations} from './operations.js?v=0.1.111';
+import {loadExamRounds} from './rounds.js?v=0.1.111';
+const APP_VERSION='v0.1.111';
+const APP_BUILD='2026-10-19-sbd-reset';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1842,8 +1842,27 @@ async function saveSbdRoomPreview(){
 }
 function wireSbdRoomMode(){
  const refresh=()=>refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
- for(const id of ['sbd-exam-select','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length'])$(id).addEventListener('change',()=>{invalidateSbdRoomPreview();refresh()});
- $('sbd-room-preview').onclick=async()=>{const button=$('sbd-room-preview');button.disabled=true;try{await previewSbdRooms()}catch(error){message($('sbd-message'),error.message,'error')}finally{button.disabled=false}};
+ for(const id of ['sbd-exam-select','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length']){
+  const control=$(id);if(control)control.addEventListener('change',()=>{invalidateSbdRoomPreview();refresh()});
+ }
+ const previewButton=$('sbd-room-preview');
+ if(previewButton)previewButton.onclick=async()=>{previewButton.disabled=true;try{await previewSbdRooms()}catch(error){message($('sbd-message'),error.message,'error')}finally{previewButton.disabled=false}};
+ const resetButton=$('reset-sbd-old');
+ if(resetButton)resetButton.onclick=resetSbdAndElectivePlan;
+}
+async function resetSbdAndElectivePlan(){
+ const examId=$('sbd-exam-select')?.value;
+ if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi xoá SBD cũ.','error');return}
+ if(!confirm('Xoá toàn bộ SBD hiện tại và phương án phòng môn lựa chọn đã lưu để lập lại? Thao tác này không thể hoàn tác.'))return;
+ const button=$('reset-sbd-old');if(button)button.disabled=true;
+ try{
+  const {data,error}=await state.client.rpc('exam_reset_sbd_and_elective_room_plan',{p_exam_id:examId});
+  if(error)throw new Error(`Không xoá được SBD cũ: ${error.message}`);
+  invalidateSbdRoomPreview();
+  if(state.preview?.examId===examId)state.preview=null;
+  message($('sbd-message'),`Đã xoá ${Number(data?.cleared_count)||0} SBD và phương án phòng môn lựa chọn. Có thể chọn “Theo tổ hợp môn và thứ tự phòng thi lựa chọn” để lập lại.`,'success');
+ }catch(error){message($('sbd-message'),error.message||String(error),'error')}
+ finally{if(button)button.disabled=false}
 }
 async function assignSbdByRoom(){
  const examId=$('sbd-exam-select')?.value;
