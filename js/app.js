@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.97';
-import {loadTabModules} from './module-loader.js?v=0.1.97';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.98';
+import {loadTabModules} from './module-loader.js?v=0.1.98';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.97';
-const APP_BUILD='2026-10-19-print-form-selection';
+const APP_VERSION='v0.1.98';
+const APP_BUILD='2026-10-19-elective-rooming-validation';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1525,7 +1525,7 @@ async function saveRooming(){
   const{examId,roundNo,planType,subjectCode,adjustmentMode,options,result}=preview;
   const rooms=result.rooms.filter(room=>room.student_count>0);
   const{data,error}=await state.client.rpc('exam_save_rooming_round_plan',{p_exam_id:examId,p_round_no:roundNo,p_plan_type:planType,p_subject_code:subjectCode||null,p_adjustment_mode:adjustmentMode||'automatic',p_capacity:options.capacity,p_room_prefix:options.roomPrefix,p_first_room_number:options.firstRoomNumber,p_rooms:rooms,p_assignments:result.assignments,p_lock:false});
-  if(error)throw new Error(`Không lưu được phương án đợt ${roundNo}. Hãy chạy migration SQL v0.1.92. ${error.message}`);
+  if(error)throw new Error(`Không lưu được phương án đợt ${roundNo}. Hãy chạy lại migration SQL v0.1.91 sau khi cập nhật điều kiện kiểm tra môn lựa chọn. ${error.message}`);
   const snapshotId=data?.plan_id;
   if(typeof snapshotId!=='string')throw new Error('RPC không trả về plan_id hợp lệ; chưa thể phân phòng chính thức.');
   if(state.preview!==preview)return;
