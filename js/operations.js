@@ -1209,17 +1209,28 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       finally{target.disabled=false}
     };
   }
-  function wire(){
+  function wireForms(){
     $('forms-print-type').onchange=showFormSettings;
     showFormSettings();
     setExamOptions();
-    setSubjectOptions('script-subject',allSubjectOptions());
     $('forms-exam').onchange=async()=>{try{setAdminExam($('forms-exam').value);await loadFormRounds($('forms-exam').value);await loadForms()}catch(error){message($('forms-message'),error.message,'error')}};
     $('forms-round').onchange=()=>loadForms().catch(error=>message($('forms-message'),error.message,'error'));
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
     safeAction('forms-message',loadForms,$('forms-load-data'));
     $('forms-export-xlsx').onclick=()=>{try{exportFormsExcel()}catch(error){message($('forms-message'),error.message,'error')}};
     $('forms-export-pdf').onclick=()=>{try{exportFormsPdf()}catch(error){message($('forms-message'),error.message,'error')}};
+  }
+  function wireAbsences(){
+    // Older deployed HTML may not yet include the grade/class filters.
+    for(const [id,label,placeholder] of [['absence-grade-filter','Khối','Tất cả khối'],['absence-class-filter','Lớp','Tất cả lớp']]){
+      if($(id))continue;
+      const wrapper=document.createElement('label');
+      wrapper.textContent=label;
+      const select=document.createElement('select');select.id=id;
+      const option=document.createElement('option');option.value='';option.textContent=placeholder;
+      select.appendChild(option);wrapper.appendChild(select);
+      $('absence-search').closest('label').before(wrapper);
+    }
     $('absence-exam').onchange=()=>loadAbsences().catch(error=>message($('absence-message'),error.message,'error'));
     safeAction('absence-message',loadAbsences,$('absence-load'));
     $('absence-search').oninput=applyAbsenceFilters;
@@ -1238,6 +1249,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(remove)clearReportedAbsence(remove.dataset.absenceDelete);
     });
     safeAction('absence-message',saveAbsences,$('absence-save'));
+  }
+  function wireScripts(){
+    setSubjectOptions('script-subject',allSubjectOptions());
     $('script-exam').onchange=()=>{
       cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptConfigs=[];
       $('script-room-order').innerHTML='';
@@ -1273,6 +1287,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const button=lock||exportButton||assignButton||deleteButton;
       if(action&&button){button.disabled=true;action().catch(error=>message($('script-message'),error?.message||String(error),'error')).finally(()=>{button.disabled=false})}
     });
+  }
+  function wireGrader(){
     $('grader-exam').onchange=()=>{
       const examId=$('grader-exam').value;
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
@@ -1298,6 +1314,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('grader-export-template').onclick=exportGraderTemplate;
     safeAction('grader-message',importGraderScores,$('grader-import-scores'));
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
+  }
+  function wireScores(){
     $('scores-exam').onchange=()=>{
       cache.scoreImportRows=[];cache.combinedScores=[];
       $('scores-preview').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';
@@ -1314,7 +1332,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('scores-message',loadCombinedScores,$('scores-load'));
     $('scores-export').onclick=()=>{try{exportCombinedScores()}catch(error){message($('scores-message'),error.message,'error')}};
   }
-  wire();
+  wireForms();
+  // Forms must remain usable if another module has outdated/missing controls.
+  for(const [initialize,notice] of [[wireAbsences,'absence-message'],[wireScripts,'script-message'],[wireGrader,'grader-message'],[wireScores,'scores-message']]){
+    try{initialize()}
+    catch(error){message($(notice),`Không khởi tạo được chức năng này. Hãy cập nhật đầy đủ các tệp giao diện. ${error.message}`,'error')}
+  }
   return{
     refreshExamSelectors:setExamOptions,
     refreshFormRounds:async examId=>{

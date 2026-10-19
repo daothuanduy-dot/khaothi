@@ -1,9 +1,9 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.107';
-import {loadTabModules} from './module-loader.js?v=0.1.107';
-import {wireOperations} from './operations.js?v=0.1.107';
-import {loadExamRounds} from './rounds.js?v=0.1.107';
-const APP_VERSION='v0.1.107';
-const APP_BUILD='2026-10-19-class-room-forms';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.108';
+import {loadTabModules} from './module-loader.js?v=0.1.108';
+import {wireOperations} from './operations.js?v=0.1.108';
+import {loadExamRounds} from './rounds.js?v=0.1.108';
+const APP_VERSION='v0.1.108';
+const APP_BUILD='2026-10-19-forms-init-fix';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -227,6 +227,7 @@ function switchTab(tab){
   if(tab==='rooming')refreshRoomingRoundOptions().catch(error=>message($('rooming-message'),error.message,'error'));
   if(tab==='forms')operations?.refreshForms?.($('forms-exam').value)
     .catch(error=>message($('forms-message'),error.message,'error'));
+  if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='sbd'){/* SBD is managed independently from rooming */}
 }
@@ -2604,6 +2605,7 @@ async function boot(){
     operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){
     console.error('Không khởi tạo được operations.js:',error);
+    message($('forms-message'),`Không khởi tạo được biểu mẫu: ${error.message||String(error)}. Hãy cập nhật đồng bộ các tệp ứng dụng.`,'error');
   }
   try{
     $('candidate-edit-grade').addEventListener('change',()=>{
