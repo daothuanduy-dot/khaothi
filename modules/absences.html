@@ -2,15 +2,17 @@
   <div class="section-heading"><div><h2>Báo vắng thí sinh</h2><p>Khai báo trước khi đánh phách. Có thể đánh dấu vắng toàn kỳ hoặc chỉ vắng một/một số môn.</p></div></div>
   <div class="form-grid">
     <label>Kỳ thi<select id="absence-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <label>Khối<select id="absence-grade-filter"><option value="">Tất cả khối</option></select></label>
+    <label>Lớp<select id="absence-class-filter"><option value="">Tất cả lớp</option></select></label>
     <label>Tìm SBD / mã học sinh / họ tên<input id="absence-search" type="search" placeholder="Nhập từ khóa"></label>
     <div class="form-actions"><button id="absence-load" class="btn btn-light" type="button">Tải thí sinh</button><button id="absence-save" class="btn btn-primary" type="button">Lưu báo vắng</button></div>
   </div>
-  <div class="notice notice-info">Chọn “Vắng toàn kỳ” nếu thí sinh không dự thi môn nào. Nếu chỉ vắng một số môn, bỏ chọn trạng thái toàn kỳ và đánh dấu các môn tương ứng. Các thay đổi có hiệu lực khi bấm Lưu.</div>
+  <div class="notice notice-info">Chọn khối, lớp hoặc tìm theo SBD/mã học sinh/họ tên để thu hẹp danh sách. Chọn “Vắng toàn kỳ” nếu thí sinh không dự thi môn nào; nếu chỉ vắng một số môn, bỏ chọn trạng thái toàn kỳ và đánh dấu môn tương ứng. Mọi thay đổi, kể cả xóa báo vắng, chỉ có hiệu lực sau khi bấm Lưu.</div>
   <div id="absence-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Vắng toàn kỳ</th><th>Các môn vắng</th><th>Ghi chú</th></tr></thead><tbody id="absence-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
   <div class="section-heading"><div><h3>Danh sách kiểm soát thí sinh vắng</h3><p>Danh sách cập nhật theo các lựa chọn hiện tại, kể cả thay đổi chưa lưu.</p></div></div>
   <div class="form-grid">
     <label>Hiển thị danh sách<select id="absence-report-filter"><option value="all">Tất cả thí sinh vắng</option><option value="*">Vắng toàn kỳ</option></select></label>
   </div>
-  <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phạm vi vắng</th></tr></thead><tbody id="absence-report-body"><tr><td colspan="4" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phạm vi vắng</th><th>Thao tác</th></tr></thead><tbody id="absence-report-body"><tr><td colspan="5" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
 </section>
