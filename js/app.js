@@ -1,9 +1,9 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.105';
-import {loadTabModules} from './module-loader.js?v=0.1.105';
-import {wireOperations} from './operations.js?v=0.1.105';
-import {loadExamRounds} from './rounds.js?v=0.1.105';
-const APP_VERSION='v0.1.105';
-const APP_BUILD='2026-10-19-forms-round-source';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.106';
+import {loadTabModules} from './module-loader.js?v=0.1.106';
+import {wireOperations} from './operations.js?v=0.1.106';
+import {loadExamRounds} from './rounds.js?v=0.1.106';
+const APP_VERSION='v0.1.106';
+const APP_BUILD='2026-10-19-form-print-settings';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -154,7 +154,7 @@ async function loadExams(){
   const body=$('exam-table-body');
   body.innerHTML='<tr><td colspan="6" class="empty">Đang tải...</td></tr>';
   const{data,error}=await state.client.from('exam_sessions')
-    .select('id,name,school_year,status,created_at,exam_mode,managing_authority,institution_name,form_exam_title').order('created_at',{ascending:false});
+    .select('id,name,school_year,status,created_at,exam_mode,managing_authority,institution_name,form_exam_title,form_font_family,form_font_size').order('created_at',{ascending:false});
   if(error){body.innerHTML=`<tr><td colspan="6" class="empty">${esc(error.message)}</td></tr>`;return}
   state.exams=data||[];
   operations?.refreshExamSelectors();

@@ -111,6 +111,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('forms-authority').value=exam.managing_authority||'';
     $('forms-institution').value=exam.institution_name||'';
     $('forms-title').value=exam.form_exam_title||exam.name||'';
+    $('forms-font-family').value=exam.form_font_family||'Times New Roman';
+    $('forms-font-size').value=String(exam.form_font_size||11);
     $('forms-load-data').disabled=true;
     try{
       const allCandidates=await readPages(()=>state.client.from('exam_candidates')
@@ -196,7 +198,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function saveFormHeader(){
     const examId=currentExam('forms-exam');setAdminExam(examId);
     const payload={managing_authority:$('forms-authority').value.trim(),
-      institution_name:$('forms-institution').value.trim(),form_exam_title:$('forms-title').value.trim()};
+      institution_name:$('forms-institution').value.trim(),form_exam_title:$('forms-title').value.trim(),
+      form_font_family:$('forms-font-family').value||'Times New Roman',
+      form_font_size:Number($('forms-font-size').value||11)};
     if(!payload.managing_authority||!payload.institution_name||!payload.form_exam_title)
       throw new Error('Hãy nhập đủ cơ quan chủ quản, tên đơn vị và tên kỳ thi.');
     const{data,error}=await state.client.from('exam_sessions').update(payload).eq('id',examId).select().single();
@@ -256,7 +260,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         const row=rows[window.XLSX.utils.decode_cell(address).r]||[];
         const first=String(row[0]??'');
         const bold=first===first.toUpperCase()||['STT','TT','STT','Tổng số thí sinh'].includes(first);
-        cell.s={font:{name:'Times New Roman',sz:12,bold},
+        cell.s={font:{name:forms.exam.form_font_family||'Times New Roman',sz:Number(forms.exam.form_font_size)||11,bold},
           border:{top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}},
           alignment:{vertical:'center',wrapText:true}};
       }
@@ -301,7 +305,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const win=window.open('','_blank');
     if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
-      @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:"Times New Roman",serif;font-size:11pt}
+      @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:${esc(forms.exam.form_font_family||'Times New Roman')},serif;font-size:${Number(forms.exam.form_font_size)||11}pt}
       .page{width:190mm;min-height:277mm;break-after:page;page-break-after:always}
       .page:last-child{break-after:auto;page-break-after:auto}header{text-align:center;line-height:1.15;white-space:nowrap}
       h3{text-align:center;margin:3mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}table:not(.receipt) th:nth-child(1){width:5%}table:not(.receipt) th:nth-child(2){width:10%}table:not(.receipt) th:nth-child(3){width:25%}table:not(.receipt) th:nth-child(4){width:13%}table:not(.receipt) th:nth-child(5){width:9%}table:not(.receipt) th:nth-child(6),table:not(.receipt) th:nth-child(7){width:14%}table:not(.receipt) th:nth-child(8){width:10%}.receipt th:nth-child(1){width:5%}.receipt th:nth-child(2){width:10%}.receipt th:nth-child(3){width:25%}.receipt th:nth-child(4){width:13%}.receipt th:nth-child(5){width:9%}.receipt th:nth-child(6){width:14%}.receipt th:nth-child(7),.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:10%}
