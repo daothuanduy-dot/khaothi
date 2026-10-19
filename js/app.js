@@ -1,5 +1,5 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.98';
-import {loadTabModules} from './module-loader.js?v=0.1.98';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.100';
+import {loadTabModules} from './module-loader.js?v=0.1.100';
 import {wireOperations} from './operations.js?v=0.1.100';
 const APP_VERSION='v0.1.100';
 const APP_BUILD='2026-10-19-forms-round-rooming-plans';

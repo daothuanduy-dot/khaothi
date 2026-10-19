@@ -110,6 +110,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       else rounds=[...new Map((candidates.data||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
     }
     if(!rounds.length&&roundsError)throw new Error(`Không tải được danh sách đợt thi. Hãy kiểm tra migration v0.1.92 và quyền đọc dữ liệu. ${roundsError.message}`);
+    if(!rounds.length)throw new Error(`Kỳ thi ${examId} chưa có đợt thi đang hoạt động. Hãy cấu hình Đợt 1 hoặc Đợt 2 trước khi tải và in biểu mẫu.`);
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
       `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
     const available=rounds.map(round=>String(round.round_no));
