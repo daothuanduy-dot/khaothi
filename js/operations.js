@@ -53,7 +53,7 @@ export function randomScriptHead(usedHeads=new Set()){
   return available[bytes[0]%available.length];
 }
 
-export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName}){
+export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName,loadExamRounds}){
   const nameOf=subjectCode=>{const code=String(subjectCode||'').trim().toUpperCase();return code==='KTPL'||code==='GDKTPL'?'GDKT&PL':subjectName(subjectCode)};
   const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0,graderBagAssignments:[],graderProfiles:[],graderGroups:[],scoreImportRows:[],combinedScores:[]};
   const examIds=['forms-exam','absence-exam','script-exam','scores-exam'];
@@ -91,27 +91,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const previous=roundSelect.value;
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>';
     if(!examId)return;
-    let rounds=[];
-    let roundsError=null;
-    const configured=await state.client.rpc('exam_get_rounds',{p_exam_id:examId});
-    if(configured.error)roundsError=configured.error;
-    else rounds=(configured.data||[]).filter(round=>round.is_active!==false);
-    if(!rounds.length){
-      for(const roundNo of [1,2]){
-        const probe=await state.client.rpc('exam_get_round_candidates',{p_exam_id:examId,p_round_no:roundNo});
-        if(!probe.error){
-          rounds.push({round_no:roundNo,name:`Đợt ${roundNo}`,is_active:true});
-          continue;
-        }
-        const detail=String(probe.error.message||'').toLowerCase();
-        if(probe.error.code==='42501'||detail.includes('không có quyền')){
-          roundsError=roundsError||probe.error;
-          break;
-        }
-      }
-    }
-    if(!rounds.length&&roundsError)throw new Error(`Không tải được danh sách đợt thi qua cơ chế xếp phòng. Hãy kiểm tra phiên đăng nhập quản trị và migration v0.1.92/v0.1.101. ${roundsError.message}`);
-    if(!rounds.length)throw new Error(`Kỳ thi ${examId} chưa có đợt thi đang hoạt động. Hãy cấu hình Đợt 1 hoặc Đợt 2 trước khi tải và in biểu mẫu.`);
+    const rounds=await loadExamRounds(state.client,examId);
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
       `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
     const available=rounds.map(round=>String(round.round_no));

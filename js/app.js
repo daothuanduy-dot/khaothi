@@ -1,8 +1,9 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.102';
-import {loadTabModules} from './module-loader.js?v=0.1.102';
-import {wireOperations} from './operations.js?v=0.1.102';
-const APP_VERSION='v0.1.102';
-const APP_BUILD='2026-10-19-forms-round-rooming-plans';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.103';
+import {loadTabModules} from './module-loader.js?v=0.1.103';
+import {wireOperations} from './operations.js?v=0.1.103';
+import {loadExamRounds} from './rounds.js?v=0.1.103';
+const APP_VERSION='v0.1.103';
+const APP_BUILD='2026-10-19-shared-round-source';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -223,6 +224,7 @@ function switchTab(tab){
   }
   if(tab==='candidates')loadCandidates();
   if(tab==='subjects'){loadSubjectRegistrations();loadRosterData()}
+  if(tab==='rooming')refreshRoomingRoundOptions().catch(error=>message($('rooming-message'),error.message,'error'));
   if(tab==='forms')operations?.refreshForms?.($('forms-exam').value)
     .catch(error=>message($('forms-message'),error.message,'error'));
   if(tab==='scripts')operations?.refreshScriptConfigs();
@@ -982,8 +984,19 @@ async function loadPreviousScores(previousExamId){
  }
  throw new Error('Không thể sắp xếp theo kết quả kỳ thi trước. '+lastError+' Hãy xác nhận tên bảng kết quả và các cột mã học sinh, điểm trong Supabase.');
 }
-function selectedRoomingRound(){return Number($('rooming-round')?.value||1)}
+function selectedRoomingRound(){return Number($('rooming-round')?.value||0)}
 function selectedRoomingMode(){return $('rooming-adjustment-mode')?.value||'automatic'}
+async function refreshRoomingRoundOptions(){
+  const select=$('rooming-round'),examId=$('rooming-exam-select')?.value;
+  if(!select||!examId||!state.client)return;
+  const previous=select.value;
+  select.innerHTML='<option value="">-- Chọn đợt thi --</option>';
+  const rounds=await loadExamRounds(state.client,examId);
+  select.innerHTML=rounds.map(round=>`<option value="${round.round_no}">${esc(round.name)}</option>`).join('');
+  const available=rounds.map(round=>String(round.round_no));
+  select.value=available.includes(previous)?previous:(available[0]||'');
+  if(select.value)await refreshRoomingSubjectOptions();
+}
 async function refreshRoomingSubjectOptions(){
   const examId=$('rooming-exam-select')?.value,roundNo=selectedRoomingRound();
   if(!examId||!state.client)return;
@@ -1150,6 +1163,7 @@ async function previewRooming(){
  try{
   const planType=$('room-plan-type')?.value||'elective';
   const roundNo=selectedRoomingRound(),adjustmentMode=selectedRoomingMode();
+  if(!roundNo)throw new Error('Hãy chọn đợt thi đã được cấu hình trước khi xếp phòng.');
   const subjectCode=planType==='mandatory'?$('mandatory-subject')?.value||'TOAN':planType==='subject'?$('rooming-subject')?.value||'TOAN':null;
   let {data:candidates,error:roundCandidatesError}=await state.client.rpc('exam_get_round_candidates',{p_exam_id:examId,p_round_no:roundNo});
   if(roundCandidatesError)throw new Error(`Chưa thể nạp thí sinh đợt ${roundNo}: ${roundCandidatesError.message}`);
@@ -2529,7 +2543,7 @@ function wireRoomingEditor(){
   $('preview-rooming').textContent='Xem trước phương án phòng';
   updateSelectedExamTitle();notifyExamSelected(state.exams.find(exam=>exam.id===state.selectedExam));
   clearRoomingPreview();
-  loadCandidates();refreshRoomingSubjectOptions().catch(()=>{});
+  loadCandidates();refreshRoomingRoundOptions().catch(error=>message($('rooming-message'),error.message,'error'));
  };
  $('room-plan-type').onchange=()=>{
   state.preview=null;
@@ -2572,7 +2586,7 @@ async function boot(){
     return;
   }
   try{
-    operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName});
+    operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){
     console.error('Không khởi tạo được operations.js:',error);
   }
