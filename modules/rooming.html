@@ -4,8 +4,10 @@
         <div class="notice notice-info"><b>Quy trình:</b> Cấp SBD trước, sau đó lập phương án sĩ số. Số thí sinh đủ điều kiện sẽ được chia thành các phòng; điều chỉnh sĩ số phòng thì phòng cân đối tự thay đổi để giữ nguyên tổng số. Chọn “Lưu phân bổ phòng” để hệ thống xếp thí sinh theo sĩ số đã chốt và lưu phương án. Khi mở lại, hệ thống khôi phục hồ sơ đã lưu từ CSDL; hồ sơ phân phòng chính thức cũ được giữ nguyên khi lập phương án mới. Với môn bắt buộc, môn bắt buộc được chốt đầu tiên làm mốc: môn còn lại tự kế thừa đúng phòng và vị trí theo thứ tự SBD; vị trí không thể chỉnh lệch giữa các môn. Môn lựa chọn vẫn phải bảo đảm môn ở Ca 1 không trùng môn ở Ca 2 trong cùng phòng.</div>
         <div class="form-grid rooming-controls">
           <label>Kỳ thi<select id="rooming-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-          <label>Loại phương án<select id="room-plan-type"><option value="elective">Môn lựa chọn</option><option value="mandatory">Môn bắt buộc</option></select></label>
-          <label id="mandatory-subject-wrap" class="hidden">Môn bắt buộc<select id="mandatory-subject"><option value="TOAN">Toán</option><option value="VAN">Ngữ văn</option></select></label>
+          <label>Loại phương án<select id="room-plan-type"><option value="mandatory">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option><option value="subject">Theo môn thi</option></select></label>
+          <label id="mandatory-subject-wrap">Môn bắt buộc<select id="mandatory-subject"></select></label>
+          <label id="subject-rooming-wrap" class="hidden">Môn thi<select id="rooming-subject"></select></label>
+          <label id="rooming-distribution-wrap" class="hidden">Cách chia phòng<select id="rooming-distribution-mode"><option value="room">Theo phòng thi</option><option value="class">Theo lớp</option></select></label>
           <label>Sĩ số phòng do người xếp phòng nhập<input id="room-capacity" type="number" min="1" value="24" required></label>
           <label>Tiền tố phòng<input id="room-prefix" type="text" value="P" maxlength="8" required></label>
           <label>Số phòng bắt đầu<input id="first-room-number" type="number" min="1" value="1" required></label>
