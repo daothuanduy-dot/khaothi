@@ -473,6 +473,41 @@ function continuousPairOrder(rows){
   return visit(groups,[],[],[new Set(),new Set()]);
 }
 
+export function orderElectiveRoomPlan(plan){
+  const rooms=plan.rooms.map(room=>({...room})).sort((a,b)=>Number(a.room_number)-Number(b.room_number));
+  if(rooms.some(room=>!Number.isInteger(Number(room.room_number))||Number(room.room_number)<1)||new Set(rooms.map(room=>Number(room.room_number))).size!==rooms.length)
+    throw new Error('Số phòng không hợp lệ hoặc bị trùng.');
+  const assignments=[];
+  for(const room of rooms){
+    const rows=plan.assignments.filter(row=>row.room_code===room.room_code);
+    if(!rows.length||rows.length!==Number(room.student_count)||rows.length>Number(room.capacity)||!validateElectiveRoomSessions(rows).ok)
+      throw new Error(`Phòng ${room.room_code}: sĩ số hoặc môn giữa hai ca không hợp lệ.`);
+    const ordered=continuousPairOrder(rows);
+    if(!ordered)throw new Error(`Phòng ${room.room_code} không thể giữ nhóm môn liên tục ở cả hai ca. Hãy điều chỉnh hoặc thêm phòng trước khi lưu.`);
+    assignments.push(...ordered.map((row,index)=>({...row,seat_number:index+1})));
+    room.candidate_ids=ordered.map(row=>row.candidate_id);
+  }
+  if(assignments.length!==plan.assignments.length||new Set(assignments.map(row=>String(row.candidate_id))).size!==assignments.length)
+    throw new Error('Phân công bị trùng hoặc có phòng không tồn tại.');
+  return {...plan,rooms,assignments};
+}
+
+export function numberSavedElectiveRooms(plan,options={}){
+  const {prefix='31',totalLength=6,startNumber=1}=options;
+  if(!plan.rooms?.length||!plan.assignments?.length)throw new Error('Hãy xếp và lưu phòng tổ hợp trước.');
+  if(![6,8].includes(totalLength)||!/^\d{2,3}$/.test(prefix)||!Number.isInteger(startNumber)||startNumber<1||startNumber+plan.assignments.length-1>=10**(totalLength-prefix.length))throw new Error('Dải SBD không hợp lệ hoặc không đủ.');
+  if(plan.assignments.some(row=>String(row.sbd||'').trim()))throw new Error('Phương án đã có SBD; không được cấp lại.');
+  const ordered=orderElectiveRoomPlan(plan);
+  // Number the saved seat order, never optimize or move candidates at this step.
+  const assignments=[...plan.assignments].sort((a,b)=>ordered.rooms.findIndex(r=>r.room_code===a.room_code)-ordered.rooms.findIndex(r=>r.room_code===b.room_code)||Number(a.seat_number)-Number(b.seat_number));
+  if(assignments.some((row,index)=>String(row.candidate_id)!==String(ordered.assignments[index].candidate_id)||Number(row.seat_number)!==ordered.assignments[index].seat_number))throw new Error('Phương án cũ chưa có thứ tự nhóm môn hợp lệ. Hãy xếp và lưu lại phòng trước.');
+  const numbered=assignments.map((row,index)=>({...row,sbd:prefix+String(startNumber+index).padStart(totalLength-prefix.length,'0')}));
+  return {...plan,rooms:ordered.rooms.map(room=>{
+    const members=numbered.filter(row=>row.room_code===room.room_code);
+    return {...room,candidate_ids:members.map(row=>row.candidate_id),sbd_first:members[0].sbd,sbd_last:members.at(-1).sbd};
+  }),assignments:numbered};
+}
+
 export function buildElectiveSbdPlan(candidates,options={}){
   const {prefix='31',totalLength=6,startNumber=1}=options;
   if(![6,8].includes(totalLength)||!/^\d{2,3}$/.test(prefix))throw new Error('Tiền tố hoặc độ dài SBD không hợp lệ.');
