@@ -3,12 +3,23 @@
         <div class="panel">
           <div class="form-grid">
             <label>Kỳ thi<select id="sbd-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-            <label>Quy tắc sắp xếp<select id="room-sort-mode"><option value="abc">Theo Tên, đệm, họ</option><option value="previous">Theo kết quả kỳ thi trước</option></select></label>
+            <label>Quy tắc sắp xếp<select id="room-sort-mode"><option value="abc">Theo Tên, đệm, họ</option><option value="previous">Theo kết quả kỳ thi trước</option><option value="elective_rooms">Theo tổ hợp môn và thứ tự phòng thi lựa chọn</option></select></label>
             <label>Độ dài số báo danh<select id="sbd-length"><option value="6">6 chữ số</option><option value="8">8 chữ số</option></select></label>
             <label>Số chữ số tiền tố<select id="sbd-prefix-length"><option value="2">2 chữ số đầu</option><option value="3">3 chữ số đầu</option></select></label>
             <label>Tiền tố SBD (chỉ số)<input id="sbd-prefix" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="3" value="31" required></label>
             <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
-            <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button></div>
+            <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button><button id="reset-sbd-old" class="btn btn-light" type="button">Xoá SBD cũ / lập lại</button></div>
+          </div>
+          <div id="sbd-room-options" class="hidden">
+            <p>Tối ưu tổ hợp và xếp phòng trước, sau đó cấp SBD liên tục theo phòng. Trong mỗi nhóm tổ hợp, ưu tiên tên → đệm → họ. Chỉ áp dụng cho học sinh chưa có SBD; lưu phương án phòng và SBD trong cùng một giao dịch.</p>
+            <div class="form-grid">
+              <label>Đợt thi<select id="sbd-room-round"><option value="">-- Chọn đợt thi --</option></select></label>
+              <label>Số học sinh tối đa/phòng<input id="sbd-room-capacity" type="number" min="1" max="100" value="24"></label>
+              <label>Tiền tố phòng<input id="sbd-room-prefix" maxlength="30" value="P"></label>
+              <label>Số phòng bắt đầu<input id="sbd-room-first" type="number" min="1" value="1"></label>
+            </div>
+            <button id="sbd-room-preview" type="button" class="btn btn-light">Tối ưu phòng và xem trước SBD</button>
+            <div id="sbd-room-preview-result"></div>
           </div>
           <div id="sbd-message" class="notice hidden"></div>
           <p class="muted">Ví dụ: SBD 6 chữ số, tiền tố 31 sẽ tạo 310001, 310002…; SBD 8 chữ số, tiền tố 31 sẽ tạo 31000001, 31000002…</p>
