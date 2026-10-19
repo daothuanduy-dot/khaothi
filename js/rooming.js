@@ -20,6 +20,8 @@ const normalize = s => String(s||'').normalize('NFC').trim();
 const cmpName = (a,b) => normalize(a.student_name).localeCompare(normalize(b.student_name),'vi',{sensitivity:'base'}) ||
   String(a.student_code||a.sbd||'').localeCompare(String(b.student_code||b.sbd||''),'vi',{numeric:true});
 const cmpSbd = (a,b) => String(a.sbd||a.student_code||'').localeCompare(String(b.sbd||b.student_code||''),'vi',{numeric:true});
+const cmpClass = (a,b) => String(a.grade_code||'').localeCompare(String(b.grade_code||''),'vi',{numeric:true}) ||
+  String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true}) || cmpName(a,b);
 
 function chooseOrientation(subjects, ca1, ca2) {
   const [x,y]=subjects;
@@ -335,7 +337,7 @@ export function optimizeElectiveRooms(candidates, options={}) {
   const capacity=Math.floor(Number(options.capacity||24)),prefix=String(options.roomPrefix||'P').trim()||'P',
     first=Math.floor(Number(options.firstRoomNumber||1)),sortMode=options.sortMode||'abc';
   const errors=[];
-  if(!Number.isFinite(capacity)||capacity<1||capacity>100)errors.push('Sức chứa phòng phải từ 1 đến 100.');
+  if(!Number.isFinite(capacity)||capacity<1)errors.push('Sức chứa phòng phải là số nguyên dương.');
   if(!Number.isFinite(first)||first<1)errors.push('Số phòng bắt đầu phải lớn hơn 0.');
   if(!Array.isArray(candidates)||!candidates.length)errors.push('Không có thí sinh đủ điều kiện.');
   if(errors.length)return {ok:false,errors};
@@ -347,7 +349,7 @@ export function optimizeElectiveRooms(candidates, options={}) {
   }
   if(errors.length)return {ok:false,errors};
   if(sortMode==='previous')students.sort((a,b)=>Number(b.previous_score)-Number(a.previous_score)||cmpName(a,b));
-  else if(sortMode==='abc')students.sort(cmpName);else students.sort(cmpSbd);
+  else if(sortMode==='abc')students.sort(cmpName);else if(sortMode==='class')students.sort(cmpClass);else students.sort(cmpSbd);
   const minimumRoomCount=Math.ceil(students.length/capacity);
   const targetRooms=Array.from({length:minimumRoomCount},(_,index)=>({
     room_number:first+index,room_code:`${prefix}${String(first+index).padStart(2,'0')}`,
@@ -423,11 +425,11 @@ export function optimizeElectiveRooms(candidates, options={}) {
 export function optimizeMandatoryRooms(candidates, options={}) {
  const capacity=Math.floor(Number(options.capacity||24)),prefix=String(options.roomPrefix||'M').trim()||'M',
  first=Math.floor(Number(options.firstRoomNumber||1)),subject=String(options.subjectCode||'TOAN').toUpperCase(),sortMode=options.sortMode||'abc';
- if(!Number.isFinite(capacity)||capacity<1||capacity>100)return {ok:false,errors:['Sức chứa phòng phải từ 1 đến 100.']};
+ if(!Number.isFinite(capacity)||capacity<1)return {ok:false,errors:['Sức chứa phòng phải là số nguyên dương.']};
  if(!Array.isArray(candidates)||!candidates.length)return {ok:false,errors:['Không có thí sinh trong kỳ thi.']};
  const students=[...candidates];
  if(sortMode==='previous')students.sort((a,b)=>Number(b.previous_score)-Number(a.previous_score)||cmpName(a,b));
- else if(sortMode==='abc')students.sort(cmpName);else students.sort(cmpSbd);
+  else if(sortMode==='abc')students.sort(cmpName);else if(sortMode==='class')students.sort(cmpClass);else students.sort(cmpSbd);
  const rooms=[],assignments=[];
  for(let i=0;i<students.length;i+=capacity){
   const chunk=students.slice(i,i+capacity),number=first+rooms.length,code=`${prefix}${String(number).padStart(2,'0')}`;
