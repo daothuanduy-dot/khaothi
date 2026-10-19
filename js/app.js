@@ -1,9 +1,9 @@
-import {buildElectiveSbdPlan,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.112';
-import {loadTabModules} from './module-loader.js?v=0.1.112';
-import {wireOperations} from './operations.js?v=0.1.112';
-import {loadExamRounds} from './rounds.js?v=0.1.112';
-const APP_VERSION='v0.1.112';
-const APP_BUILD='2026-10-19-version-refresh';
+import {buildElectiveSbdPlan,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.113';
+import {loadTabModules} from './module-loader.js?v=0.1.113';
+import {wireOperations} from './operations.js?v=0.1.113';
+import {loadExamRounds} from './rounds.js?v=0.1.113';
+const APP_VERSION='v0.1.113';
+const APP_BUILD='2026-10-19-archive-sbd';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1853,14 +1853,17 @@ function wireSbdRoomMode(){
 async function resetSbdAndElectivePlan(){
  const examId=$('sbd-exam-select')?.value;
  if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi xoá SBD cũ.','error');return}
- if(!confirm('Xoá toàn bộ SBD hiện tại và phương án phòng môn lựa chọn đã lưu để lập lại? Thao tác này không thể hoàn tác.'))return;
+ const exam=state.exams.find(item=>item.id===examId);
+ const confirmation=prompt(`Kỳ thi: ${exam?.name||examId}\nLưu trữ SBD và toàn bộ phương án phòng (kể cả chính thức, mọi môn và đợt), sau đó xoá SBD hiện tại để lập lại. Giữ nguyên thí sinh và đăng ký môn. Các danh sách đã in sẽ không còn hiệu lực; cần xếp và chốt lại tất cả phòng.\nHệ thống sẽ chặn nếu đã có điểm, phách hoặc báo vắng.\nNhập LAP LAI SBD để xác nhận:`);
+ if(confirmation!=='LAP LAI SBD')return;
  const button=$('reset-sbd-old');if(button)button.disabled=true;
  try{
-  const {data,error}=await state.client.rpc('exam_reset_sbd_and_elective_room_plan',{p_exam_id:examId});
-  if(error)throw new Error(`Không xoá được SBD cũ: ${error.message}`);
+  const {data,error}=await state.client.rpc('exam_archive_rooming_and_reset_sbd',{p_exam_id:examId,p_confirmation:confirmation});
+  if(error)throw new Error(`Không lập lại được SBD: ${error.message}${error.code==='PGRST202'?' — Cần chạy migration v0.1.113 trên Supabase.':''}`);
   invalidateSbdRoomPreview();
-  if(state.preview?.examId===examId)state.preview=null;
-  message($('sbd-message'),`Đã xoá ${Number(data?.cleared_count)||0} SBD và phương án phòng môn lựa chọn. Có thể chọn “Theo tổ hợp môn và thứ tự phòng thi lựa chọn” để lập lại.`,'success');
+  state.preview=null;state.formData=null;state.candidates=[];state.sbdExamId=null;state.sbdConfig=null;
+  clearRoomingPreview();
+  message($('sbd-message'),`Đã lưu trữ hồ sơ cũ (mã ${data.archive_id}), xoá ${Number(data?.cleared_count)||0} SBD và huỷ các phương án phòng hiện hành. Hãy tải lại trang để làm mới các module, rồi chọn “Theo tổ hợp môn và thứ tự phòng thi lựa chọn”. Cần lập và chốt lại phòng cho mọi môn.`,'success');
  }catch(error){message($('sbd-message'),error.message||String(error),'error')}
  finally{if(button)button.disabled=false}
 }
