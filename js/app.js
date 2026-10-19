@@ -1,9 +1,9 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.104';
-import {loadTabModules} from './module-loader.js?v=0.1.104';
-import {wireOperations} from './operations.js?v=0.1.104';
-import {loadExamRounds} from './rounds.js?v=0.1.104';
-const APP_VERSION='v0.1.104';
-const APP_BUILD='2026-10-19-round-management';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.105';
+import {loadTabModules} from './module-loader.js?v=0.1.105';
+import {wireOperations} from './operations.js?v=0.1.105';
+import {loadExamRounds} from './rounds.js?v=0.1.105';
+const APP_VERSION='v0.1.105';
+const APP_BUILD='2026-10-19-forms-round-source';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;

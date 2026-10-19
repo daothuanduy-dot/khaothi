@@ -3,9 +3,17 @@ export async function loadExamRounds(client,examId){
   if(!examId)return [];
   let rounds=[];
   let roundsError=null;
-  const configured=await client.rpc('exam_get_rounds',{p_exam_id:examId});
-  if(configured.error)roundsError=configured.error;
-  else rounds=(configured.data||[]).filter(round=>round.is_active!==false);
+  // v0.1.104 is the source used by the round-management screen and returns
+  // both active and inactive rows. Use it here so Forms, Rooming and
+  // management cannot disagree about the available rounds.
+  const managed=await client.rpc('exam_list_rounds',{p_exam_id:examId});
+  if(!managed.error)rounds=(managed.data||[]).filter(round=>round.is_active!==false);
+  else roundsError=managed.error;
+  if(!rounds.length){
+    const configured=await client.rpc('exam_get_rounds',{p_exam_id:examId});
+    if(configured.error)roundsError=roundsError||configured.error;
+    else rounds=(configured.data||[]).filter(round=>round.is_active!==false);
+  }
   if(!rounds.length){
     for(const roundNo of [1,2]){
       const probe=await client.rpc('exam_get_round_candidates',{p_exam_id:examId,p_round_no:roundNo});
