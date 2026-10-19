@@ -83,8 +83,27 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!examId)throw new Error('Hãy chọn kỳ thi.');
   };
 
+  async function loadFormRounds(examId){
+    const roundSelect=$('forms-round');
+    const previous=roundSelect.value;
+    roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>';
+    if(!examId)return;
+    let rounds=checkResult(await state.client.from('exam_rounds').select('round_no,name,is_active')
+      .eq('exam_id',examId).eq('is_active',true).order('round_no'),'Không tải được danh sách đợt thi');
+    if(!rounds?.length){
+      const fallback=checkResult(await state.client.from('exam_rooming_round_plans').select('round_no')
+        .eq('exam_id',examId).eq('status','official').order('round_no'),'Không tải được các đợt đã phân phòng');
+      rounds=[...new Map((fallback||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
+    }
+    roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
+      `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
+    const available=rounds.map(round=>String(round.round_no));
+    roundSelect.value=available.includes(previous)?previous:(available[0]||'');
+  }
+
   async function loadForms(){
-    const examId=currentExam('forms-exam');
+    const examId=currentExam('forms-exam'),roundValue=$('forms-round')?.value||'';
+    const roundNo=roundValue?Number(roundValue):null;
     cache.forms=null;
     $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
     setAdminExam(examId);
@@ -95,21 +114,43 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('forms-title').value=exam.form_exam_title||exam.name||'';
     $('forms-load-data').disabled=true;
     try{
-      const candidates=await readPages(()=>state.client.from('exam_candidates')
+      const allCandidates=await readPages(()=>state.client.from('exam_candidates')
         .select('id,sbd,student_code,student_name,class_code,date_of_birth').eq('exam_id',examId).order('class_code').order('sbd'));
+      let candidates=allCandidates;
+      if(roundNo){
+        const roundCandidates=checkResult(await state.client.from('exam_round_candidates').select('candidate_id')
+          .eq('exam_id',examId).eq('round_no',roundNo),'Không tải được thí sinh của đợt thi');
+        const roundIds=new Set((roundCandidates||[]).map(row=>String(row.candidate_id)));
+        candidates=allCandidates.filter(candidate=>roundIds.has(String(candidate.id)));
+      }
       const registrations=await readPages(()=>state.client.from('exam_candidate_subjects')
         .select('candidate_id,subject_code,subject_order,subject_type').eq('exam_id',examId).eq('subject_type','elective'));
-      const finalizations=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
+      const legacyFinalizations=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
         .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng chính thức');
       const assignments=[];
-      for(const finalization of finalizations||[]){
-        const stored=await readPages(()=>state.client.from('exam_room_assignments')
-          .select('candidate_id,room_code,sbd,subject_code,ca1_subject_code,ca2_subject_code')
-          .eq('finalization_id',finalization.id).order('sbd'));
-        for(const assignment of stored)assignments.push({...assignment,
-          plan_type:finalization.plan_type,finalization_id:finalization.id,
-          subject_code:assignment.subject_code||finalization.subject_code});
+      let officialPlans=[];
+      if(roundNo){
+        officialPlans=checkResult(await state.client.from('exam_rooming_round_plans')
+          .select('id,round_no,plan_type,subject_code,rooms,assignments,status,created_at')
+          .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}),
+          'Không tải được phương án phòng chính thức của đợt');
+        for(const plan of officialPlans||[]){
+          for(const assignment of Array.isArray(plan.assignments)?plan.assignments:[]){
+            assignments.push({...assignment,plan_type:plan.plan_type,finalization_id:plan.id,
+              subject_code:assignment.subject_code||plan.subject_code||''});
+          }
+        }
+      }else{
+        for(const finalization of legacyFinalizations||[]){
+          const stored=await readPages(()=>state.client.from('exam_room_assignments')
+            .select('candidate_id,room_code,sbd,subject_code,ca1_subject_code,ca2_subject_code')
+            .eq('finalization_id',finalization.id).order('sbd'));
+          for(const assignment of stored)assignments.push({...assignment,
+            plan_type:finalization.plan_type,finalization_id:finalization.id,
+            subject_code:assignment.subject_code||finalization.subject_code});
+        }
       }
+      const finalizations=roundNo?officialPlans:legacyFinalizations;
       const candidateById=new Map(candidates.map(candidate=>[String(candidate.id),candidate]));
       const registrationById=new Map();
       for(const registration of registrations||[]){
@@ -119,11 +160,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         if(Number(registration.subject_order)===1)target.one=registration.subject_code;
         if(Number(registration.subject_order)===2)target.two=registration.subject_code;
       }
-      const expanded=assignments.map(assignment=>({...candidateById.get(String(assignment.candidate_id)),...assignment}));
+      const expanded=assignments.filter(assignment=>candidateById.has(String(assignment.candidate_id)))
+        .map(assignment=>({...candidateById.get(String(assignment.candidate_id)),...assignment}));
       const electiveFinal=finalizations?.find(row=>row.plan_type==='elective');
       let posting=(electiveFinal?expanded.filter(row=>row.finalization_id===electiveFinal.id):
-        expanded.filter(row=>row.plan_type==='mandatory'));
-      if(!posting.length)posting=expanded.filter(row=>row.plan_type==='mandatory');
+        expanded.filter(row=>row.plan_type==='mandatory'||row.plan_type==='subject'));
+      if(!posting.length)posting=expanded;
       const listingRows=posting.map((row,index)=>{
         const registration=registrationById.get(String(row.candidate_id))||{};
         return {...row,sequence:index+1,
@@ -143,13 +185,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         const selected=registrationById.get(String(candidate.id))||{};
         return {...candidate,sequence:index+1,subject_one:selected.one||'',subject_two:selected.two||''};
       });
-      cache.forms={exam,examId,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows};
+      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows};
       $('forms-summary').innerHTML=[
         ['Thí sinh',candidates.length],['Danh sách có phòng',listingRows.length],
         ['Lượt thu bài',receiptRows.length],['Môn lựa chọn đã rà soát',rosterRows.length]
       ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
       $('forms-export-xlsx').disabled=false;$('forms-export-pdf').disabled=false;
-      message($('forms-message'),`Đã tải ${candidates.length} thí sinh, ${finalizations?.length||0} phương án phòng chính thức.`,'success');
+      message($('forms-message'),`Đã tải ${candidates.length} thí sinh${roundNo?` của đợt ${roundNo}`:''}, ${finalizations?.length||0} phương án phòng chính thức.`,'success');
     }finally{$('forms-load-data').disabled=false}
   }
   async function saveFormHeader(){
@@ -164,6 +206,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     message($('forms-message'),'Đã lưu thông tin tiêu đề riêng cho kỳ thi.','success');
   }
   function exportFormsExcel(){
+    const printType=$('forms-print-type')?.value||'all';
     const forms=cache.forms;
     if(!forms)throw new Error('Hãy tải dữ liệu biểu mẫu trước.');
     if(!window.XLSX)throw new Error('Không tải được thư viện Excel.');
@@ -195,11 +238,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ['STT','Lớp','Mã học sinh','SBD','Họ và tên','Môn 1','Môn 2'],
       ...forms.rosterRows.map((row,index)=>[index+1,row.class_code||'',row.student_code||'',row.sbd||'',
         row.student_name,nameOf(row.subject_one),nameOf(row.subject_two)])];
-    for(const[sheetName,rows,widths]of[
+    const sheetSpecs=[
       ['Danh sach niem yet',listings,[8,15,30,15,12,25,25,25]],
       ['Phieu thu bai',receipts,[7,14,26,15,11,24,10,9,14,24]],
       ['SBD va mon lua chon',roster,[8,16,20,14,30,25,25]]
-    ]){
+    ].filter(([sheetName])=>printType==='all'||
+      (printType==='listing'&&sheetName==='Danh sach niem yet')||
+      (printType==='receipt'&&sheetName==='Phieu thu bai')||
+      (printType==='roster'&&sheetName==='SBD va mon lua chon'));
+    for(const[sheetName,rows,widths]of sheetSpecs){
       const ws=window.XLSX.utils.aoa_to_sheet(rows);
       ws['!cols']=widths.map(wch=>({wch}));
       ws['!margins']={left:.15,right:.15,top:.25,bottom:.25,header:.1,footer:.1};
@@ -237,24 +284,21 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const printType=$('forms-print-type')?.value||'all';
     const forms=cache.forms;if(!forms)throw new Error('Hãy tải dữ liệu biểu mẫu trước.');
     const pages=[];
-    const originalRosterRows=forms.rosterRows;
-    if(printType==='listing'||printType==='receipt')forms.rosterRows=[];
     const header=`<header><b>${esc(forms.exam.managing_authority||'')}</b><br><b>${esc(forms.exam.institution_name||'')}</b><br><b>${esc(forms.exam.form_exam_title||forms.exam.name)}</b></header>`;
-    for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
+    if(printType==='all'||printType==='listing')for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
       const rows=forms.listingRows.filter(row=>row.room_code===room);
       pages.push(`<section class="page">${header}<h3>DANH SÁCH NIÊM YẾT · PHÒNG ${esc(room)}</h3><table><thead><tr><th>STT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
-    for(const key of [...new Set(forms.receiptRows.map(row=>`${row.room_code}|${row.subject_code||''}|${row.subject_order??''}`))]){
+    if(printType==='all'||printType==='receipt')for(const key of [...new Set(forms.receiptRows.map(row=>`${row.room_code}|${row.subject_code||''}|${row.subject_order??''}`))]){
       const[room,subject,order]=key.split('|');
       const rows=forms.receiptRows.filter(row=>row.room_code===room&&String(row.subject_code||'')===subject&&String(row.subject_order??'')===order);
       pages.push(`<section class="page">${header}<h3>PHIẾU THU BÀI · PHÒNG ${esc(room)}${subject?` · MÔN ${esc(order)}: ${esc(nameOf(subject))}`:''}</h3><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p></section>`);
     }
-    for(const classCode of [...new Set(forms.rosterRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))){
+    if(printType==='all'||printType==='roster')for(const classCode of [...new Set(forms.rosterRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))){
       const rows=forms.rosterRows.filter(row=>(row.class_code||'Chưa xếp lớp')===classCode);
       pages.push(`<section class="page">${header}<h3>DANH SÁCH SỐ BÁO DANH VÀ MÔN THI LỰA CHỌN · LỚP ${esc(classCode)}</h3><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>SBD</th><th>Họ và tên</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.student_code||'')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     const printablePages=compactPrintPages(pages);
-    forms.rosterRows=originalRosterRows;
     const win=window.open('','_blank');
     if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
@@ -1044,7 +1088,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   function wire(){
     setExamOptions();
     setSubjectOptions('script-subject',allSubjectOptions());
-    $('forms-exam').onchange=()=>{try{setAdminExam($('forms-exam').value);loadForms().catch(error=>message($('forms-message'),error.message,'error'))}catch(error){message($('forms-message'),error.message,'error')}};
+    if($('forms-exam').value)loadFormRounds($('forms-exam').value).catch(error=>message($('forms-message'),error.message,'error'));
+    $('forms-exam').onchange=async()=>{try{setAdminExam($('forms-exam').value);await loadFormRounds($('forms-exam').value);await loadForms()}catch(error){message($('forms-message'),error.message,'error')}};
+    $('forms-round').onchange=()=>loadForms().catch(error=>message($('forms-message'),error.message,'error'));
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
     safeAction('forms-message',loadForms,$('forms-load-data'));
     $('forms-export-xlsx').onclick=()=>{try{exportFormsExcel()}catch(error){message($('forms-message'),error.message,'error')}};
