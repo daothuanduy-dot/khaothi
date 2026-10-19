@@ -1,9 +1,9 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.103';
-import {loadTabModules} from './module-loader.js?v=0.1.103';
-import {wireOperations} from './operations.js?v=0.1.103';
-import {loadExamRounds} from './rounds.js?v=0.1.103';
-const APP_VERSION='v0.1.103';
-const APP_BUILD='2026-10-19-shared-round-source';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.104';
+import {loadTabModules} from './module-loader.js?v=0.1.104';
+import {wireOperations} from './operations.js?v=0.1.104';
+import {loadExamRounds} from './rounds.js?v=0.1.104';
+const APP_VERSION='v0.1.104';
+const APP_BUILD='2026-10-19-round-management';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -996,6 +996,20 @@ async function refreshRoomingRoundOptions(){
   const available=rounds.map(round=>String(round.round_no));
   select.value=available.includes(previous)?previous:(available[0]||'');
   if(select.value)await refreshRoomingSubjectOptions();
+}
+async function openRoundManagement(){
+  const examId=$('rooming-exam-select')?.value;
+  if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi trước khi quản lý đợt thi.','error');return}
+  let dialog=$('round-management-dialog');
+  if(!dialog){dialog=document.createElement('dialog');dialog.id='round-management-dialog';dialog.className='modal-dialog';document.body.appendChild(dialog)}
+  dialog.innerHTML=`<form method="dialog" class="round-candidate-form"><div class="modal-header"><div><h3>Quản lý đợt thi</h3><p>Đợt thi thuộc riêng kỳ thi đang chọn. Tối đa 2 đợt theo quy tắc dữ liệu hiện tại.</p></div><button value="cancel" class="btn btn-light" type="submit">Đóng</button></div><div class="form-grid"><label>Số đợt<select id="round-management-no"><option value="1">Đợt 1</option><option value="2">Đợt 2</option></select></label><label>Tên đợt<input id="round-management-name" maxlength="120" placeholder="Ví dụ: Đợt 1"></label></div><div class="form-actions"><button id="round-management-create" class="btn btn-primary" type="button">Thêm đợt</button><button id="round-management-refresh" class="btn btn-light" type="button">Tải lại</button></div><div id="round-management-message" class="notice hidden"></div><div class="table-wrap"><table><thead><tr><th>Đợt</th><th>Tên</th><th>${'Trạng thái'}</th><th>Thí sinh</th><th>Môn</th><th>Thao tác</th></tr></thead><tbody id="round-management-body"></tbody></table></div></form>`;
+  const body=dialog.querySelector('#round-management-body'),nameInput=dialog.querySelector('#round-management-name'),noInput=dialog.querySelector('#round-management-no'),notice=dialog.querySelector('#round-management-message');
+  const showError=text=>message(notice,text,'error');
+  const load=async()=>{body.innerHTML='<tr><td colspan="6" class="empty">Đang tải...</td></tr>';const {data,error}=await state.client.rpc('exam_list_rounds',{p_exam_id:examId});if(error){showError(`Không tải được danh sách đợt: ${error.message}`);return []}const rows=data||[];body.innerHTML=rows.length?rows.map(row=>`<tr><td>${esc(row.round_no)}</td><td>${esc(row.name)}</td><td>${row.is_active?'Đang hoạt động':'Đã tắt'}</td><td>${Number(row.candidate_count)||0}</td><td>${Number(row.subject_count)||0}</td><td><button type="button" class="small-btn" data-round-edit="${esc(row.round_no)}">Sửa</button> <button type="button" class="small-btn danger-btn" data-round-delete="${esc(row.round_no)}">Xoá</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Kỳ thi chưa có đợt thi.</td></tr>';return rows};
+  dialog.querySelector('#round-management-create').onclick=async()=>{const roundNo=Number(noInput.value),name=nameInput.value.trim()||`Đợt ${roundNo}`;try{const {error}=await state.client.rpc('exam_create_round',{p_exam_id:examId,p_round_no:roundNo,p_name:name});if(error)throw error;message(notice,`Đã thêm ${name}.`,'success');await load();await refreshRoomingRoundOptions()}catch(error){showError(error.message||String(error))}};
+  dialog.querySelector('#round-management-refresh').onclick=()=>load();
+  body.onclick=async event=>{const edit=event.target.closest('[data-round-edit]'),del=event.target.closest('[data-round-delete]');if(edit){const rowNo=Number(edit.dataset.roundEdit),row=[...(await load())].find(item=>Number(item.round_no)===rowNo);if(!row)return;const name=prompt('Tên đợt thi:',row.name);if(name===null)return;const active=confirm('Đợt này có được hiển thị để cấu hình và xếp phòng không?');try{const {error}=await state.client.rpc('exam_update_round',{p_exam_id:examId,p_round_no:rowNo,p_name:name.trim(),p_is_active:active});if(error)throw error;message(notice,'Đã cập nhật đợt thi.','success');await load();await refreshRoomingRoundOptions()}catch(error){showError(error.message||String(error))}return}if(del){const rowNo=Number(del.dataset.roundDelete);if(!confirm(`Xoá cấu hình đợt ${rowNo}? Danh sách học sinh và môn của đợt sẽ bị xoá. Phương án phòng chính thức sẽ được bảo vệ.`))return;try{const {error}=await state.client.rpc('exam_delete_round',{p_exam_id:examId,p_round_no:rowNo});if(error)throw error;message(notice,`Đã xoá đợt ${rowNo}.`,'success');await load();await refreshRoomingRoundOptions()}catch(error){showError(error.message||String(error))}}};
+  await load();dialog.showModal();
 }
 async function refreshRoomingSubjectOptions(){
   const examId=$('rooming-exam-select')?.value,roundNo=selectedRoomingRound();
@@ -2528,6 +2542,7 @@ $('room-plan-type').onchange=()=>{const mandatory=$('room-plan-type').value==='m
 function wireRoomingEditor(){
  const refreshRoomingTypeControls=()=>{const type=$('room-plan-type').value,subjectPlan=type==='subject';$('mandatory-subject-wrap').classList.toggle('hidden',type!=='mandatory');$('subject-rooming-wrap').classList.toggle('hidden',!subjectPlan);$('rooming-distribution-wrap').classList.remove('hidden');if(subjectPlan)$('room-prefix').value='P'};
  $('room-plan-type').addEventListener('change',refreshRoomingTypeControls);refreshRoomingTypeControls();
+ $('manage-rounds').onclick=()=>openRoundManagement().catch(error=>message($('rooming-message'),error.message||String(error),'error'));
  if(!$('configure-rooming-round')){const b=document.createElement('button');b.id='configure-rooming-round';b.type='button';b.className='btn btn-light';b.textContent='Nạp thí sinh vào đợt đang chọn';$('preview-rooming').parentElement.prepend(b)}
  $('configure-rooming-round').onclick=async()=>{
   const button=$('configure-rooming-round');
