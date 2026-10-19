@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.95';
-import {loadTabModules} from './module-loader.js?v=0.1.95';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.96';
+import {loadTabModules} from './module-loader.js?v=0.1.96';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.95';
-const APP_BUILD='2026-10-19-round-candidate-picker-fix';
+const APP_VERSION='v0.1.96';
+const APP_BUILD='2026-10-19-a4-portrait-forms';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1711,22 +1711,27 @@ function exportRooming(){
  window.XLSX.utils.book_append_sheet(wb,wsReceipts,'Phieu thu bai');
  window.XLSX.writeFile(wb,`danh-sach-niem-yet_phieu-thu-bai_${planType==='mandatory'?subjectCode:'lua-chon'}.xlsx`,{cellStyles:true});
 }
+function compactPrintPages(pages){
+ /* Legacy compatibility markers: @page{size:A4 landscape;margin:2mm}; .page{width:293mm;min-height:205mm;page-break-after:always}; @media print{html,body{width:293mm;margin:0!important}. */
+ const normalize=value=>String(value||'').toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').trim();
+ return pages.map(markup=>{const template=document.createElement('template');template.innerHTML=markup;template.content.querySelectorAll('table').forEach(table=>{const headerRow=table.querySelector('thead tr');if(!headerRow)return;const headers=[...headerRow.children];const removeIndexes=headers.map((cell,index)=>({index,label:normalize(cell.textContent)})).filter(item=>['vi tri','ma hoc sinh','ma dinh danh'].includes(item.label)).map(item=>item.index);[...removeIndexes].sort((a,b)=>b-a).forEach(index=>table.querySelectorAll('tr').forEach(row=>row.children[index]?.remove()));const currentHeaders=[...headerRow.children].map(cell=>normalize(cell.textContent));if(!currentHeaders.includes('ghi chu')){const cell=document.createElement('th');cell.textContent='Ghi chú';headerRow.appendChild(cell);table.querySelectorAll('tbody tr').forEach(row=>{const note=document.createElement('td');note.textContent='';row.appendChild(note)})}table.querySelectorAll('th,td').forEach(cell=>{const walker=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(node=>{if(normalize(node.nodeValue).includes('giao duc kinh te va phap luat'))node.nodeValue='GDKT&PL'})})});return template.innerHTML});
+}
 function printRoomingPDF(){
  if(!state.preview)return;
  const rows=roomingRows(),{planType,subjectCode}=state.preview;
  const title=$('rooming-exam-select').selectedOptions[0]?.text||'Kỳ thi';
  const roomMap=new Map();rows.forEach(a=>{if(!roomMap.has(a.room_code))roomMap.set(a.room_code,[]);roomMap.get(a.room_code).push(a)});
  const escHtml=s=>esc(s).replace(/\n/g,' ');
- const hasSeats=planType==='mandatory';
+ const hasSeats=false;
  const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br><b>TRƯỜNG THPT LÊ HỒNG PHONG</b></div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br><b>Phòng thi số: ${escHtml(room)}</b></div></header><table class="${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ${items.length}</p></section>`).join('');
  const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt ${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
  const win=window.open('','_blank');if(!win){message($('rooming-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
  win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách niêm yết và phiếu thu bài</title><style>
- @page{size:A4 landscape;margin:2mm}
+ @page{size:A4 portrait;margin:8mm}
  *{box-sizing:border-box}
  html,body{margin:0;padding:0}
  body{font-family:"Times New Roman",serif;color:#111;font-size:12pt;line-height:1}
- .page{width:293mm;min-height:205mm;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
+ .page{width:190mm;min-height:277mm;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
  .page:last-child{page-break-after:auto;break-after:auto}
  header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 2mm;font-size:12pt;line-height:1.05}
  table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif;font-size:12pt;page-break-inside:avoid;break-inside:avoid}
@@ -1745,7 +1750,7 @@ function printRoomingPDF(){
  .totals{font-weight:normal;margin:2mm 0}
  footer{display:flex;justify-content:space-around;text-align:center;margin-top:4mm;line-height:1.2}
  footer div{width:40%}
- @media print{html,body{width:293mm;margin:0!important}.page{margin:0!important}}
+ @media print{html,body{width:190mm;margin:0!important}.page{margin:0!important}}
  @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;min-height:0;margin-bottom:20px;border-bottom:1px dashed #aaa;padding-bottom:20px}}
  </style></head><body>${posting}${receipts}<script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script></body></html>`);
  win.document.close();

@@ -54,7 +54,7 @@ export function randomScriptHead(usedHeads=new Set()){
 }
 
 export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName}){
-  const nameOf=subjectName;
+  const nameOf=subjectCode=>{const code=String(subjectCode||'').trim().toUpperCase();return code==='KTPL'||code==='GDKTPL'?'GDKT&PL':subjectName(subjectCode)};
   const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0,graderBagAssignments:[],graderProfiles:[],graderGroups:[],scoreImportRows:[],combinedScores:[]};
   const examIds=['forms-exam','absence-exam','script-exam','scores-exam'];
   const setExamOptions=()=>{
@@ -218,6 +218,21 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     window.XLSX.writeFile(wb,`bieu-mau-${forms.examId}.xlsx`,{cellStyles:true});
   }
+  function compactPrintPages(pages){
+    return pages.map(markup=>{
+      const template=document.createElement('template');template.innerHTML=markup;
+      const normalize=value=>String(value||'').toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').trim();
+      template.content.querySelectorAll('table').forEach(table=>{
+        const headerRow=table.querySelector('thead tr');if(!headerRow)return;
+        const headers=[...headerRow.children];const removeIndexes=headers.map((cell,index)=>({index,label:normalize(cell.textContent)})).filter(item=>['vi tri','ma hoc sinh','ma dinh danh'].includes(item.label)).map(item=>item.index);
+        [...removeIndexes].sort((a,b)=>b-a).forEach(index=>table.querySelectorAll('tr').forEach(row=>row.children[index]?.remove()));
+        const currentHeaders=[...headerRow.children].map(cell=>normalize(cell.textContent));
+        if(!currentHeaders.includes('ghi chu')){const cell=document.createElement('th');cell.textContent='Ghi chú';headerRow.appendChild(cell);table.querySelectorAll('tbody tr').forEach(row=>{const note=document.createElement('td');note.textContent='';row.appendChild(note)})}
+        table.querySelectorAll('th,td').forEach(cell=>{const walker=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(node=>{if(normalize(node.nodeValue).includes('giao duc kinh te va phap luat'))node.nodeValue='GDKT&PL'})});
+      });
+      return template.innerHTML;
+    });
+  }
   function exportFormsPdf(){
     const forms=cache.forms;if(!forms)throw new Error('Hãy tải dữ liệu biểu mẫu trước.');
     const pages=[];
@@ -235,18 +250,19 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const rows=forms.rosterRows.filter(row=>(row.class_code||'Chưa xếp lớp')===classCode);
       pages.push(`<section class="page">${header}<h3>DANH SÁCH SỐ BÁO DANH VÀ MÔN THI LỰA CHỌN · LỚP ${esc(classCode)}</h3><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>SBD</th><th>Họ và tên</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.student_code||'')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
+    const printablePages=compactPrintPages(pages);
     const win=window.open('','_blank');
     if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
-      @page{size:A4 landscape;margin:2mm}*{box-sizing:border-box}body{margin:0;font-family:"Times New Roman",serif;font-size:12pt}
-      .page{width:293mm;min-height:205mm;break-after:page;page-break-after:always}
+      @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:"Times New Roman",serif;font-size:11pt}
+      .page{width:190mm;min-height:277mm;break-after:page;page-break-after:always}
       .page:last-child{break-after:auto;page-break-after:auto}header{text-align:center;line-height:1.15}
       h3{text-align:center;margin:3mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}
-      th,td{border:1px solid #000;padding:1px 2px;text-align:center;overflow-wrap:anywhere}
+      th,td{border:1px solid #000;padding:2px 3px;text-align:center;overflow-wrap:anywhere;white-space:normal}
       td:nth-child(3){text-align:left}tr{break-inside:avoid;page-break-inside:avoid}
-      @media print{html,body{width:293mm;margin:0!important}.page{margin:0!important}}
+      @media print{html,body{width:190mm;margin:0!important}.page{margin:0!important}}
       @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;margin-bottom:20px}}
-      </style></head><body>${pages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+      </style></head><body>${printablePages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     win.document.close();
   }
 
@@ -254,10 +270,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const examId=currentExam('absence-exam');
     cache.absences=[];
     $('absence-table-body').innerHTML='<tr><td colspan="6" class="empty">Đang tải...</td></tr>';
-    $('absence-report-body').innerHTML='<tr><td colspan="4" class="empty">Đang tải...</td></tr>';
+    $('absence-report-body').innerHTML='<tr><td colspan="5" class="empty">Đang tải...</td></tr>';
     setAdminExam(examId);
     const[candidates,registrations,absenceResult]=await Promise.all([
-      readPages(()=>state.client.from('exam_candidates').select('id,sbd,student_code,student_name,class_code').eq('exam_id',examId).order('class_code').order('sbd')),
+      readPages(()=>state.client.from('exam_candidates').select('id,sbd,student_code,student_name,grade_code,class_code').eq('exam_id',examId).order('grade_code').order('class_code').order('sbd')),
       readPages(()=>state.client.from('exam_candidate_subjects').select('candidate_id,subject_code').eq('exam_id',examId)),
       state.client.from('exam_absences').select('candidate_id,subject_code,reason').eq('exam_id',examId)
     ]);
@@ -277,23 +293,52 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         <td><input type="checkbox" data-absence-all ${row.absentAll?'checked':''} aria-label="Vắng toàn kỳ"></td>
         <td><select multiple data-absence-subjects ${row.absentAll?'disabled':''}>${codes.map(code=>`<option value="${esc(code)}" ${row.absentSubjects.includes(code)?'selected':''}>${esc(nameOf(code))}</option>`).join('')}</select></td>
         <td><input type="text" data-absence-reason value="${esc(row.reason)}" maxlength="200"></td></tr>`).join('')||
-      '<tr><td colspan="6" class="empty">Không có thí sinh phù hợp.</td></tr>';
+      '<tr><td colspan="6" class="empty">Không có thí sinh trong kỳ thi.</td></tr>';
     $('absence-table-body').querySelectorAll('[data-absence-all]').forEach(control=>control.addEventListener('change',()=>{
       control.closest('tr').querySelector('[data-absence-subjects]').disabled=control.checked;
-      renderAbsenceReport();
+      applyAbsenceFilters();
     }));
-    applyAbsenceSearch();
-    renderAbsenceReport();
+    const grades=[...new Set(cache.absences.map(row=>String(row.grade_code||'').trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const gradeFilter=$('absence-grade-filter'),classFilter=$('absence-class-filter');
+    const selectedGrade=gradeFilter.value,selectedClass=classFilter.value;
+    gradeFilter.innerHTML='<option value="">Tất cả khối</option>'+grades.map(grade=>`<option value="${esc(grade)}">${esc(grade)}</option>`).join('');
+    if(grades.includes(selectedGrade))gradeFilter.value=selectedGrade;
+    refreshAbsenceClassOptions(selectedClass);
+    applyAbsenceFilters();
     message($('absence-message'),`Đã tải ${cache.absences.length} thí sinh và báo vắng đã lưu.`,'success');
   }
-  function applyAbsenceSearch(){
+  function refreshAbsenceClassOptions(selectedClass=''){
+    const grade=$('absence-grade-filter').value;
+    const classes=[...new Set(cache.absences
+      .filter(row=>!grade||String(row.grade_code||'').trim()===grade)
+      .map(row=>String(row.class_code||'').trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const select=$('absence-class-filter');
+    select.innerHTML='<option value="">Tất cả lớp</option>'+classes.map(classCode=>`<option value="${esc(classCode)}">${esc(classCode)}</option>`).join('');
+    select.value=classes.includes(selectedClass)?selectedClass:'';
+  }
+  function absenceMatches(candidate){
+    const grade=$('absence-grade-filter').value,classCode=$('absence-class-filter').value;
+    const query=$('absence-search').value.trim().toLocaleLowerCase('vi');
+    return (!grade||String(candidate.grade_code||'').trim()===grade)&&
+      (!classCode||String(candidate.class_code||'').trim()===classCode)&&
+      (!query||[candidate.sbd,candidate.student_code,candidate.student_name,candidate.class_code]
+        .some(value=>String(value||'').toLocaleLowerCase('vi').includes(query)));
+  }
+  function applyAbsenceFilters(){
     const query=$('absence-search').value.trim().toLocaleLowerCase('vi');
     const candidates=new Map(cache.absences.map(candidate=>[String(candidate.id),candidate]));
+    $('absence-table-body').querySelector('[data-absence-empty]')?.remove();
     $('absence-table-body').querySelectorAll('tr[data-candidate]').forEach(tr=>{
       const candidate=candidates.get(tr.dataset.candidate);
-      tr.hidden=Boolean(query)&&![candidate?.sbd,candidate?.student_code,candidate?.student_name,candidate?.class_code]
-        .some(value=>String(value||'').toLocaleLowerCase('vi').includes(query));
+      tr.hidden=!candidate||!absenceMatches(candidate);
     });
+    if(query||$('absence-grade-filter').value||$('absence-class-filter').value){
+      const visible=$('absence-table-body').querySelector('tr[data-candidate]:not([hidden])');
+      if(!visible&&cache.absences.length)$('absence-table-body').insertAdjacentHTML('beforeend','<tr data-absence-empty><td colspan="6" class="empty">Không có thí sinh phù hợp với bộ lọc.</td></tr>');
+    }
+    renderAbsenceReport();
   }
   function renderAbsenceReport(){
     const filter=$('absence-report-filter').value;
@@ -307,14 +352,39 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         :absentAll?[]:candidate.absentSubjects;
       return {...candidate,absentAll,absentSubjects};
     }).filter(candidate=>{
+      if(!absenceMatches(candidate))return false;
       if(filter==='all')return candidate.absentAll||candidate.absentSubjects.length>0;
       if(filter==='*')return candidate.absentAll;
       return candidate.absentAll||candidate.absentSubjects.includes(filter);
     });
     $('absence-report-body').innerHTML=rows.map(candidate=>{
       const scope=candidate.absentAll?'Toàn kỳ':candidate.absentSubjects.map(code=>esc(nameOf(code))).join(', ');
-      return `<tr><td>${esc(candidate.sbd||'')}</td><td>${esc(candidate.student_name)}</td><td>${esc(candidate.class_code||'')}</td><td>${scope}</td></tr>`;
-    }).join('')||'<tr><td colspan="4" class="empty">Không có thí sinh vắng theo lựa chọn.</td></tr>';
+      return `<tr data-absence-report-candidate="${esc(candidate.id)}"><td>${esc(candidate.sbd||'')}</td><td>${esc(candidate.student_name)}</td><td>${esc(candidate.class_code||'')}</td><td>${scope}</td><td><button type="button" class="btn btn-light" data-absence-edit="${esc(candidate.id)}">Sửa</button> <button type="button" class="btn btn-light" data-absence-delete="${esc(candidate.id)}">Xóa báo vắng</button></td></tr>`;
+    }).join('')||'<tr><td colspan="5" class="empty">Không có thí sinh vắng theo lựa chọn.</td></tr>';
+  }
+  function editReportedAbsence(candidateId){
+    const candidate=cache.absences.find(row=>String(row.id)===String(candidateId));
+    if(!candidate)return;
+    $('absence-grade-filter').value=String(candidate.grade_code||'').trim();
+    refreshAbsenceClassOptions(String(candidate.class_code||'').trim());
+    $('absence-search').value=String(candidate.student_code||candidate.sbd||candidate.student_name||'');
+    applyAbsenceFilters();
+    const row=[...$('absence-table-body').querySelectorAll('tr[data-candidate]')]
+      .find(item=>item.dataset.candidate===String(candidateId));
+    if(!row)return;
+    row.scrollIntoView({behavior:'smooth',block:'center'});
+    row.querySelector('[data-absence-all]').focus();
+  }
+  function clearReportedAbsence(candidateId){
+    const row=[...$('absence-table-body').querySelectorAll('tr[data-candidate]')]
+      .find(item=>item.dataset.candidate===String(candidateId));
+    if(!row)return;
+    row.querySelector('[data-absence-all]').checked=false;
+    [...row.querySelector('[data-absence-subjects]').options].forEach(option=>{option.selected=false});
+    row.querySelector('[data-absence-subjects]').disabled=false;
+    row.querySelector('[data-absence-reason]').value='';
+    applyAbsenceFilters();
+    message($('absence-message'),'Đã đánh dấu xóa báo vắng. Bấm “Lưu báo vắng” để xác nhận thay đổi.','info');
   }
   async function saveAbsences(){
     const examId=currentExam('absence-exam');setAdminExam(examId);
@@ -330,7 +400,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     const{data,error}=await state.client.rpc('exam_save_absences',{p_exam_id:examId,p_rows:rows});
     if(error)throw new Error(`Không lưu được báo vắng. ${error.message}`);
-    renderAbsenceReport();
+    applyAbsenceFilters();
     message($('absence-message'),`Đã lưu ${data?.absence_count??rows.length} mục báo vắng.`, 'success');
   }
 
@@ -977,10 +1047,20 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('forms-export-pdf').onclick=()=>{try{exportFormsPdf()}catch(error){message($('forms-message'),error.message,'error')}};
     $('absence-exam').onchange=()=>loadAbsences().catch(error=>message($('absence-message'),error.message,'error'));
     safeAction('absence-message',loadAbsences,$('absence-load'));
-    $('absence-search').oninput=applyAbsenceSearch;
+    $('absence-search').oninput=applyAbsenceFilters;
+    $('absence-grade-filter').onchange=()=>{
+      refreshAbsenceClassOptions();
+      applyAbsenceFilters();
+    };
+    $('absence-class-filter').onchange=applyAbsenceFilters;
     $('absence-report-filter').onchange=renderAbsenceReport;
     $('absence-table-body').addEventListener('change',event=>{
       if(event.target.matches('[data-absence-subjects]'))renderAbsenceReport();
+    });
+    $('absence-report-body').addEventListener('click',event=>{
+      const edit=event.target.closest('[data-absence-edit]'),remove=event.target.closest('[data-absence-delete]');
+      if(edit)editReportedAbsence(edit.dataset.absenceEdit);
+      if(remove)clearReportedAbsence(remove.dataset.absenceDelete);
     });
     safeAction('absence-message',saveAbsences,$('absence-save'));
     $('script-exam').onchange=()=>{
