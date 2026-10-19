@@ -1,7 +1,7 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.101';
-import {loadTabModules} from './module-loader.js?v=0.1.101';
-import {wireOperations} from './operations.js?v=0.1.101';
-const APP_VERSION='v0.1.101';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.102';
+import {loadTabModules} from './module-loader.js?v=0.1.102';
+import {wireOperations} from './operations.js?v=0.1.102';
+const APP_VERSION='v0.1.102';
 const APP_BUILD='2026-10-19-forms-round-rooming-plans';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
