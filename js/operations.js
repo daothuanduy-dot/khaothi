@@ -1,3 +1,22 @@
+export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
+  const byId=new Map();
+  for(const row of assignments){
+    const id=String(row.candidate_id),room=String(row.room_code||'').trim();
+    if(!room)continue;
+    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set()});
+    const group=byId.get(id);
+    const subject=String(row.subject_code||'').toUpperCase();
+    const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&['TOAN','VAN'].includes(subject));
+    const subjects=row.plan_type==='elective'?[row.ca1_subject_code,row.ca2_subject_code].filter(Boolean):[subject].filter(Boolean);
+    const label=subjects.length?subjects.map(code=>nameOf(code)).join(' / ')+': '+room:room;
+    group[required?'mandatory':'elective'].add(label);
+  }
+  return candidates.map(row=>{
+    const rooms=byId.get(String(row.id));
+    return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng'};
+  }).sort((a,b)=>String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
+}
+
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_SIZE=500;
 
@@ -86,19 +105,34 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!examId)throw new Error('Hãy chọn kỳ thi.');
   };
 
+  let formRoundRequest=0,formDataRequest=0,formSettingsExamId=null;
   async function loadFormRounds(examId){
-    const roundSelect=$('forms-round');
-    const previous=roundSelect.value;
-    roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>';
-    if(!examId)return;
-    const rounds=await loadExamRounds(state.client,examId);
-    roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
-      `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
-    const available=rounds.map(round=>String(round.round_no));
-    roundSelect.value=available.includes(previous)?previous:(available[0]||'');
+    const request=++formRoundRequest,roundSelect=$('forms-round');
+    cache.forms=null;
+    $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
+    const previous=roundSelect.dataset.examId===examId?roundSelect.value:'';
+    roundSelect.disabled=true;
+    $('forms-round-status').textContent='Đang tải đợt thi…';
+    try{
+      const rounds=examId?await loadExamRounds(state.client,examId):[];
+      if(request!==formRoundRequest)return;
+      roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
+        `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
+      roundSelect.dataset.examId=examId||'';
+      const available=rounds.map(round=>String(round.round_no));
+      roundSelect.value=available.includes(previous)?previous:(available[0]||'');
+      $('forms-round-status').textContent=rounds.length?'':'Hãy chọn kỳ thi có đợt thi đã cấu hình.';
+    }catch(error){
+      if(request!==formRoundRequest)return;
+      roundSelect.innerHTML='<option value="">-- Không tải được đợt thi --</option>';
+      roundSelect.dataset.examId='';
+      $('forms-round-status').textContent=error.message;
+      throw error;
+    }finally{if(request===formRoundRequest)roundSelect.disabled=false}
   }
 
   const formSpecs={"listing":["Danh sách niêm yết","DANH SÁCH NIÊM YẾT THÍ SINH",["STT","SBD","Họ và tên","Ngày sinh","Lớp","Môn 1","Môn 2","Ghi chú"],[5,10,25,13,9,14,14,10]],"receipt":["Phiếu thu bài","PHIẾU THU BÀI",["TT","SBD","Họ và tên","Ngày sinh","Lớp","Môn thi","Mã đề","Số tờ","Ký nộp","Ghi chú"],[5,10,25,13,9,14,6,6,12,10]],"roster":["SBD và môn lựa chọn","DANH SÁCH SỐ BÁO DANH VÀ MÔN THI LỰA CHỌN",["STT","Lớp","Mã học sinh","SBD","Họ và tên","Môn 1","Môn 2","Ghi chú"],[8,16,20,14,30,25,25,10]]};
+  formSpecs.classrooms=['Phòng thi theo lớp','DANH SÁCH PHÒNG THI THEO LỚP',['STT','Số báo danh','Họ và tên','Ngày sinh','Giới tính','Phòng thi bắt buộc','Phòng thi lựa chọn','Ghi chú'],[6,13,26,14,9,25,30,12]];
   const defaultFont=(header=false)=>({family:'Times New Roman',size:header?12:10,weight:header?700:400,style:'normal'});
   const normalizeFormPrintSettings=raw=>Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
     const value=raw?.[key]||{};
@@ -127,42 +161,62 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
   };
 
+  function showFormSettings(){
+    const selected=$('forms-print-type').value;
+    for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',key!==selected);
+    $('forms-class-filter-wrap').classList.toggle('hidden',selected!=='classrooms');
+  }
+  function classRoomGroups(forms){
+    const selected=$('forms-class-filter').value||'';
+    const rows=forms.classRoomRows||[];
+    return [...new Set(rows.map(row=>row.class_code||'Chưa xếp lớp'))]
+      .filter(code=>!selected||code===selected).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))
+      .map(code=>[code,rows.filter(row=>(row.class_code||'Chưa xếp lớp')===code)]);
+  }
+  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',row.mandatory_rooms,row.elective_rooms,''];
+
   async function loadForms(){
+    const request=++formDataRequest;
+    cache.forms=null;
+    $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
     const examId=currentExam('forms-exam');
-    if(examId&&$('forms-round')&&$('forms-round').options.length<=1)await loadFormRounds(examId);
+    if(examId&&$('forms-round')&&($('forms-round').dataset.examId!==examId||!$('forms-round').value))await loadFormRounds(examId);
     const roundValue=$('forms-round')?.value||'';
-    const roundNo=roundValue?Number(roundValue):null;
+    if(request!==formDataRequest)return;
+    if(!roundValue)throw new Error('Hãy chọn đợt thi trước khi tải biểu mẫu.');
+    const roundNo=Number(roundValue);
     cache.forms=null;
     $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
     setAdminExam(examId);
     const exam=state.exams.find(item=>item.id===examId);
     if(!exam)throw new Error('Không tìm thấy kỳ thi đang chọn.');
+    if(formSettingsExamId!==examId){
     $('forms-authority').value=exam.managing_authority||'';
     $('forms-institution').value=exam.institution_name||'';
     $('forms-title').value=exam.form_exam_title||exam.name||'';
     applyFormPrintSettings(exam.form_print_settings);
+    formSettingsExamId=examId;
+    }
     $('forms-load-data').disabled=true;
     try{
       const allCandidates=await readPages(()=>state.client.from('exam_candidates')
-        .select('id,sbd,student_code,student_name,class_code,date_of_birth').eq('exam_id',examId).order('class_code').order('sbd'));
+        .select('id,sbd,student_code,student_name,class_code,date_of_birth,gender').eq('exam_id',examId).order('class_code').order('sbd'));
       let candidates=allCandidates;
       if(roundNo){
-        const roundCandidates=checkResult(await state.client.from('exam_round_candidates').select('candidate_id')
-          .eq('exam_id',examId).eq('round_no',roundNo),'Không tải được thí sinh của đợt thi');
-        const roundIds=new Set((roundCandidates||[]).map(row=>String(row.candidate_id)));
+        const roundCandidates=await readPages(()=>state.client.rpc('exam_get_round_candidates',{p_exam_id:examId,p_round_no:roundNo}).order('id'));
+        const roundIds=new Set((roundCandidates||[]).map(row=>String(row.candidate_id||row.id)));
         candidates=allCandidates.filter(candidate=>roundIds.has(String(candidate.id)));
       }
       const registrations=await readPages(()=>state.client.from('exam_candidate_subjects')
         .select('candidate_id,subject_code,subject_order,subject_type').eq('exam_id',examId).eq('subject_type','elective'));
-      const legacyFinalizations=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
+      const legacyFinalizations=roundNo?[]:checkResult(await state.client.from('exam_rooming_finalizations').select('*')
         .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng chính thức');
       const assignments=[];
       let officialPlans=[];
       if(roundNo){
-        officialPlans=checkResult(await state.client.from('exam_rooming_round_plans')
+        officialPlans=await readPages(()=>state.client.from('exam_rooming_round_plans')
           .select('id,round_no,plan_type,subject_code,rooms,assignments,status,created_at')
-          .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}),
-          'Không tải được phương án phòng chính thức của đợt');
+          .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
         for(const plan of officialPlans||[]){
           for(const assignment of Array.isArray(plan.assignments)?plan.assignments:[]){
             assignments.push({...assignment,plan_type:plan.plan_type,finalization_id:plan.id,
@@ -214,14 +268,19 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         const selected=registrationById.get(String(candidate.id))||{};
         return {...candidate,sequence:index+1,subject_one:selected.one||'',subject_two:selected.two||''};
       });
-      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows};
+      if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
+      const classRoomRows=buildClassRoomRows(candidates,expanded,nameOf);
+      const classSelect=$('forms-class-filter'),previousClass=classSelect.value;
+      classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set(classRoomRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
+      classSelect.value=[...classSelect.options].some(option=>option.value===previousClass)?previousClass:'';
+      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows};
       $('forms-summary').innerHTML=[
         ['Thí sinh',candidates.length],['Danh sách có phòng',listingRows.length],
         ['Lượt thu bài',receiptRows.length],['Môn lựa chọn đã rà soát',rosterRows.length]
       ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
       $('forms-export-xlsx').disabled=false;$('forms-export-pdf').disabled=false;
       message($('forms-message'),`Đã tải ${candidates.length} thí sinh${roundNo?` của đợt ${roundNo}`:''}, ${finalizations?.length||0} phương án phòng chính thức.`,'success');
-    }finally{$('forms-load-data').disabled=false}
+    }finally{if(request===formDataRequest)$('forms-load-data').disabled=false}
   }
   async function saveFormHeader(){
     const examId=currentExam('forms-exam');setAdminExam(examId);
@@ -271,16 +330,22 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ['STT','Lớp','Mã học sinh','SBD','Họ và tên','Môn 1','Môn 2','Ghi chú'],
       ...forms.rosterRows.map((row,index)=>[index+1,row.class_code||'',row.student_code||'',row.sbd||'',
         row.student_name,nameOf(row.subject_one),nameOf(row.subject_two),''])];
+    const classSheets=classRoomGroups(forms).map(([code,rows],index)=>[
+      `Lop ${index+1} - ${code.replace(/[\\/?*\[\]:]/g,' ').slice(0,18)}`,
+      [header,[settings.classrooms.title],[`Lớp: ${code} · Đợt ${forms.roundNo}`],formSpecs.classrooms[2],...rows.map(classRoomValues)],[], 'classrooms'
+    ]);
     const sheetSpecs=[
       ['Danh sach niem yet',listings,[8,15,30,15,12,25,25,25]],
       ['Phieu thu bai',receipts,[7,14,26,15,11,24,10,9,14,24]],
-      ['SBD va mon lua chon',roster,[8,16,20,14,30,25,25]]
-    ].filter(([sheetName])=>printType==='all'||
+      ['SBD va mon lua chon',roster,[8,16,20,14,30,25,25]],
+      ...classSheets
+    ].filter(([sheetName,rows,widths,type])=>printType==='all'||(type==='classrooms'&&printType==='classrooms')||
       (printType==='listing'&&sheetName==='Danh sach niem yet')||
       (printType==='receipt'&&sheetName==='Phieu thu bai')||
       (printType==='roster'&&sheetName==='SBD va mon lua chon'));
-    for(const[sheetName,rows,widths]of sheetSpecs){
-      const key=sheetName==='Danh sach niem yet'?'listing':sheetName==='Phieu thu bai'?'receipt':'roster';
+    if(!sheetSpecs.length)throw new Error('Không có dữ liệu cho biểu mẫu hoặc lớp đang chọn.');
+    for(const[sheetName,rows,widths,type]of sheetSpecs){
+      const key=type|| (sheetName==='Danh sach niem yet'?'listing':sheetName==='Phieu thu bai'?'receipt':'roster');
       const config=settings[key];
       const ws=window.XLSX.utils.aoa_to_sheet(rows);
       ws['!cols']=config.widths.map(wch=>({wch}));
@@ -312,6 +377,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function compactPrintPages(pages){
     return pages.map(markup=>{
+      if(markup.includes('class="page classrooms"'))return markup;
       const template=document.createElement('template');template.innerHTML=markup;
       const normalize=value=>String(value||'').toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').trim();
       template.content.querySelectorAll('table').forEach(table=>{
@@ -344,6 +410,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const rows=forms.rosterRows.filter(row=>(row.class_code||'Chưa xếp lớp')===classCode);
       pages.push(`<section class="page roster">${header}<h3>${esc(settings.roster.title)} · LỚP ${esc(classCode)}</h3><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>SBD</th><th>Họ và tên</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.student_code||'')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
+    if(printType==='all'||printType==='classrooms')for(const [code,rows] of classRoomGroups(forms)){
+      pages.push(`<section class="page classrooms">${header}<h3>${esc(settings.classrooms.title)} · LỚP ${esc(code)} · ĐỢT ${forms.roundNo}</h3><table><thead><tr>${formSpecs.classrooms[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i)=>`<tr>${classRoomValues(row,i).map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số học sinh: ${rows.length}</p></section>`);
+    }
+    if(!pages.length)throw new Error('Không có dữ liệu cho biểu mẫu hoặc lớp đang chọn.');
     const printablePages=compactPrintPages(pages);
     const fontCss=font=>`font-family:'${esc(font.family)}',serif;font-size:${font.size}pt;font-weight:${font.weight};font-style:${font.style};`;
     const customCss=Object.entries(settings).map(([key,config])=>{
@@ -1140,9 +1210,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     };
   }
   function wire(){
+    $('forms-print-type').onchange=showFormSettings;
+    showFormSettings();
     setExamOptions();
     setSubjectOptions('script-subject',allSubjectOptions());
-    if($('forms-exam').value)loadFormRounds($('forms-exam').value).catch(error=>message($('forms-message'),error.message,'error'));
     $('forms-exam').onchange=async()=>{try{setAdminExam($('forms-exam').value);await loadFormRounds($('forms-exam').value);await loadForms()}catch(error){message($('forms-message'),error.message,'error')}};
     $('forms-round').onchange=()=>loadForms().catch(error=>message($('forms-message'),error.message,'error'));
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
