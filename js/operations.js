@@ -91,25 +91,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const previous=roundSelect.value;
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>';
     if(!examId)return;
-    let rounds=[];
-    let roundsError=null;
-    const configured=await state.client.from('exam_rounds').select('round_no,name,is_active')
-      .eq('exam_id',examId).eq('is_active',true).order('round_no');
-    if(configured.error)roundsError=configured.error;
-    else rounds=configured.data||[];
-    if(!rounds.length){
-      const official=await state.client.from('exam_rooming_round_plans').select('round_no')
-        .eq('exam_id',examId).eq('status','official').order('round_no');
-      if(official.error)roundsError=roundsError||official.error;
-      else rounds=[...new Map((official.data||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
-    }
-    if(!rounds.length){
-      const candidates=await state.client.from('exam_round_candidates').select('round_no')
-        .eq('exam_id',examId).order('round_no');
-      if(candidates.error)roundsError=roundsError||candidates.error;
-      else rounds=[...new Map((candidates.data||[]).map(row=>[Number(row.round_no),{round_no:Number(row.round_no),name:`Đợt ${row.round_no}`,is_active:true}])).values()];
-    }
-    if(!rounds.length&&roundsError)throw new Error(`Không tải được danh sách đợt thi. Hãy kiểm tra migration v0.1.92 và quyền đọc dữ liệu. ${roundsError.message}`);
+    const {data,error}=await state.client.rpc('exam_get_rounds',{p_exam_id:examId});
+    if(error)throw new Error(`Không tải được danh sách đợt thi qua cơ chế xếp phòng. Hãy chạy migration v0.1.101 và kiểm tra quyền quản trị. ${error.message}`);
+    const rounds=(data||[]).filter(round=>round.is_active!==false);
     if(!rounds.length)throw new Error(`Kỳ thi ${examId} chưa có đợt thi đang hoạt động. Hãy cấu hình Đợt 1 hoặc Đợt 2 trước khi tải và in biểu mẫu.`);
     roundSelect.innerHTML='<option value="">-- Chọn đợt thi --</option>'+rounds.map(round=>
       `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
