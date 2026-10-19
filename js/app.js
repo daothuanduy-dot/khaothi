@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.96';
-import {loadTabModules} from './module-loader.js?v=0.1.96';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.97';
+import {loadTabModules} from './module-loader.js?v=0.1.97';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.96';
-const APP_BUILD='2026-10-19-a4-portrait-forms';
+const APP_VERSION='v0.1.97';
+const APP_BUILD='2026-10-19-print-form-selection';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1733,7 +1733,7 @@ function printRoomingPDF(){
  body{font-family:"Times New Roman",serif;color:#111;font-size:12pt;line-height:1}
  .page{width:190mm;min-height:277mm;page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}
  .page:last-child{page-break-after:auto;break-after:auto}
- header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 2mm;font-size:12pt;line-height:1.05}
+ header{display:grid;grid-template-columns:35% 65%;text-align:center;align-items:center;margin:0 0 2mm;font-size:12pt;line-height:1.05;white-space:nowrap}
  table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:"Times New Roman",serif;font-size:12pt;page-break-inside:avoid;break-inside:avoid}
  thead{display:table-header-group}
  tr{break-inside:avoid;page-break-inside:avoid}

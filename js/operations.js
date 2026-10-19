@@ -122,12 +122,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const expanded=assignments.map(assignment=>({...candidateById.get(String(assignment.candidate_id)),...assignment}));
       const electiveFinal=finalizations?.find(row=>row.plan_type==='elective');
       let posting=(electiveFinal?expanded.filter(row=>row.finalization_id===electiveFinal.id):
-        expanded.filter(row=>row.plan_type==='mandatory'&&row.subject_code==='TOAN'));
+        expanded.filter(row=>row.plan_type==='mandatory'));
       if(!posting.length)posting=expanded.filter(row=>row.plan_type==='mandatory');
       const listingRows=posting.map((row,index)=>{
         const registration=registrationById.get(String(row.candidate_id))||{};
         return {...row,sequence:index+1,
-          subject_one:row.ca1_subject_code||registration.one||'',
+          subject_one:row.ca1_subject_code||row.subject_code||registration.one||'',
           subject_two:row.ca2_subject_code||registration.two||'',
           note:''};
       }).sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||
@@ -170,7 +170,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const wb=window.XLSX.utils.book_new();
     const header=[forms.exam.managing_authority,forms.exam.institution_name,forms.exam.form_exam_title||forms.exam.name];
     const listings=[],listingBreaks=[];
-    for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
+    for(const room of (printType==='receipt'||printType==='roster'?[]:[...new Set(forms.listingRows.map(row=>row.room_code))])){
       const roomRows=forms.listingRows.filter(row=>row.room_code===room);
       listings.push(...[header,['DANH SÁCH NIÊM YẾT THÍ SINH'],[`Phòng thi: ${room}`],
         ['STT','SBD','Họ và tên','Ngày sinh','Lớp','Môn 1','Môn 2','Ghi chú'],
@@ -179,7 +179,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       listingBreaks.push({id:listings.length-1,max:16383,man:1});
     }
     const receipts=[],receiptBreaks=[];
-    for(const key of [...new Set(forms.receiptRows.map(row=>`${row.room_code}|${row.subject_code||''}|${row.subject_order??''}`))]){
+    for(const key of (printType==='listing'||printType==='roster'?[]:[...new Set(forms.receiptRows.map(row=>`${row.room_code}|${row.subject_code||''}|${row.subject_order??''}`))])){
       const [room,subject,order]=key.split('|');
       const roomRows=forms.receiptRows.filter(row=>row.room_code===room&&String(row.subject_code||'')===subject&&String(row.subject_order??'')===order);
       receipts.push(...[header,['PHIẾU THU BÀI'],[`Phòng thi: ${room}`,subject?`Môn ${order}: ${nameOf(subject)}`:''],
@@ -234,8 +234,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     });
   }
   function exportFormsPdf(){
+    const printType=$('forms-print-type')?.value||'all';
     const forms=cache.forms;if(!forms)throw new Error('Hãy tải dữ liệu biểu mẫu trước.');
     const pages=[];
+    const originalRosterRows=forms.rosterRows;
+    if(printType==='listing'||printType==='receipt')forms.rosterRows=[];
     const header=`<header><b>${esc(forms.exam.managing_authority||'')}</b><br><b>${esc(forms.exam.institution_name||'')}</b><br><b>${esc(forms.exam.form_exam_title||forms.exam.name)}</b></header>`;
     for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
       const rows=forms.listingRows.filter(row=>row.room_code===room);
@@ -251,13 +254,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       pages.push(`<section class="page">${header}<h3>DANH SÁCH SỐ BÁO DANH VÀ MÔN THI LỰA CHỌN · LỚP ${esc(classCode)}</h3><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>SBD</th><th>Họ và tên</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.student_code||'')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     const printablePages=compactPrintPages(pages);
+    forms.rosterRows=originalRosterRows;
     const win=window.open('','_blank');
     if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
       @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:"Times New Roman",serif;font-size:11pt}
       .page{width:190mm;min-height:277mm;break-after:page;page-break-after:always}
-      .page:last-child{break-after:auto;page-break-after:auto}header{text-align:center;line-height:1.15}
-      h3{text-align:center;margin:3mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}
+      .page:last-child{break-after:auto;page-break-after:auto}header{text-align:center;line-height:1.15;white-space:nowrap}
+      h3{text-align:center;margin:3mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}table:not(.receipt) th:nth-child(1){width:5%}table:not(.receipt) th:nth-child(2){width:10%}table:not(.receipt) th:nth-child(3){width:25%}table:not(.receipt) th:nth-child(4){width:13%}table:not(.receipt) th:nth-child(5){width:9%}table:not(.receipt) th:nth-child(6),table:not(.receipt) th:nth-child(7){width:14%}table:not(.receipt) th:nth-child(8){width:10%}.receipt th:nth-child(1){width:5%}.receipt th:nth-child(2){width:10%}.receipt th:nth-child(3){width:25%}.receipt th:nth-child(4){width:13%}.receipt th:nth-child(5){width:9%}.receipt th:nth-child(6){width:14%}.receipt th:nth-child(7),.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:10%}
       th,td{border:1px solid #000;padding:2px 3px;text-align:center;overflow-wrap:anywhere;white-space:normal}
       td:nth-child(3){text-align:left}tr{break-inside:avoid;page-break-inside:avoid}
       @media print{html,body{width:190mm;margin:0!important}.page{margin:0!important}}
