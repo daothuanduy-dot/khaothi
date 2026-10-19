@@ -1,8 +1,8 @@
-import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.91';
-import {loadTabModules} from './module-loader.js?v=0.1.91';
+import {adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.94';
+import {loadTabModules} from './module-loader.js?v=0.1.94';
 import {wireOperations} from './operations.js?v=0.1.90';
-const APP_VERSION='v0.1.92';
-const APP_BUILD='2026-10-18-round-rooming-manual';
+const APP_VERSION='v0.1.94';
+const APP_BUILD='2026-10-19-round-candidate-picker';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -991,6 +991,57 @@ async function refreshRoomingSubjectOptions(){
   const options=codes.map(code=>`<option value="${esc(code)}">${esc(subjectName(code))} (${esc(code)})</option>`).join('');
   $('mandatory-subject').innerHTML=options||'<option value="TOAN">Toán (TOAN)</option>';
   $('rooming-subject').innerHTML=options||'<option value="TOAN">Toán (TOAN)</option>';
+}
+function normalizeRoundSubjectRows(rows){
+  const seen=new Set();
+  return (rows||[]).map(row=>{
+    const code=String(row.subject_code||'').trim().toUpperCase();
+    const rawType=String(row.subject_type||'').trim().toLowerCase();
+    const type=rawType==='required'?'mandatory':rawType==='class'?'class':'elective';
+    return {subject_code:code,subject_type:type,subject_order:Number(row.subject_order)||1};
+  }).filter(row=>row.subject_code).filter(row=>{const key=`${row.subject_code}|${row.subject_type}`;if(seen.has(key))return false;seen.add(key);return true});
+}
+async function configureRoomingRoundFromSelection(selectedIds){
+  const examId=$('rooming-exam-select').value,roundNo=selectedRoomingRound();
+  if(!examId)throw new Error('Hãy chọn kỳ thi trước.');
+  const ids=(selectedIds||[]).map(String);
+  if(!ids.length)throw new Error('Chưa chọn học sinh vào đợt.');
+  if(roundNo===2){const first=await state.client.from('exam_round_candidates').select('candidate_id').eq('exam_id',examId).eq('round_no',1);const excluded=new Set((first.data||[]).map(row=>String(row.candidate_id)));const overlap=ids.filter(id=>excluded.has(id));if(overlap.length)throw new Error(`${overlap.length} học sinh đã thuộc đợt 1, không thể đưa vào đợt 2.`)}
+  const subjectRows=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code,subject_type,subject_order').eq('exam_id',examId));
+  const subjects=normalizeRoundSubjectRows(subjectRows);
+  if(!subjects.length)subjects.push({subject_code:String($('rooming-subject')?.value||$('mandatory-subject')?.value||'TOAN').toUpperCase(),subject_type:'mandatory',subject_order:1});
+  const {data,error}=await state.client.rpc('exam_configure_round',{p_exam_id:examId,p_round_no:roundNo,p_candidate_ids:ids,p_subjects:subjects,p_name:`Đợt ${roundNo}`});
+  if(error)throw error;
+  message($('rooming-message'),`Đã cấu hình đợt ${roundNo}: ${data.candidate_count} thí sinh, ${data.subject_count} môn. SBD vẫn dùng chung theo kỳ thi.`,'success');
+  await loadCandidates();
+}
+async function openRoundCandidateDialog(){
+  const examId=$('rooming-exam-select').value,roundNo=selectedRoomingRound();
+  if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi trước.','error');return}
+  const button=$('configure-rooming-round');button.disabled=true;
+  try{
+    if(!state.candidates.length)await loadCandidates();
+    const firstRows=roundNo===2?await selectAllPages(()=>state.client.from('exam_round_candidates').select('candidate_id').eq('exam_id',examId).eq('round_no',1)):[];
+    const excluded=new Set(firstRows.map(row=>String(row.candidate_id)));
+    const currentRows=await selectAllPages(()=>state.client.from('exam_round_candidates').select('candidate_id').eq('exam_id',examId).eq('round_no',roundNo));
+    const current=new Set(currentRows.map(row=>String(row.candidate_id)));
+    const eligible=state.candidates.filter(candidate=>!excluded.has(String(candidate.id)));
+    const initiallySelected=current.size?new Set([...current].filter(id=>eligible.some(candidate=>String(candidate.id)===id))):new Set(eligible.map(candidate=>String(candidate.id)));
+    let dialog=$('round-candidate-dialog');
+    if(!dialog){dialog=document.createElement('dialog');dialog.id='round-candidate-dialog';dialog.className='modal-dialog';document.body.appendChild(dialog)}
+    dialog.innerHTML=`<form method="dialog" class="round-candidate-form"><div class="modal-header"><div><h3>Nạp học sinh vào đợt ${roundNo}</h3><p>Chọn khối, lớp và tích chọn học sinh. Số báo danh vẫn giữ nguyên theo kỳ thi.</p></div><button value="cancel" class="btn btn-light" type="submit">Đóng</button></div><div class="form-grid round-candidate-filters"><label>Khối<select id="round-candidate-grade"><option value="">Tất cả khối</option></select></label><label>Lớp<select id="round-candidate-class"><option value="">Tất cả lớp</option></select></label><label>Tìm học sinh<input id="round-candidate-search" placeholder="Mã hoặc họ tên"></label></div><div class="form-actions"><button id="round-candidate-select-visible" class="btn btn-light" type="button">Chọn tất cả đang lọc</button><button id="round-candidate-clear-visible" class="btn btn-light" type="button">Bỏ chọn đang lọc</button><span id="round-candidate-count" class="muted"></span></div><div id="round-candidate-list" class="round-candidate-list"></div><div class="modal-actions"><button value="cancel" class="btn btn-light" type="submit">Hủy</button><button id="round-candidate-save" value="default" class="btn btn-primary" type="submit">Lưu danh sách vào đợt ${roundNo}</button></div></form>`;
+    const gradeSelect=dialog.querySelector('#round-candidate-grade'),classSelect=dialog.querySelector('#round-candidate-class'),searchInput=dialog.querySelector('#round-candidate-search'),list=dialog.querySelector('#round-candidate-list'),count=dialog.querySelector('#round-candidate-count');
+    const grades=[...new Set(eligible.map(row=>String(row.grade_code||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    gradeSelect.innerHTML='<option value="">Tất cả khối</option>'+grades.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
+    const selected=new Set(initiallySelected);
+    const refreshClasses=()=>{const grade=gradeSelect.value;const classes=[...new Set(eligible.filter(row=>!grade||String(row.grade_code)===grade).map(row=>String(row.class_code||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));const old=classSelect.value;classSelect.innerHTML='<option value="">Tất cả lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');if(classes.includes(old))classSelect.value=old};
+    const render=()=>{const grade=gradeSelect.value,cls=classSelect.value,q=String(searchInput.value||'').trim().toLocaleLowerCase('vi');const rows=eligible.filter(row=>(!grade||String(row.grade_code)===grade)&&(!cls||String(row.class_code)===cls)&&(!q||[row.student_code,row.student_name,row.class_code].some(value=>String(value||'').toLocaleLowerCase('vi').includes(q))));list.innerHTML=rows.length?rows.map(row=>{const id=String(row.id);return `<label class="round-candidate-row"><input type="checkbox" data-round-candidate="${esc(id)}" ${selected.has(id)?'checked':''}><span>${esc(row.student_code||'')} · ${esc(row.student_name||'')}</span><small>Khối ${esc(row.grade_code||'')} · ${esc(row.class_code||'')}</small></label>`}).join(''):'<div class="empty">Không có học sinh phù hợp.</div>';count.textContent=`Đã chọn ${selected.size}/${eligible.length} học sinh`;list.querySelectorAll('[data-round-candidate]').forEach(input=>input.onchange=()=>{const id=input.dataset.roundCandidate;if(input.checked)selected.add(id);else selected.delete(id);count.textContent=`Đã chọn ${selected.size}/${eligible.length} học sinh`})};
+    const visibleIds=()=>[...list.querySelectorAll('[data-round-candidate]')].map(input=>input.dataset.roundCandidate);
+    gradeSelect.onchange=()=>{refreshClasses();render()};classSelect.onchange=render;searchInput.oninput=render;
+    dialog.querySelector('#round-candidate-select-visible').onclick=()=>{visibleIds().forEach(id=>selected.add(id));render()};dialog.querySelector('#round-candidate-clear-visible').onclick=()=>{visibleIds().forEach(id=>selected.delete(id));render()};
+    dialog.querySelector('#round-candidate-save').onclick=async event=>{event.preventDefault();const save=dialog.querySelector('#round-candidate-save');save.disabled=true;try{await configureRoomingRoundFromSelection([...selected]);dialog.close()}catch(error){message($('rooming-message'),error.message||String(error),'error');save.disabled=false}};
+    refreshClasses();render();dialog.showModal();
+  }catch(error){message($('rooming-message'),error.message||String(error),'error')}finally{button.disabled=false}
 }
 async function configureRoomingRound(){
   const examId=$('rooming-exam-select').value,roundNo=selectedRoomingRound();
@@ -2455,7 +2506,7 @@ function wireRoomingEditor(){
  const refreshRoomingTypeControls=()=>{const type=$('room-plan-type').value,subjectPlan=type==='subject';$('mandatory-subject-wrap').classList.toggle('hidden',type!=='mandatory');$('subject-rooming-wrap').classList.toggle('hidden',!subjectPlan);$('rooming-distribution-wrap').classList.remove('hidden');if(subjectPlan)$('room-prefix').value='P'};
  $('room-plan-type').addEventListener('change',refreshRoomingTypeControls);refreshRoomingTypeControls();
  if(!$('configure-rooming-round')){const b=document.createElement('button');b.id='configure-rooming-round';b.type='button';b.className='btn btn-light';b.textContent='Nạp thí sinh vào đợt đang chọn';$('preview-rooming').parentElement.prepend(b)}
- $('configure-rooming-round').onclick=()=>safeAction('rooming-message',configureRoomingRound,$('configure-rooming-round'));
+ $('configure-rooming-round').onclick=()=>safeAction('rooming-message',openRoundCandidateDialog,$('configure-rooming-round'));
  $('rooming-round').onchange=()=>{state.preview=null;$('preview-rooming').textContent='Xem trước phương án phòng';clearRoomingPreview();refreshRoomingSubjectOptions().catch(()=>{});message($('rooming-message'),'Đã chuyển sang đợt thi mới. Hãy lập hoặc khôi phục phương án của đợt này.','info')};
  $('rooming-adjustment-mode').onchange=()=>{if(state.preview&&!state.preview.finalized){state.preview.adjustmentMode=selectedRoomingMode();state.preview.assignmentsCreated=false;state.preview.saved=null;state.preview.sourcePlanId=null;renderRooming(state.preview.result,state.preview.planType);updateRoomingActions();message($('rooming-message'),state.preview.adjustmentMode==='manual'?'Đã chọn điều chỉnh thủ công. Có thể chuyển từng thí sinh giữa các phòng rồi kiểm tra và lưu.':'Đã chọn điều chỉnh tự động theo thuật toán.','info')}};
  $('rooming-exam-select').onchange=()=>{
