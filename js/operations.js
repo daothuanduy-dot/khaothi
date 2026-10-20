@@ -777,10 +777,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const roundNo=Number($('script-round')?.value||0)||null;
     let target=null,records=[];
     if(roundNo){
-      const plans=checkResult(await readPages(()=>state.client.from('exam_rooming_round_plans')
+      const plans=await readPages(()=>state.client.from('exam_rooming_round_plans')
         .select('id,round_no,plan_type,subject_code,assignments,created_at')
-        .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false})),
-        'Không tải được phương án phòng');
+        .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
       for(const plan of plans||[]){
         const rows=(Array.isArray(plan.assignments)?plan.assignments:[]).map(row=>({...row,subject_code:row.subject_code||plan.subject_code||''}));
         const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
