@@ -17,6 +17,20 @@ export function groupReceiptRows(rows,electiveOrder=1){
   return [...groups.values()].map(group=>({...group,rows:group.rows.sort((a,b)=>String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}))}));
 }
 
+export function mandatoryListingGroups(assignments){
+  const groups=new Map();
+  for(const row of assignments){
+    if(!row.room_code||!(row.plan_type==='mandatory'||(row.plan_type==='subject'&&row.subject_type==='mandatory')))continue;
+    const subject=row.subject_code||'';
+    const key=JSON.stringify([subject,row.room_code]);
+    if(!groups.has(key))groups.set(key,{subject,room:row.room_code,rows:[]});
+    const group=groups.get(key);
+    if(!group.rows.some(item=>String(item.candidate_id||item.id)===String(row.candidate_id||row.id)))group.rows.push(row);
+  }
+  return [...groups.values()].sort((a,b)=>a.subject.localeCompare(b.subject,'vi')||String(a.room).localeCompare(String(b.room),'vi',{numeric:true}))
+    .map(group=>({...group,rows:group.rows.sort((a,b)=>String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}))}));
+}
+
 export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
   const byId=new Map();
   for(const row of assignments){
@@ -25,7 +39,7 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
     if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set()});
     const group=byId.get(id);
     const subject=String(row.subject_code||'').toUpperCase();
-    const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&['TOAN','VAN'].includes(subject));
+    const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&(row.subject_type==='mandatory'||(!row.subject_type&&['TOAN','VAN'].includes(subject))));
     const subjects=row.plan_type==='elective'?[row.ca1_subject_code,row.ca2_subject_code].filter(Boolean):[subject].filter(Boolean);
     const label=subjects.length?subjects.map(code=>nameOf(code)).join(' / ')+': '+room:room;
     group[required?'mandatory':'elective'].add(label);
@@ -56,7 +70,12 @@ export function parseImportedScore(value,rowNumber){
 }
 
 export function parseQuickScore(value,decimalPlaces){
-  const digits=String(value??'').trim().replace(/\D/g,'');
+  const raw=String(value??'').trim();
+  if(!raw)return null;
+  if(/^\d+[,.]\d+$/.test(raw))return Number(raw.replace(',','.'));
+  if(!/^\d+$/.test(raw))return NaN;
+  if(raw==='10')return 10;
+  const digits=raw;
   if(!digits)return null;
   const places=Math.max(0,Math.min(3,Number(decimalPlaces)||0));
   if(!places)return Number(digits);
@@ -66,8 +85,13 @@ export function parseQuickScore(value,decimalPlaces){
 }
 
 export function validateEssayScore(value,config){
+  if(value===null||value===undefined||String(value).trim()==='')return 'Hãy nhập điểm, không để trống.';
   const score=Number(value),maximum=Number(config?.maximum_score),step=Number(config?.score_step);
   if(!Number.isFinite(score)||score<0||score>maximum)return `Điểm phải từ 0 đến ${maximum}.`;
+  if(config?.decimal_places!=null){
+    const scale=10**Number(config.decimal_places);
+    if(Math.abs(score*scale-Math.round(score*scale))>1e-7)return `Điểm có tối đa ${config.decimal_places} chữ số thập phân.`;
+  }
   if(!Number.isFinite(step)||step<=0)return null;
   const steps=score/step;
   if(Math.abs(steps-Math.round(steps))>1e-7)return `Điểm phải theo bước ${step}.`;
@@ -159,6 +183,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     return [side,Number.isFinite(value)&&value>=0&&value<=30?value:defaultFormMargins[side]];
   }));
   formSpecs.classrooms=['Phòng thi theo lớp','DANH SÁCH PHÒNG THI THEO LỚP',['STT','Số báo danh','Họ và tên','Ngày sinh','Giới tính','Phòng thi bắt buộc','Phòng thi lựa chọn','Ghi chú'],[6,13,26,14,9,25,30,12]];
+  formSpecs.mandatory_listing=['Niêm yết môn bắt buộc','DANH SÁCH NIÊM YẾT MÔN THI BẮT BUỘC',['STT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Ghi chú'],[5,12,28,14,10,19,12]];
   const defaultFont=(header=false)=>({family:'Times New Roman',size:header?12:10,weight:header?700:400,style:'normal'});
   const normalizeFormPrintSettings=raw=>{
     const settings=Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
@@ -205,7 +230,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const selected=$('forms-print-type').value;
     for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',key!==selected);
     $('forms-settings-receipt').classList.toggle('hidden',!selected.startsWith('receipt_'));
-    $('forms-class-filter-wrap').classList.toggle('hidden',selected!=='receipt_classrooms');
+    $('forms-class-filter-wrap').classList.toggle('hidden',!['receipt_classrooms','classrooms'].includes(selected));
     $('forms-receipt-order-wrap').classList.toggle('hidden',selected!=='receipt_elective');
   }
   function classRoomGroups(forms){
@@ -264,7 +289,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         candidates=allCandidates.filter(candidate=>roundIds.has(String(candidate.id)));
       }
       const registrations=await readPages(()=>state.client.from('exam_candidate_subjects')
-        .select('candidate_id,subject_code,subject_order,subject_type').eq('exam_id',examId).eq('subject_type','elective'));
+        .select('candidate_id,subject_code,subject_order,subject_type').eq('exam_id',examId));
+      const roundSubjects=await readPages(()=>state.client.from('exam_round_subjects')
+        .select('subject_code,subject_type').eq('exam_id',examId).eq('round_no',roundNo));
+      const subjectTypes=new Map(roundSubjects.map(row=>[row.subject_code,row.subject_type]));
       const legacyFinalizations=roundNo?[]:checkResult(await state.client.from('exam_rooming_finalizations').select('*')
         .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng chính thức');
       const assignments=[];
@@ -293,6 +321,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const candidateById=new Map(candidates.map(candidate=>[String(candidate.id),candidate]));
       const registrationById=new Map();
       for(const registration of registrations||[]){
+        if(registration.subject_type!=='elective')continue;
         const id=String(registration.candidate_id);
         if(!registrationById.has(id))registrationById.set(id,{one:'',two:''});
         const target=registrationById.get(id);
@@ -300,7 +329,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         if(Number(registration.subject_order)===2)target.two=registration.subject_code;
       }
       const expanded=assignments.filter(assignment=>candidateById.has(String(assignment.candidate_id)))
-        .map(assignment=>({...candidateById.get(String(assignment.candidate_id)),...assignment}));
+        .map(assignment=>({...candidateById.get(String(assignment.candidate_id)),...assignment,
+          subject_type:subjectTypes.get(assignment.subject_code)||(registrations||[]).find(row=>String(row.candidate_id)===String(assignment.candidate_id)&&row.subject_code===assignment.subject_code)?.subject_type}));
       const electiveFinal=finalizations?.find(row=>row.plan_type==='elective');
       let posting=(electiveFinal?expanded.filter(row=>row.finalization_id===electiveFinal.id):
         expanded.filter(row=>row.plan_type==='mandatory'||row.plan_type==='subject'));
@@ -329,7 +359,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const classSelect=$('forms-class-filter'),previousClass=classSelect.value;
       classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set(classRoomRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
       classSelect.value=[...classSelect.options].some(option=>option.value===previousClass)?previousClass:'';
-      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows};
+      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
       $('forms-summary').innerHTML=[
         ['Thí sinh',candidates.length],['Danh sách có phòng',listingRows.length],
         ['Lượt thu bài',receiptRows.length],['Môn lựa chọn đã rà soát',rosterRows.length]
@@ -413,11 +443,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       [header,[settings.classrooms.title],[`Lớp: ${code} Đợt ${forms.roundNo}`],formSpecs.classrooms[2],...rows.map(classRoomValues)],[], 'classrooms'
     ]);
     const sheetSpecs=[
+      ...(printType==='mandatory_listing'?(forms.mandatoryGroups||[]).map(({room,subject,rows},i)=>[
+        `Bat buoc ${i+1}`,[header,[settings.mandatory_listing.title],[`Đợt ${forms.roundNo} — Phòng: ${room}${subject?` — Môn: ${nameOf(subject)}`:''}`],
+          formSpecs.mandatory_listing[2],...rows.map((row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',nameOf(subject)||'Bắt buộc',row.note||''])],[],'mandatory_listing'
+      ]):[]),
       ['Danh sach niem yet',listings,[8,15,30,15,12,25,25,25]],
       ['Phieu thu bai',receipts,[7,14,26,15,11,24,10,9,14,24]],
       ['SBD va mon lua chon',roster,[8,16,20,14,30,25,25]],
       ...classSheets
-    ].filter(([sheetName,rows,widths,type])=>printType==='all'||(type==='classrooms'&&printType==='classrooms')||
+    ].filter(([sheetName,rows,widths,type])=>printType==='all'||(type==='mandatory_listing'&&printType==='mandatory_listing')||(type==='classrooms'&&printType==='classrooms')||
       (printType==='listing'&&sheetName==='Danh sach niem yet')||
       (printType.startsWith('receipt_')&&sheetName==='Phieu thu bai')||
       (printType==='roster'&&sheetName==='SBD va mon lua chon'));
@@ -497,6 +531,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const pages=[];
     const displayRoom=room=>String(room??'').replace(/^phòng\s*/i,'').trim();
     const header=`<header><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b><br><b>${esc(String($('forms-title').value||'').replace(/[·.]+/g,' ').replace(/\s+/g,' ').trim())}</b></header>`;
+    if(printType==='mandatory_listing')for(const {room,subject,rows} of forms.mandatoryGroups||[]){
+      pages.push(`<section class="page mandatory_listing">${header}<h3>${esc(settings.mandatory_listing.title)}<br>ĐỢT ${esc(forms.roundNo)} — PHÒNG ${esc(displayRoom(room))}${subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}</h3><table><thead><tr>${formSpecs.mandatory_listing[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr>${[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',nameOf(subject)||'Bắt buộc',row.note||''].map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
+    }
     if(printType==='all'||printType==='listing')for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
       const rows=forms.listingRows.filter(row=>row.room_code===room);
       pages.push(`<section class="page listing">${header}<h3>${esc(settings.listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr><th>STT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
@@ -1232,6 +1269,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function enterAsGrader(){
+    ++graderQueueRequest;graderWindow=null;clearInterval(graderWindowTimer);
+    cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
     const{data,error}=await state.client.rpc('exam_list_grading_work');
     if(error)throw new Error(`Không tải được danh sách kỳ thi/môn được giao: ${error.message}`);
     cache.graderWork=data||[];
@@ -1245,6 +1284,20 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   function selectedGraderConfig(){
     return cache.graderWork.find(work=>work.exam_id===$('grader-exam').value&&work.subject_code===$('grader-subject').value);
   }
+  let graderWindow=null,graderWindowTimer=null,graderQueueRequest=0,graderSaving=false;
+  function updateGraderWindow(){
+    const now=Date.now()+(graderWindow?.offset||0);
+    const open=!!graderWindow&&Number.isFinite(graderWindow.start)&&Number.isFinite(graderWindow.end)
+      &&now>=graderWindow.start&&now<=graderWindow.end;
+    const notice=$('grader-window-status');
+    if(notice)notice.textContent=!graderWindow?'Chưa có thời hạn nhập điểm.':
+      `${open?'Đang mở nhập điểm':'Ngoài thời hạn nhập điểm'}: ${new Date(graderWindow.start).toLocaleString('vi-VN')} – ${new Date(graderWindow.end).toLocaleString('vi-VN')}.`;
+    for(const id of ['grader-score','grader-quick-score','grader-save-score','grader-apply-default','grader-import-scores']){
+      const control=$(id);
+      if(control)control.disabled=!open||graderSaving||(!cache.graderQueue.length&&id!=='grader-import-scores');
+    }
+    return open;
+  }
   function renderGraderQueue(){
     $('grader-table-body').innerHTML=cache.graderQueue.map((row,index)=>`<tr data-grader-index="${index}" class="${index===cache.graderIndex?'roster-dirty':''}">
       <td>${index+1}</td><td>${esc(row.phach_code)}</td><td>${row.score??''}</td>
@@ -1253,15 +1306,36 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const current=cache.graderQueue[cache.graderIndex];
     $('grader-current-phach').value=current?.phach_code||'';
     $('grader-score').value=current?.score??'';
+    $('grader-quick-score').value='';
     $('grader-save-score').disabled=!current;
+    const picker=$('grader-phach-select');
+    if(picker){
+      picker.innerHTML='<option value="">-- Chọn mã phách --</option>'+cache.graderQueue.map((row,index)=>
+        `<option value="${index}">${esc(row.phach_code)}${row.score==null?'':` — ${esc(row.score)}`}</option>`).join('');
+      picker.value=current?String(cache.graderIndex):'';
+    }
+    updateGraderWindow();
   }
   async function loadGraderQueue(){
+    const request=++graderQueueRequest;
     const config=selectedGraderConfig();
-    if(!config)return;
+    graderWindow=null;
     cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
+    if(!config)return;
+    const {data:windowData,error:windowError}=await state.client.rpc('exam_get_grading_window',{p_exam_id:config.exam_id});
+    if(request!==graderQueueRequest)return;
+    if(windowError)throw new Error(`Không tải được thời hạn nhập điểm: ${windowError.message}`);
+    if(windowData?.starts_at&&windowData?.ends_at)graderWindow={
+      start:Date.parse(windowData.starts_at),end:Date.parse(windowData.ends_at),
+      offset:Date.parse(windowData.server_now||new Date().toISOString())-Date.now()
+    };
+    clearInterval(graderWindowTimer);
+    graderWindowTimer=setInterval(updateGraderWindow,1000);
+    updateGraderWindow();
     const{data:headRows,error:headError}=await state.client.rpc('exam_get_grading_heads',{
       p_exam_id:config.exam_id,p_subject_code:config.subject_code
     });
+    if(request!==graderQueueRequest)return;
     if(headError)throw new Error(`Không tải được danh sách đầu phách: ${headError.message}`);
     const heads=(headRows||[]).map(row=>row.phach_prefix);
     const select=$('grader-prefix'),previous=select.value;
@@ -1271,6 +1345,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const{data,error}=await state.client.rpc('exam_get_grading_queue',{
       p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_prefix:$('grader-prefix').value
     });
+    if(request!==graderQueueRequest)return;
     if(error)throw new Error(`Không tải được danh sách phách: ${error.message}`);
     cache.graderQueue=data||[];cache.graderIndex=0;
     $('grader-score-rules').textContent=`Điểm hợp lệ: 0–${config.maximum_score}${config.score_step==null?' (tự do)':`; bước ${config.score_step}`}; tối đa ${config.decimal_places} chữ số thập phân.`;
@@ -1280,34 +1355,42 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     renderGraderQueue();
   }
   async function saveGraderScore(scoreOverride){
+    if(graderSaving)return;
+    if(!updateGraderWindow())throw new Error('Hiện không trong thời hạn nhập điểm.');
     const config=selectedGraderConfig(),row=cache.graderQueue[cache.graderIndex];
     if(!config||!row)throw new Error('Chọn một phách trong danh sách.');
     const raw=scoreOverride??$('grader-score').value;
-    const score=Number(raw),invalid=validateEssayScore(score,config);
+    const score=Number(raw),invalid=validateEssayScore(raw,config);
     if(invalid)throw new Error(invalid);
+    const request=graderQueueRequest;
+    graderSaving=true;updateGraderWindow();
+    try{
     const{error}=await state.client.rpc('exam_save_script_score',{
       p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_code:row.phach_code,p_score:score
     });
     if(error)throw new Error(`Không lưu được điểm phách ${row.phach_code}: ${error.message}`);
+    if(request!==graderQueueRequest)return;
     row.score=score;row.updated_at=new Date().toISOString();
     cache.graderIndex=Math.min(cache.graderIndex+1,cache.graderQueue.length-1);
     renderGraderQueue();
     message($('grader-message'),`Đã lưu điểm ${score} cho phách ${row.phach_code}.`, 'success');
+    }finally{graderSaving=false;updateGraderWindow()}
   }
   async function applyGraderDefault(){
+    if(!updateGraderWindow())throw new Error('Hiện không trong thời hạn nhập điểm.');
     const config=selectedGraderConfig(),value=$('grader-default-score').value;
     if(!config)throw new Error('Chọn kỳ thi và môn trước.');
     const invalid=validateEssayScore(value,config);if(invalid)throw new Error(invalid);
-    if(!confirm(`Áp dụng điểm ${value} cho ${cache.graderQueue.length} phách trong danh sách hiện tại?`))return;
-    let saved=0;
-    for(const row of cache.graderQueue){
-      const{error}=await state.client.rpc('exam_save_script_score',{
-        p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_code:row.phach_code,p_score:Number(value)
-      });
-      if(error)throw new Error(`Đã lưu ${saved} điểm trước khi lỗi tại phách ${row.phach_code}: ${error.message}`);
-      row.score=Number(value);row.updated_at=new Date().toISOString();saved++;
-    }
-    renderGraderQueue();message($('grader-message'),`Đã áp dụng điểm mặc định cho ${saved} phách.`, 'success');
+    const pending=cache.graderQueue.filter(row=>row.score==null);
+    if(!pending.length)throw new Error('Danh sách không còn bài chưa nhập điểm.');
+    if(!confirm(`Áp dụng điểm ${value} cho ${pending.length} phách chưa có điểm?`))return;
+    const{error}=await state.client.rpc('exam_import_script_scores',{
+      p_exam_id:config.exam_id,p_subject_code:config.subject_code,
+      p_rows:pending.map(row=>({phach_code:row.phach_code,score:Number(value)}))
+    });
+    if(error)throw new Error(`Không áp dụng được điểm mặc định: ${error.message}`);
+    await loadGraderQueue();
+    message($('grader-message'),`Đã áp dụng điểm mặc định cho ${pending.length} phách.`, 'success');
   }
   function exportGraderTemplate(){
     const wb=window.XLSX.utils.book_new();
@@ -1316,6 +1399,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     window.XLSX.writeFile(wb,'mau-nhap-diem-tu-luan.xlsx');
   }
   async function importGraderScores(){
+    if(!updateGraderWindow())throw new Error('Hiện không trong thời hạn nhập điểm.');
     const file=$('grader-import-file').files?.[0],config=selectedGraderConfig();
     if(!file||!config)throw new Error('Chọn kỳ thi/môn và file Excel hoặc CSV.');
     const buffer=await file.arrayBuffer();
@@ -1348,7 +1432,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       target.disabled=true;
       try{await action()}
       catch(error){message($(label),error?.message||String(error),'error')}
-      finally{target.disabled=false}
+      finally{target.disabled=false;if(label==='grader-message')updateGraderWindow()}
     };
   }
   function wireForms(){
@@ -1438,9 +1522,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   function wireGrader(){
     $('grader-exam').onchange=()=>{
       const examId=$('grader-exam').value;
+      ++graderQueueRequest;graderWindow=null;clearInterval(graderWindowTimer);
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
       $('grader-prefix').value='';
       setSubjectOptions('grader-subject',cache.graderWork.filter(work=>work.exam_id===examId).map(work=>({code:work.subject_code,name:nameOf(work.subject_code)})));
+      const assigned=cache.graderWork.filter(work=>work.exam_id===examId);
+      if(assigned.length===1)$('grader-subject').value=assigned[0].subject_code;
       $('grader-subject').onchange();
     };
     $('grader-subject').onchange=()=>{
@@ -1454,7 +1541,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     });
     $('grader-quick-score').addEventListener('input',()=>{
       const config=selectedGraderConfig(),parsed=parseQuickScore($('grader-quick-score').value,config?.decimal_places);
-      if(parsed!==null)$('grader-score').value=String(parsed);
+      $('grader-score').value=Number.isFinite(parsed)?String(parsed):'';
+    });
+    if($('grader-phach-select'))$('grader-phach-select').onchange=()=>{
+      const value=$('grader-phach-select').value;if(value==='')return;
+      cache.graderIndex=Number(value);renderGraderQueue();
+    };
+    $('grader-quick-score').addEventListener('keydown',event=>{
+      if(event.key==='Enter'){event.preventDefault();saveGraderScore().catch(error=>message($('grader-message'),error.message,'error'))}
     });
     safeAction('grader-message',()=>saveGraderScore(),$('grader-save-score'));
     safeAction('grader-message',applyGraderDefault,$('grader-apply-default'));
