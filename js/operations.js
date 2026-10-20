@@ -222,12 +222,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const row of forms.receiptRows||[]){
       if(row.subject_order!==null&&row.subject_order!==undefined)continue;
       if(selected&&String(row.class_code||'Chưa xếp lớp')!==selected)continue;
-      const key=JSON.stringify([row.class_code||'Chưa xếp lớp',row.subject_code||'']);
-      if(!groups.has(key))groups.set(key,{classCode:row.class_code||'Chưa xếp lớp',subject:row.subject_code||'',order:null,room:'',rows:[]});
+      const key=String(row.class_code||'Chưa xếp lớp');
+      if(!groups.has(key))groups.set(key,{classCode:key,subject:'',order:null,room:'',rows:[]});
       const group=groups.get(key);
       if(!group.rows.some(item=>String(item.candidate_id)===String(row.candidate_id)))group.rows.push(row);
     }
-    return [...groups.values()].sort((a,b)=>String(a.classCode).localeCompare(String(b.classCode),'vi',{numeric:true})||String(a.subject).localeCompare(String(b.subject),'vi'));
+    return [...groups.values()].sort((a,b)=>String(a.classCode).localeCompare(String(b.classCode),'vi',{numeric:true}));
   }
 
   async function loadForms(){
@@ -380,7 +380,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const pageStart=receipts.length;
       const columns=isMandatory?['TT','SBD','Họ và tên','Ngày sinh','Mã đề','Số tờ','Ký nộp','Ghi chú']:
         ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'];
-      const heading=isClassReceipt?[`Lớp: ${classCode}`,`Môn thi: ${nameOf(subject)}`]:[`Phòng: ${String(room||'').replace(/^phòng\s*/i,'')}`,order?`Môn ${order}`:subject?`Môn thi: ${nameOf(subject)}`:''];
+      const heading=isClassReceipt?[`Lớp: ${classCode}`,'Môn thi: ................................']: [`Phòng: ${String(room||'').replace(/^phòng\s*/i,'')}`,order?`Môn ${order}`:subject?`Môn thi: ${nameOf(subject)}`:''];
       receipts.push(...[header,[settings.receipt.title],heading,columns,
         ...roomRows.map((row,index)=>isMandatory?
           [index+1,row.sbd,row.student_name,row.date_of_birth||'','','','','']:
@@ -507,12 +507,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const {room,subject,order,rows,classCode} of pdfReceiptGroups){
       const isClassReceipt=receiptMode==='classrooms';
       const isMandatory=receiptMode==='mandatory'||isClassReceipt||(!order&&['TOAN','VAN'].includes(subject));
-      const heading=isClassReceipt?`LỚP ${esc(classCode)}<br>MÔN THI: ${esc(nameOf(subject))}`:`PHÒNG ${esc(displayRoom(room))}${order?`<br>MÔN ${order}`:subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}`;
+      const heading=isClassReceipt?`LỚP ${esc(classCode)}<br>MÔN THI: ................................`:`PHÒNG ${esc(displayRoom(room))}${order?`<br>MÔN ${order}`:subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}`;
       const columns=isMandatory?'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>':'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>';
       const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
       const receiptFooter=isClassReceipt?'':`<div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div>`;
       const receiptHeading=isClassReceipt
-        ? `${esc(settings.receipt.title)} LỚP ${esc(classCode)}<br>MÔN THI: ${esc(nameOf(subject))}`
+        ? `${esc(settings.receipt.title)} LỚP ${esc(classCode)}<br>MÔN THI: ................................`
         : `${esc(settings.receipt.title)}<br>${heading}`;
       pages.push(`<section class="page receipt ${isClassReceipt?'class-receipt ':''}${isMandatory?'mandatory-receipt':''}">${header}<h3>${receiptHeading}</h3><table><thead><tr>${columns}</tr></thead><tbody>${body}</tbody></table>${receiptFooter}</section>`);
     }
