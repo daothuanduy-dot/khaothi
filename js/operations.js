@@ -94,7 +94,7 @@ export function randomScriptHead(usedHeads=new Set()){
 
 export function wireOperations({state,$,esc,message,selectAllPages,subjects,subjectName,loadExamRounds}){
   const nameOf=subjectCode=>{const code=String(subjectCode||'').trim().toUpperCase();return code==='KTPL'||code==='GDKTPL'?'GDKT&PL':subjectName(subjectCode)};
-  const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0,graderBagAssignments:[],graderProfiles:[],graderGroups:[],scoreImportRows:[],combinedScores:[]};
+  const cache={forms:null,absences:[],scriptRooms:[],scriptFinalizationId:null,scriptPlanId:null,scriptRoundNo:null,scriptConfigs:[],graderWork:[],graderQueue:[],graderIndex:0,graderBagAssignments:[],graderProfiles:[],graderGroups:[],scoreImportRows:[],combinedScores:[]};
   const examIds=['forms-exam','absence-exam','script-exam','scores-exam'];
   const setExamOptions=()=>{
     for(const id of examIds){
@@ -760,21 +760,47 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`).join('')||
       '<tr><td colspan="8" class="empty">Chưa có phương án phách.</td></tr>';
   }
+  async function loadScriptRounds(examId){
+    const roundSelect=$('script-round');
+    if(!roundSelect)return;
+    const rounds=examId?await loadExamRounds(state.client,examId):[];
+    const previous=roundSelect.dataset.examId===examId?roundSelect.value:'';
+    roundSelect.innerHTML='<option value="">-- Phân phòng cũ --</option>'+rounds.map(round=>
+      `<option value="${esc(round.round_no)}">${esc(round.name||`Đợt ${round.round_no}`)}</option>`).join('');
+    roundSelect.dataset.examId=examId||'';
+    const available=rounds.map(round=>String(round.round_no));
+    roundSelect.value=available.includes(previous)?previous:(available[0]||'');
+  }
   async function loadScriptRooms(){
     const examId=currentExam('script-exam');setAdminExam(examId);
     const code=$('script-subject').value;if(!code)throw new Error('Chọn môn thi trước.');
-    const finals=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
-      .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng');
+    const roundNo=Number($('script-round')?.value||0)||null;
     let target=null,records=[];
-    for(const finalization of finals||[]){
-      const rows=await readPages(()=>state.client.from('exam_room_assignments')
-        .select('candidate_id,room_code,sbd,subject_code,ca1_subject_code,ca2_subject_code')
-        .eq('finalization_id',finalization.id).order('sbd'));
-      const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
-      if(relevant.length){target=finalization;records=relevant;break}
+    if(roundNo){
+      const plans=checkResult(await readPages(()=>state.client.from('exam_rooming_round_plans')
+        .select('id,round_no,plan_type,subject_code,assignments,created_at')
+        .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false})),
+        'Không tải được phương án phòng');
+      for(const plan of plans||[]){
+        const rows=(Array.isArray(plan.assignments)?plan.assignments:[]).map(row=>({...row,subject_code:row.subject_code||plan.subject_code||''}));
+        const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
+        if(relevant.length){target=plan;records=relevant;break}
+      }
+    }else{
+      const finals=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
+        .eq('exam_id',examId).eq('is_current',true).order('finalized_at',{ascending:false}),'Không tải được phương án phòng');
+      for(const finalization of finals||[]){
+        const rows=await readPages(()=>state.client.from('exam_room_assignments')
+          .select('candidate_id,room_code,sbd,subject_code,ca1_subject_code,ca2_subject_code')
+          .eq('finalization_id',finalization.id).order('sbd'));
+        const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
+        if(relevant.length){target=finalization;records=relevant;break}
+      }
     }
     if(!target)throw new Error(`Chưa có phân phòng chính thức cho môn ${nameOf(code)}.`);
     cache.scriptFinalizationId=target.id;
+    cache.scriptPlanId=roundNo?target.id:null;
+    cache.scriptRoundNo=roundNo;
     const roomCodes=[...new Set(records.map(row=>row.room_code))]
       .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
     if(roomCodes.length>26)throw new Error('Mỗi môn tối đa 26 phòng để mỗi phòng có một đầu phách là chữ cái riêng.');
@@ -811,7 +837,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       throw new Error('Mỗi phòng không được có quá 100 bài; hãy kiểm tra lại phương án phân phòng.');
     const{data,error}=await state.client.rpc('exam_create_script_run',{
       p_exam_id:examId,p_subject_code:$('script-subject').value,p_method:$('script-method').value,
-      p_absence_mode:$('script-absence-mode').value,p_room_order:roomOrder
+      p_absence_mode:$('script-absence-mode').value,p_room_order:roomOrder,
+      p_round_no:cache.scriptRoundNo
     });
     if(error)throw new Error(`Không tạo được phương án phách. ${error.message}`);
     message($('script-message'),`Đã tạo bản nháp phách ${data.run_id} (${data.record_count} bài, ${data.room_count} phòng). Kiểm tra rồi khóa để cố định mã phách.`, 'success');
@@ -1370,13 +1397,17 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     setSubjectOptions('script-subject',allSubjectOptions());
     $('script-score-mode').onchange=()=>$('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
     $('script-exam').onchange=()=>{
-      cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptConfigs=[];
+      cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptPlanId=null;cache.scriptRoundNo=null;cache.scriptConfigs=[];
       $('script-room-order').innerHTML='';
-      loadScriptConfigs().catch(error=>message($('script-message'),error.message,'error'));
+      loadScriptRounds($('script-exam').value).then(loadScriptConfigs).catch(error=>message($('script-message'),error.message,'error'));
     };
     $('script-subject').onchange=()=>{
-      cache.scriptRooms=[];cache.scriptFinalizationId=null;$('script-room-order').innerHTML='';
+      cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptPlanId=null;cache.scriptRoundNo=null;$('script-room-order').innerHTML='';
       if($('script-exam').value)loadScriptConfigs().catch(error=>message($('script-message'),error.message,'error'));
+    };
+    $('script-round').onchange=()=>{
+      cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptPlanId=null;cache.scriptRoundNo=null;
+      $('script-room-order').innerHTML='';
     };
     safeAction('script-message',saveScriptConfig,$('script-save-subject'));
     safeAction('script-message',saveMcqMaximumScore,$('script-save-mcq-max-score'));
@@ -1468,7 +1499,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       await loadForms();
     },
     refreshScriptConfigs:()=>{
-      if($('script-exam').value)loadScriptConfigs().catch(error=>message($('script-message'),error?.message||String(error),'error'));
+      if(!$('script-exam').value)return Promise.resolve();
+      return loadScriptRounds($('script-exam').value).then(loadScriptConfigs)
+        .catch(error=>message($('script-message'),error?.message||String(error),'error'));
     },
     enterAsGrader
   };
