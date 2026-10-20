@@ -1169,6 +1169,10 @@ function restoreSavedRooming(record,assignments,candidates,{examId,planType,subj
 async function previewRooming(){
  const examId=$('rooming-exam-select').value;
  if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi.','error');return}
+ if(state.preview&&!state.preview.restoredFromDatabase){
+  message($('rooming-message'),'Phương án hiện tại đang được chỉnh sửa. Hãy tiếp tục điều chỉnh hoặc lưu; không cần bấm xem trước lại.','info');
+  return;
+ }
  const creatingNewPlan=Boolean(state.preview?.restoredFromDatabase);
  if(creatingNewPlan)state.preview=null;
  state.preview=null;clearRoomingPreview();
@@ -1377,10 +1381,11 @@ function renderRooming(result,planType='elective'){
     .forEach((assignment,index)=>seatNumbers.set(String(assignment.candidate_id),index+1));
   }
  }
- const roomPicker=preview?.adjustmentMode==='manual'&&!preview?.finalized?assignment=>`<select data-room-assignment="${esc(assignment.candidate_id)}" aria-label="Phòng của ${esc(assignment.student_name)}">${result.rooms.map(room=>`<option value="${esc(room.room_code)}" ${room.room_code===assignment.room_code?'selected':''}>${esc(room.room_code)}</option>`).join('')}</select>`:'';
+ const manualEditing=preview?.adjustmentMode==='manual'&&!preview?.finalized&&!preview?.saving&&!preview?.finalizing;
+ const roomPicker=manualEditing?assignment=>`<span class="rooming-drag-handle" title="Kéo để đổi thứ tự" aria-hidden="true">↕</span><select data-room-assignment="${esc(assignment.candidate_id)}" aria-label="Phòng của ${esc(assignment.student_name)}">${result.rooms.map(room=>`<option value="${esc(room.room_code)}" ${room.room_code===assignment.room_code?'selected':''}>${esc(room.room_code)}</option>`).join('')}</select>`:'';
  $('assignment-table-body').innerHTML=result.assignments.length?result.assignments.map(a=>['mandatory','subject'].includes(planType)
-  ?`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${seatNumbers.get(String(a.candidate_id))??''}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`
-  :`<tr><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`).join('')
+  ?`<tr data-assignment-row="${esc(a.candidate_id)}" ${manualEditing?'draggable="true"':''}><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${a.seat_number??seatNumbers.get(String(a.candidate_id))??''}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`
+  :`<tr data-assignment-row="${esc(a.candidate_id)}" ${manualEditing?'draggable="true"':''}><td>${esc(a.sbd)}</td><td>${esc(a.student_name)}</td><td>${esc(a.class_code)}</td><td>${esc(a.room_code)}</td><td>${esc(subjectName(a.ca1_subject_code))}</td><td>${esc(subjectName(a.ca2_subject_code))}</td>${roomPicker?`<td>${roomPicker(a)}</td>`:''}</tr>`).join('')
   :`<tr><td colspan="${planType==='mandatory'?5:6}" class="empty">Chưa gán thí sinh. Điều chỉnh sĩ số phòng rồi bấm “Lưu phân bổ phòng”.</td></tr>`;
  const planned=preview?.result.rooms.reduce((sum,room)=>sum+Number(room.student_count||0),0)||0;
  $('room-plan-status').textContent=preview
@@ -1420,6 +1425,17 @@ function rebuildRoomingFromAssignments(preview){
  }
  preview.result.rooms=[...byRoom.values()].map(room=>({...room,ca1_subject_codes:room.ca1_subject_codes.sort(),ca2_subject_codes:room.ca2_subject_codes.sort(),ca1_subject_name:room.ca1_subject_codes.map(subjectName).join(', '),ca2_subject_name:room.ca2_subject_codes.map(subjectName).join(', ')||'—'}));
  syncRoomingResult(preview.result,preview.planType);
+ renumberRoomingAssignments(preview);
+}
+function renumberRoomingAssignments(preview){
+ const roomOrder=new Map((preview.result.rooms||[]).map((room,index)=>[room.room_code,index]));
+ const nextByRoom=new Map();
+ for(const assignment of preview.result.assignments||[]){
+  const next=(nextByRoom.get(assignment.room_code)||0)+1;
+  nextByRoom.set(assignment.room_code,next);
+  assignment.seat_number=next;
+ }
+ preview.result.assignments.sort((a,b)=>(roomOrder.get(a.room_code)??9999)-(roomOrder.get(b.room_code)??9999)||Number(a.seat_number)-Number(b.seat_number));
 }
 function validateRoomingPlan(preview){
  if(!preview)return {ok:false,errors:['Chưa có phương án xếp phòng.']};
@@ -1556,10 +1572,10 @@ async function saveRooming(){
  preview.saving=true;updateRoomingActions();
  $('preview-rooming').disabled=true;$('rooming-exam-select').disabled=true;$('room-plan-type').disabled=true;
  try{
-  if(preview.planType==='elective'&&preview.result.assignments.every(row=>!String(row.sbd||'').trim())){
+  if(preview.planType==='elective'&&preview.adjustmentMode!=='manual'&&preview.result.assignments.every(row=>!String(row.sbd||'').trim())){
    preview.result=orderElectiveRoomPlan(preview.result);
    renderRooming(preview.result,preview.planType);
-  }
+  }else if(preview.adjustmentMode==='manual')renumberRoomingAssignments(preview);
   const{examId,roundNo,planType,subjectCode,adjustmentMode,options,result}=preview;
   const rooms=result.rooms.filter(room=>room.student_count>0);
   const{data,error}=await state.client.rpc('exam_save_rooming_round_plan',{p_exam_id:examId,p_round_no:roundNo,p_plan_type:planType,p_subject_code:subjectCode||null,p_adjustment_mode:adjustmentMode||'automatic',p_capacity:options.capacity,p_room_prefix:options.roomPrefix,p_first_room_number:options.firstRoomNumber,p_rooms:rooms,p_assignments:result.assignments,p_lock:false});
@@ -1620,7 +1636,7 @@ function roomingRows(){
    return {...a,date_of_birth:a.date_of_birth||candidate.date_of_birth||candidate.ngay_sinh||'',subject_name:a.subject_name|| (planType==='mandatory'?subjectName(subjectCode):''),
     ca1_name:a.ca1_subject_code?subjectName(a.ca1_subject_code):'',ca2_name:a.ca2_subject_code?subjectName(a.ca2_subject_code):''};
  });
- const rows=source.sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
+ const rows=source.sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||Number(a.seat_number||0)-Number(b.seat_number||0)||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
  if(planType==='mandatory'){
   const roomSeats=new Map();
   for(const row of rows){
@@ -2660,6 +2676,7 @@ function wireRoomingEditor(){
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
+ let draggedAssignmentId=null;
  $('assignment-table-body').addEventListener('change',event=>{
   const select=event.target.closest('[data-room-assignment]'),preview=state.preview;
   if(!select||!preview||preview.adjustmentMode!=='manual'||preview.finalized)return;
@@ -2671,6 +2688,43 @@ function wireRoomingEditor(){
   renderRooming(preview.result,preview.planType);
   const validation=validateRoomingPlan(preview);
   message($('rooming-message'),validation.ok?'Phương án thủ công hợp lệ, có thể lưu.':`Chưa thể lưu phương án thủ công:\n${validation.errors.join('\n')}`,validation.ok?'success':'error');
+ });
+ $('assignment-table-body').addEventListener('dragstart',event=>{
+  const row=event.target.closest('[data-assignment-row]'),preview=state.preview;
+  if(!row||!preview||preview.adjustmentMode!=='manual'||preview.finalized)return;
+  draggedAssignmentId=String(row.dataset.assignmentRow);
+  row.classList.add('rooming-dragging');
+  event.dataTransfer.effectAllowed='move';
+  event.dataTransfer.setData('text/plain',draggedAssignmentId);
+ });
+ $('assignment-table-body').addEventListener('dragover',event=>{
+  const row=event.target.closest('[data-assignment-row]');
+  if(row&&draggedAssignmentId){event.preventDefault();event.dataTransfer.dropEffect='move';}
+ });
+ $('assignment-table-body').addEventListener('drop',event=>{
+  event.preventDefault();
+  const targetRow=event.target.closest('[data-assignment-row]'),preview=state.preview;
+  const sourceId=draggedAssignmentId||event.dataTransfer.getData('text/plain');
+  if(!targetRow||!sourceId||!preview||preview.adjustmentMode!=='manual'||preview.finalized)return;
+  const targetId=String(targetRow.dataset.assignmentRow);
+  if(sourceId===targetId)return;
+  const assignments=preview.result.assignments;
+  const sourceIndex=assignments.findIndex(item=>String(item.candidate_id)===sourceId);
+  const targetIndex=assignments.findIndex(item=>String(item.candidate_id)===targetId);
+  if(sourceIndex<0||targetIndex<0)return;
+  const [source]=assignments.splice(sourceIndex,1);
+  const adjustedTargetIndex=sourceIndex<targetIndex?targetIndex-1:targetIndex;
+  source.room_code=assignments[adjustedTargetIndex]?.room_code||source.room_code;
+  assignments.splice(adjustedTargetIndex,0,source);
+  preview.assignmentsCreated=false;preview.saved=null;preview.finalized=null;preview.sourcePlanId=null;preview.suggestionValid=false;
+  rebuildRoomingFromAssignments(preview);
+  renderRooming(preview.result,preview.planType);
+  const validation=validateRoomingPlan(preview);
+  message($('rooming-message'),validation.ok?'Đã sắp xếp lại thứ tự/phòng, có thể lưu.':`Chưa thể lưu phương án thủ công:\n${validation.errors.join('\n')}`,validation.ok?'success':'error');
+ });
+ $('assignment-table-body').addEventListener('dragend',event=>{
+  event.target.closest('[data-assignment-row]')?.classList.remove('rooming-dragging');
+  draggedAssignmentId=null;
  });
  $('rooming-table-body').addEventListener('click',event=>{
   const button=event.target.closest('[data-remove-room]');
