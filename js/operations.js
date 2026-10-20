@@ -152,13 +152,23 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
 
   const formSpecs={"listing":["Danh sách niêm yết","DANH SÁCH NIÊM YẾT THÍ SINH",["STT","SBD","Họ và tên","Ngày sinh","Lớp","Môn 1","Môn 2","Ghi chú"],[5,10,25,13,9,14,14,10]],"receipt":["Phiếu thu bài","PHIẾU THU BÀI",["TT","SBD","Họ và tên","Ngày sinh","Lớp","Môn thi","Mã đề","Số tờ","Ký nộp","Ghi chú"],[5,10,25,13,9,14,6,6,12,10]],"roster":["SBD và môn lựa chọn","DANH SÁCH SỐ BÁO DANH VÀ MÔN THI LỰA CHỌN",["STT","Lớp","Mã học sinh","SBD","Họ và tên","Môn 1","Môn 2","Ghi chú"],[8,16,20,14,30,25,25,10]]};
   const cleanFormTitle=value=>String(value??'').replace(/[·.]+/g,' ').replace(/\s+/g,' ').trim();
+  const defaultFormMargins={top:8,right:8,bottom:8,left:8};
+  const normalizeFormMargins=raw=>Object.fromEntries(Object.keys(defaultFormMargins).map(side=>{
+    const value=Number(raw?.[side]);
+    return [side,Number.isFinite(value)&&value>=0&&value<=30?value:defaultFormMargins[side]];
+  }));
   formSpecs.classrooms=['Phòng thi theo lớp','DANH SÁCH PHÒNG THI THEO LỚP',['STT','Số báo danh','Họ và tên','Ngày sinh','Giới tính','Phòng thi bắt buộc','Phòng thi lựa chọn','Ghi chú'],[6,13,26,14,9,25,30,12]];
   const defaultFont=(header=false)=>({family:'Times New Roman',size:header?12:10,weight:header?700:400,style:'normal'});
-  const normalizeFormPrintSettings=raw=>Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
-    const value=raw?.[key]||{};
-    return [key,{title:cleanFormTitle(value.title)||spec[1],header:{...defaultFont(true),...(value.header||raw?.header)},body:{...defaultFont(),...(value.body||raw?.body)},widths:spec[3].map((w,i)=>Number(value.widths?.[i]||raw?.widths?.[key]?.[i])||w)}];
-  }));
-  const currentFormPrintSettings=()=>Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
+  const normalizeFormPrintSettings=raw=>{
+    const settings=Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
+      const value=raw?.[key]||{};
+      return [key,{title:cleanFormTitle(value.title)||spec[1],header:{...defaultFont(true),...(value.header||raw?.header)},body:{...defaultFont(),...(value.body||raw?.body)},widths:spec[3].map((w,i)=>Number(value.widths?.[i]||raw?.widths?.[key]?.[i])||w)}];
+    }));
+    settings.margins=normalizeFormMargins(raw?.margins);
+    return settings;
+  };
+  const currentFormPrintSettings=()=>{
+    const settings=Object.fromEntries(Object.entries(formSpecs).map(([key,spec])=>{
     const value={title:cleanFormTitle($(`forms-${key}-title`).value)||spec[1]};
     for(const part of ['header','body']){
       const id=`forms-${key}-${part}`;
@@ -171,14 +181,23 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(!Number.isFinite(width)||width<1||width>100)throw new Error('Độ rộng cột phải từ 1 đến 100.');
       return width;
     });
-    return [key,value];
-  }));
+      return [key,value];
+    }));
+    settings.margins=Object.fromEntries(Object.keys(defaultFormMargins).map(side=>{
+      const value=Number($(`forms-margin-${side}`).value||defaultFormMargins[side]);
+      if(!Number.isFinite(value)||value<0||value>30)throw new Error('Lề in phải từ 0 đến 30 mm.');
+      return [side,value];
+    }));
+    return settings;
+  };
   const applyFormPrintSettings=settings=>{
-    for(const [key,value] of Object.entries(normalizeFormPrintSettings(settings))){
+    for(const [key,value] of Object.entries(normalizeFormPrintSettings(settings)).filter(([key])=>formSpecs[key])){
       $(`forms-${key}-title`).value=value.title;
       for(const part of ['header','body'])for(const prop of ['family','size','weight','style'])$(`forms-${key}-${part}-${prop}`).value=String(value[part][prop]);
       value.widths.forEach((width,i)=>$(`forms-${key}-width-${i}`).value=width);
     }
+    const margins=normalizeFormMargins(settings?.margins);
+    for(const side of Object.keys(defaultFormMargins))$(`forms-margin-${side}`).value=margins[side];
   };
 
   function showFormSettings(){
@@ -408,7 +427,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const ws=window.XLSX.utils.aoa_to_sheet(rows);
       ws['!cols']=config.widths.map(wch=>({wch}));
       if(key==='receipt')ws['!merges']=receiptMerges;
-      ws['!margins']={left:.15,right:.15,top:.25,bottom:.25,header:.1,footer:.1};
+      const marginInches=side=>settings.margins[side]/25.4;
+      ws['!margins']={left:marginInches('left'),right:marginInches('right'),top:marginInches('top'),bottom:marginInches('bottom'),header:0,footer:0};
       ws['!pageSetup']={paperSize:9,orientation:'landscape',fitToWidth:1,fitToHeight:0};
       ws['!rowBreaks']=sheetName==='Danh sach niem yet'?listingBreaks:sheetName==='Phieu thu bai'?receiptBreaks:[];
       const tableRows=new Set(),headingRows=new Set();
@@ -490,10 +510,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const heading=isClassReceipt?`LỚP ${esc(classCode)}<br>MÔN THI: ${esc(nameOf(subject))}`:`PHÒNG ${esc(displayRoom(room))}${order?`<br>MÔN ${order}`:subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}`;
       const columns=isMandatory?'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>':'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>';
       const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
+      const receiptFooter=isClassReceipt?'':`<div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div>`;
       const receiptHeading=isClassReceipt
         ? `${esc(settings.receipt.title)} LỚP ${esc(classCode)}<br>MÔN THI: ${esc(nameOf(subject))}`
         : `${esc(settings.receipt.title)}<br>${heading}`;
-      pages.push(`<section class="page receipt ${isClassReceipt?'class-receipt ':''}${isMandatory?'mandatory-receipt':''}">${header}<h3>${receiptHeading}</h3><table><thead><tr>${columns}</tr></thead><tbody>${body}</tbody></table><div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div></section>`);
+      pages.push(`<section class="page receipt ${isClassReceipt?'class-receipt ':''}${isMandatory?'mandatory-receipt':''}">${header}<h3>${receiptHeading}</h3><table><thead><tr>${columns}</tr></thead><tbody>${body}</tbody></table>${receiptFooter}</section>`);
     }
     if(printType==='all'||printType==='roster')for(const classCode of [...new Set(forms.rosterRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))){
       const rows=forms.rosterRows.filter(row=>(row.class_code||'Chưa xếp lớp')===classCode);
@@ -505,7 +526,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!pages.length)throw new Error('Không có dữ liệu cho biểu mẫu hoặc lớp đang chọn.');
     const printablePages=compactPrintPages(pages).map(page=>page.replace(/<header>[\s\S]*?<\/header><h3>([\s\S]*?)<\/h3>/,(_,title)=>`<header class="form-heading"><div><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b></div><div><b>${esc($('forms-title').value)}</b><h3>${title}</h3></div></header>`));
     const fontCss=font=>`font-family:'${esc(font.family)}',serif;font-size:${font.size}pt;font-weight:${font.weight};font-style:${font.style};`;
-    const customCss=Object.entries(settings).map(([key,config])=>{
+    const customCss=Object.entries(settings).filter(([key])=>key!=='margins').map(([key,config])=>{
       // Printed class rosters omit class and student ID, and include a notes column.
       const widths=key==='roster'?[config.widths[0],config.widths[3],config.widths[4],config.widths[5],config.widths[6],config.widths[7]]:config.widths;
       const total=widths.reduce((sum,w)=>sum+w,0);
@@ -514,16 +535,16 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const win=window.open('','_blank');
     if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
-      @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:${esc(forms.exam.form_font_family||'Times New Roman')},serif;font-size:${Number(forms.exam.form_font_size)||11}pt}
-      .page{width:190mm;min-height:277mm;break-after:page;page-break-after:always}
+      @page{size:A4 portrait;margin:${settings.margins.top}mm ${settings.margins.right}mm ${settings.margins.bottom}mm ${settings.margins.left}mm}*{box-sizing:border-box}body{margin:0;font-family:${esc(forms.exam.form_font_family||'Times New Roman')},serif;font-size:${Number(forms.exam.form_font_size)||11}pt}
+      .page{width:calc(210mm - ${settings.margins.left+settings.margins.right}mm);min-height:calc(297mm - ${settings.margins.top+settings.margins.bottom}mm);break-after:page;page-break-after:always}
       .page:last-child{break-after:auto;page-break-after:auto}header{text-align:center;line-height:1.15;white-space:nowrap}
-      h3{text-align:center;margin:3mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}table:not(.receipt) th:nth-child(1){width:5%}table:not(.receipt) th:nth-child(2){width:10%}table:not(.receipt) th:nth-child(3){width:25%}table:not(.receipt) th:nth-child(4){width:13%}table:not(.receipt) th:nth-child(5){width:9%}table:not(.receipt) th:nth-child(6),table:not(.receipt) th:nth-child(7){width:14%}table:not(.receipt) th:nth-child(8){width:10%}.receipt th:nth-child(1){width:5%}.receipt th:nth-child(2){width:10%}.receipt th:nth-child(3){width:25%}.receipt th:nth-child(4){width:13%}.receipt th:nth-child(5){width:9%}.receipt th:nth-child(6){width:14%}.receipt th:nth-child(7),.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:10%}
+      h3{text-align:center;margin:1mm 0}table{width:100%;border-collapse:collapse;table-layout:fixed}table:not(.receipt) th:nth-child(1){width:5%}table:not(.receipt) th:nth-child(2){width:10%}table:not(.receipt) th:nth-child(3){width:25%}table:not(.receipt) th:nth-child(4){width:13%}table:not(.receipt) th:nth-child(5){width:9%}table:not(.receipt) th:nth-child(6),table:not(.receipt) th:nth-child(7){width:14%}table:not(.receipt) th:nth-child(8){width:10%}.receipt th:nth-child(1){width:5%}.receipt th:nth-child(2){width:10%}.receipt th:nth-child(3){width:25%}.receipt th:nth-child(4){width:13%}.receipt th:nth-child(5){width:9%}.receipt th:nth-child(6){width:14%}.receipt th:nth-child(7),.receipt th:nth-child(8){width:6%}.receipt th:nth-child(9){width:12%}.receipt th:nth-child(10){width:10%}
       th,td{border:1px solid #000;padding:2px 3px;text-align:center;overflow-wrap:anywhere;white-space:normal}
       td:nth-child(3){text-align:left}tr{break-inside:avoid;page-break-inside:avoid}
-      @media print{html,body{width:190mm;margin:0!important}.page{margin:0!important}}
+      @media print{html,body{width:calc(210mm - ${settings.margins.left+settings.margins.right}mm);margin:0!important}.page{margin:0!important}}
       @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;margin-bottom:20px}}
       .receipt-footer{break-inside:avoid;page-break-inside:avoid}.receipt-footer p{margin:3mm 0}.receipt-signatures{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;min-height:25mm}${customCss}
-      .page header.form-heading{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:start;text-align:center;margin-bottom:6mm;white-space:normal}.page header.form-heading b,.page header.form-heading h3{font-weight:700}.page header.form-heading h3{margin:0}.page.class-receipt h3{white-space:nowrap}.page table thead th{font-weight:700 !important}
+      .page header.form-heading{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:start;text-align:center;margin-bottom:2mm;white-space:normal}.page header.form-heading b,.page header.form-heading h3{font-weight:700}.page header.form-heading h3{margin:0}.page.class-receipt h3{white-space:nowrap;margin:0 0 1mm}.page table thead th{font-weight:700 !important}
       .page.mandatory-receipt table th:nth-child(n){width:auto}.page.mandatory-receipt table th:nth-child(1){width:5%}.page.mandatory-receipt table th:nth-child(2){width:13%}.page.mandatory-receipt table th:nth-child(3){width:25%}.page.mandatory-receipt table th:nth-child(4){width:14%}
       </style></head><body>${printablePages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     win.document.close();
