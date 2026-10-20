@@ -392,6 +392,23 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
           alignment:{vertical:'center',wrapText:true}};
         if(key==='receipt'&&!tableRows.has(rowIndex))delete cell.s.border;
       }
+      // Two centered heading blocks, with the form title below the exam title.
+      const split=Math.floor(config.widths.length/2),last=config.widths.length-1;
+      rows.forEach((row,i)=>{
+        if(row!==header)return;
+        for(let r=i;r<=i+1;r++)for(let c=0;c<=last;c++)delete ws[window.XLSX.utils.encode_cell({r,c})];
+        const values=[[header[0],header[2]],[header[1],config.title]];
+        for(let offset=0;offset<2;offset++)for(let side=0;side<2;side++){
+          const c=side?split:0,r=i+offset;
+          ws[window.XLSX.utils.encode_cell({r,c})]={t:'s',v:values[offset][side]||'',s:{font:{name:config.header.family,sz:config.header.size,bold:true},alignment:{horizontal:'center',vertical:'center',wrapText:true}}};
+          (ws['!merges']||=[]).push({s:{r,c},e:{r,c:side?last:split-1}});
+        }
+      });
+      for(const[address,cell]of Object.entries(ws)){
+        if(address.startsWith('!'))continue;
+        const row=rows[window.XLSX.utils.decode_cell(address).r];
+        if(['STT','TT'].includes(row?.[0]))cell.s.font.bold=true;
+      }
       window.XLSX.utils.book_append_sheet(wb,ws,sheetName);
     }
     window.XLSX.writeFile(wb,`bieu-mau-${forms.examId}.xlsx`,{cellStyles:true});
@@ -433,7 +450,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       pages.push(`<section class="page classrooms">${header}<h3>${esc(settings.classrooms.title)} · LỚP ${esc(code)} · ĐỢT ${forms.roundNo}</h3><table><thead><tr>${formSpecs.classrooms[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i)=>`<tr>${classRoomValues(row,i).map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số học sinh: ${rows.length}</p></section>`);
     }
     if(!pages.length)throw new Error('Không có dữ liệu cho biểu mẫu hoặc lớp đang chọn.');
-    const printablePages=compactPrintPages(pages);
+    const printablePages=compactPrintPages(pages).map(page=>page.replace(/<header>[\s\S]*?<\/header><h3>([\s\S]*?)<\/h3>/,(_,title)=>`<header class="form-heading"><div><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b></div><div><b>${esc($('forms-title').value)}</b><h3>${title}</h3></div></header>`));
     const fontCss=font=>`font-family:'${esc(font.family)}',serif;font-size:${font.size}pt;font-weight:${font.weight};font-style:${font.style};`;
     const customCss=Object.entries(settings).map(([key,config])=>{
       // Printed class rosters omit class and student ID, and include a notes column.
@@ -453,6 +470,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       @media print{html,body{width:190mm;margin:0!important}.page{margin:0!important}}
       @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;margin-bottom:20px}}
       .receipt-footer{break-inside:avoid;page-break-inside:avoid}.receipt-footer p{margin:3mm 0}.receipt-signatures{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;min-height:25mm}${customCss}
+      .page header.form-heading{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:start;text-align:center;margin-bottom:6mm;white-space:normal}.page header.form-heading b,.page header.form-heading h3{font-weight:700}.page header.form-heading h3{margin:0}.page table thead th{font-weight:700}
       </style></head><body>${printablePages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     win.document.close();
   }
