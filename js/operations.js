@@ -1,4 +1,10 @@
 export function groupReceiptRows(rows,electiveOrder=1){
+  rows=[...rows];
+  // Mandatory subjects share the fixed roster; prefer each subject's actual plan.
+  for(const [source,target] of [['TOAN','VAN'],['VAN','TOAN']]){
+    if(rows.some(row=>!row.subject_order&&row.subject_code===target))continue;
+    rows.push(...rows.filter(row=>!row.subject_order&&row.subject_code===source).map(row=>({...row,subject_code:target})));
+  }
   const groups=new Map();
   for(const row of rows){
     const order=Number(row.subject_order)||null;
@@ -329,12 +335,18 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     const receipts=[],receiptBreaks=[],receiptMerges=[];
     for(const {room,subject,order,rows:roomRows} of (printType==='all'||printType==='receipt'?groupReceiptRows(forms.receiptRows,$('forms-receipt-order').value||1):[])){
+      const pageStart=receipts.length;
       receipts.push(...[header,[settings.receipt.title],[`Phòng thi: ${room}`,order?`Môn ${order}`:subject?`Môn thi: ${nameOf(subject)}`:''],
         ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'],
         ...roomRows.map((row,index)=>[index+1,row.sbd,row.student_name,row.date_of_birth||'',row.class_code||'',
           nameOf(row.subject_code)||nameOf(row.subject_one)||'', '', '', '', '']),
         ['Tổng số thí sinh',roomRows.length,'Số thí sinh vắng','','','','','','','']]);
       const footerStart=receipts.length;
+      if(!order&&['TOAN','VAN'].includes(subject)){
+        for(let i=pageStart+3;i<footerStart-1;i++)receipts[i].splice(5,1);
+      }
+      receipts[pageStart+2]=[`Phòng: ${String(room).replace(/^phòng\s*/i,'')} · ${order?`Môn ${order}`:`Môn: ${nameOf(subject)}`}`];
+      receiptMerges.push({s:{r:pageStart+2,c:0},e:{r:pageStart+2,c:9}});
       receipts.push(['Tổng số bài: ................','','','','','Tổng số tờ: ................'],
         ['SBD thí sinh vắng: ................................................................................'],[],
         ['Cán bộ coi thi 1','','','','','Cán bộ coi thi 2'],
@@ -440,7 +452,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       pages.push(`<section class="page listing">${header}<h3>${esc(settings.listing.title)} · PHÒNG ${esc(room)}</h3><table><thead><tr><th>STT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     if(printType==='all'||printType==='receipt')for(const {room,subject,order,rows} of groupReceiptRows(forms.receiptRows,$('forms-receipt-order').value||1)){
-      pages.push(`<section class="page receipt">${header}<h3>${esc(settings.receipt.title)} · PHÒNG ${esc(room)}${order?` · MÔN ${order}`:subject?` · MÔN: ${esc(nameOf(subject))}`:''}</h3><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div></section>`);
+      pages.push(`<section class="page receipt ${!order&&['TOAN','VAN'].includes(subject)?'mandatory-receipt':''}">${header}<h3>${esc(settings.receipt.title)}<br>Phòng: ${esc(String(room).replace(/^phòng\s*/i,''))}${order?` · MÔN ${order}`:subject?` · MÔN: ${esc(nameOf(subject))}`:''}</h3><table><thead><tr><th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th>${!order&&['TOAN','VAN'].includes(subject)?'':'<th>Môn thi</th>'}<th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td>${!order&&['TOAN','VAN'].includes(subject)?'':`<td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td>`}<td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div></section>`);
     }
     if(printType==='all'||printType==='roster')for(const classCode of [...new Set(forms.rosterRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))){
       const rows=forms.rosterRows.filter(row=>(row.class_code||'Chưa xếp lớp')===classCode);
@@ -471,6 +483,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;margin-bottom:20px}}
       .receipt-footer{break-inside:avoid;page-break-inside:avoid}.receipt-footer p{margin:3mm 0}.receipt-signatures{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;min-height:25mm}${customCss}
       .page header.form-heading{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:start;text-align:center;margin-bottom:6mm;white-space:normal}.page header.form-heading b,.page header.form-heading h3{font-weight:700}.page header.form-heading h3{margin:0}.page table thead th{font-weight:700}
+      .page.mandatory-receipt table th:nth-child(n){width:auto}.page.mandatory-receipt table th:nth-child(1){width:5%}.page.mandatory-receipt table th:nth-child(2){width:13%}.page.mandatory-receipt table th:nth-child(3){width:25%}.page.mandatory-receipt table th:nth-child(4){width:14%}
       </style></head><body>${printablePages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     win.document.close();
   }
