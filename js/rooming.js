@@ -276,7 +276,19 @@ export function numberSavedElectiveRooms(plan,options={}){
   const ordered=orderElectiveRoomPlan(plan);
   // Number the saved seat order, never optimize or move candidates at this step.
   const assignments=[...plan.assignments].sort((a,b)=>ordered.rooms.findIndex(r=>r.room_code===a.room_code)-ordered.rooms.findIndex(r=>r.room_code===b.room_code)||Number(a.seat_number)-Number(b.seat_number));
-  if(assignments.some((row,index)=>String(row.candidate_id)!==String(ordered.assignments[index].candidate_id)||Number(row.seat_number)!==ordered.assignments[index].seat_number))throw new Error('Phương án cũ chưa có thứ tự nhóm môn hợp lệ. Hãy xếp và lưu lại phòng trước.');
+  for(const room of ordered.rooms){
+    const members=assignments.filter(row=>row.room_code===room.room_code);
+    if(members.some((row,index)=>Number(row.seat_number)!==index+1))throw new Error('Phòng chưa có thứ tự vị trí liên tục hợp lệ. Hãy xếp và lưu lại phòng trước.');
+    if(plan.adjustment_mode!=='manual'){
+      const closed=new Set();let previous=null;
+      const closedPairs=new Set();let previousPair=null;
+      for(const row of members){
+        const code=row.ca1_subject_code,pair=JSON.stringify([code,row.ca2_subject_code]);
+        if(code!==previous){if(closed.has(code))throw new Error('Thứ tự nhóm môn Ca 1 không liên tục. Hãy lưu lại phòng.');closed.add(code);previous=code;}
+        if(pair!==previousPair){if(closedPairs.has(pair))throw new Error('Thứ tự nhóm môn trong Ca 1 không liên tục. Hãy lưu lại phòng.');closedPairs.add(pair);previousPair=pair;}
+      }
+    }
+  }
   const numbered=assignments.map((row,index)=>({...row,sbd:prefix+String(startNumber+index).padStart(totalLength-prefix.length,'0')}));
   return {...plan,rooms:ordered.rooms.map(room=>{
     const members=numbered.filter(row=>row.room_code===room.room_code);
