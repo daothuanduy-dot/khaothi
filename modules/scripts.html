@@ -3,8 +3,9 @@
   <div class="form-grid">
     <label>Kỳ thi<select id="script-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
     <label>Môn<select id="script-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label>Cách nhập điểm<select id="script-score-mode"><option value="free">Nhập điểm tự do</option><option value="step">Nhập điểm theo quy cách</option></select></label>
     <label>Điểm tối đa phần tự luận<input id="script-max-score" type="number" min="0.001" step="0.001"></label>
-    <label>Bước điểm hợp lệ<input id="script-score-step" type="number" min="0.001" step="0.001"></label>
+    <label id="script-score-step-wrap" class="hidden">Bước điểm hợp lệ<input id="script-score-step" type="number" min="0.001" step="0.001"></label>
     <label>Số chữ số thập phân<input id="script-decimals" type="number" min="0" max="3" step="1" value="2"></label>
     <label>Điểm mặc định (không bắt buộc)<input id="script-default-score" type="number" min="0" step="0.001"></label>
     <div class="form-actions"><button id="script-save-subject" class="btn btn-light" type="button">Lưu thang điểm tự luận</button></div>
