@@ -69,7 +69,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.115</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.119</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -96,7 +96,7 @@
 
     <section id="app-screen" class="hidden">
       <div class="welcome-row"><div><div class="eyebrow">BẢNG ĐIỀU KHIỂN</div><h1 id="app-title">Quản lý kỳ thi</h1><p>Quản lý kỳ thi, đăng ký môn lựa chọn và phương án xếp phòng.</p></div><button id="reload-exams" class="btn btn-light">Làm mới</button></div>
-      <nav class="tabs" aria-label="Chức năng"><button class="tab active" data-tab="exams">Kỳ thi</button><button class="tab" data-tab="school-students">DS học sinh</button><button class="tab" data-tab="candidates">Hồ sơ thí sinh</button><button class="tab" data-tab="subjects">Môn thi</button><button class="tab" data-tab="sbd">Quản lý SBD</button><button class="tab" data-tab="rooming">Xếp phòng thi</button><button class="tab" data-tab="forms">Biểu mẫu</button><button class="tab" data-tab="absences">Báo vắng</button><button class="tab" data-tab="scripts">Quản lý phách</button><button class="tab" data-tab="scores">Tổng hợp điểm</button><button class="tab" data-tab="settings">Cấu hình</button></nav>
+      <nav class="tabs" aria-label="Chức năng"><button class="tab active" data-tab="exams">Kỳ thi</button><button class="tab" data-tab="school-students">DS học sinh</button><button class="tab" data-tab="candidates">Hồ sơ thí sinh</button><button class="tab" data-tab="subjects">Môn thi</button><button class="tab" data-tab="sbd">Quản lý SBD</button><button class="tab" data-tab="rooming">Xếp phòng thi</button><button class="tab" data-tab="forms">Biểu mẫu</button><button class="tab" data-tab="absences">Báo vắng</button><button class="tab" data-tab="scripts">Quản lý phách</button><button class="tab" data-tab="accounts">Quản lý tài khoản</button><button class="tab" data-tab="scores">Tổng hợp điểm</button><button class="tab" data-tab="settings">Cấu hình</button></nav>
       <div id="global-message" class="notice hidden"></div>
 
             <div class="tab-module" id="module-exams" data-module="exams"></div>
@@ -120,6 +120,7 @@
             <div class="tab-module" id="module-scores" data-module="scores"></div>
 
             <div class="tab-module" id="module-settings" data-module="settings"></div>
+            <div class="tab-module" id="module-accounts" data-module="accounts"></div>
     </section>
 <dialog id="subject-manage-dialog" class="modal-dialog">
   <div class="modal-header"><div><h3 id="subject-manage-title">Quản lý học sinh theo môn</h3><p id="subject-manage-subtitle">Thêm, chuyển môn hoặc xóa đăng ký.</p></div><button id="subject-manage-close" class="btn btn-light" type="button">Đóng</button></div>
@@ -147,7 +148,7 @@
 .rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.115 · build 2026-10-20-frequency-rooming</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.119 · build 2026-10-20-accounts-grading</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM TỰ LUẬN</div><h1>Chấm bài theo phách</h1><p>Tài khoản chỉ được xem phách và điểm của kỳ thi/môn được phân công.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
@@ -157,17 +158,20 @@
       <label>Đầu phách<select id="grader-prefix"><option value="">-- Tất cả đầu phách --</option></select></label>
       <label>Điểm mặc định<input id="grader-default-score" type="number" step="any"></label>
       <label>Nhập nhanh (bỏ dấu thập phân)<input id="grader-quick-score" inputmode="numeric" placeholder="Ví dụ: 875 → 8,75"></label>
-      <label>Phách<input id="grader-current-phach" readonly></label>
+      <label>Chọn mã phách<select id="grader-phach-select"><option value="">-- Chọn mã phách --</option></select></label>
+      <label>Phách đang nhập<input id="grader-current-phach" readonly></label>
       <label>Điểm<input id="grader-score" type="number" step="any"></label>
     </div>
     <div class="form-actions"><button id="grader-save-score" class="btn btn-primary" type="button">Lưu điểm / tiếp theo</button><button id="grader-apply-default" class="btn btn-light" type="button">Áp dụng điểm mặc định cho danh sách</button><button id="grader-export-template" class="btn btn-light" type="button">Tải mẫu Excel</button><input id="grader-import-file" type="file" accept=".xlsx,.csv"><button id="grader-import-scores" class="btn btn-light" type="button">Nạp điểm từ Excel</button></div>
     <div id="grader-message" class="notice hidden" role="status" aria-live="polite"></div>
+    <div id="grader-window-status" class="notice notice-info" role="status">Chọn kỳ thi để xem thời hạn nhập điểm.</div>
+    <p class="help-text">Nhập nhanh: 85 → 8,5; 875 → 8,75; 10 → 10. Nhấn Enter để lưu và chuyển bài. Đầu phách do giáo viên khác đã nhập sẽ không xuất hiện. Điểm của chính mình có thể sửa trong thời hạn; mỗi thay đổi được ghi nhật ký.</p>
     <div id="grader-score-rules" class="notice notice-info">Điểm được kiểm tra theo cấu hình của môn.</div>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Phách</th><th>Điểm</th><th>Cập nhật</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="4" class="empty">Chọn kỳ thi và môn được phân công.</td></tr></tbody></table></div>
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.118" data-previous-src="js/app.js?v=0.1.115"></script>
+    <script type="module" src="./js/app.js?v=0.1.119-forms-20261021" data-previous-src="js/app.js?v=0.1.118"></script>
   <script>
     (() => {
       const form = document.getElementById('setup-form');
