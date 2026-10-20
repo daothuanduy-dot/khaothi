@@ -1,9 +1,9 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.114';
-import {loadTabModules} from './module-loader.js?v=0.1.114';
-import {wireOperations} from './operations.js?v=0.1.114';
-import {loadExamRounds} from './rounds.js?v=0.1.114';
-const APP_VERSION='v0.1.114';
-const APP_BUILD='2026-10-20-room-first-sbd';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.115';
+import {loadTabModules} from './module-loader.js?v=0.1.115';
+import {wireOperations} from './operations.js?v=0.1.115';
+import {loadExamRounds} from './rounds.js?v=0.1.115';
+const APP_VERSION='v0.1.115';
+const APP_BUILD='2026-10-20-frequency-rooming';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
