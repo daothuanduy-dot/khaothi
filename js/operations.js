@@ -68,6 +68,7 @@ export function parseQuickScore(value,decimalPlaces){
 export function validateEssayScore(value,config){
   const score=Number(value),maximum=Number(config?.maximum_score),step=Number(config?.score_step);
   if(!Number.isFinite(score)||score<0||score>maximum)return `Điểm phải từ 0 đến ${maximum}.`;
+  if(!Number.isFinite(step)||step<=0)return null;
   const steps=score/step;
   if(Math.abs(steps-Math.round(steps))>1e-7)return `Điểm phải theo bước ${step}.`;
   return null;
@@ -701,7 +702,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!$('script-subject').value)$('script-subject').value=essay[0]?.subject_code||'TOAN';
     const selected=cache.scriptConfigs.find(row=>row.subject_code===$('script-subject').value);
     $('script-max-score').value=selected?.maximum_score??'';
+    $('script-score-mode').value=selected?.score_step==null?'free':'step';
     $('script-score-step').value=selected?.score_step??'';
+    $('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
     $('script-decimals').value=selected?.decimal_places??2;
     $('script-default-score').value=selected?.default_score??'';
     $('script-mcq-max-score').value=selected?.mcq_maximum_score??10;
@@ -711,13 +714,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const examId=currentExam('script-exam');setAdminExam(examId);
     const code=$('script-subject').value;
     if(!code)throw new Error('Chọn môn cần cấu hình.');
+    const stepMode=$('script-score-mode').value==='step';
     if(!Number.isFinite(Number($('script-max-score').value))||Number($('script-max-score').value)<=0||
-      !Number.isFinite(Number($('script-score-step').value))||Number($('script-score-step').value)<=0||
+      (stepMode&&(!Number.isFinite(Number($('script-score-step').value))||Number($('script-score-step').value)<=0))||
       !Number.isInteger(Number($('script-decimals').value))||Number($('script-decimals').value)<0||Number($('script-decimals').value)>3)
-      throw new Error('Nhập điểm tối đa, bước điểm dương và số chữ số thập phân từ 0 đến 3.');
+      throw new Error('Nhập điểm tối đa; nếu chọn theo quy cách, bước điểm phải dương; số chữ số thập phân từ 0 đến 3.');
     const payload={p_exam_id:examId,p_subject_code:code,p_is_essay:true,
       p_maximum_score:Number($('script-max-score').value),
-      p_score_step:Number($('script-score-step').value),
+      p_score_step:stepMode?Number($('script-score-step').value):null,
       p_decimal_places:Number($('script-decimals').value),
       p_default_score:$('script-default-score').value===''?null:Number($('script-default-score').value)};
     const invalid=payload.p_default_score===null?null:validateEssayScore(payload.p_default_score,{
@@ -1243,10 +1247,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     });
     if(error)throw new Error(`Không tải được danh sách phách: ${error.message}`);
     cache.graderQueue=data||[];cache.graderIndex=0;
-    $('grader-score-rules').textContent=`Điểm hợp lệ: 0–${config.maximum_score}; bước ${config.score_step}; tối đa ${config.decimal_places} chữ số thập phân.`;
+    $('grader-score-rules').textContent=`Điểm hợp lệ: 0–${config.maximum_score}${config.score_step==null?' (tự do)':`; bước ${config.score_step}`}; tối đa ${config.decimal_places} chữ số thập phân.`;
     $('grader-default-score').value=config.default_score??'';
     $('grader-score').max=config.maximum_score;
-    $('grader-score').step=config.score_step;
+    $('grader-score').step=config.score_step??'any';
     renderGraderQueue();
   }
   async function saveGraderScore(scoreOverride){
@@ -1364,6 +1368,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function wireScripts(){
     setSubjectOptions('script-subject',allSubjectOptions());
+    $('script-score-mode').onchange=()=>$('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
     $('script-exam').onchange=()=>{
       cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptConfigs=[];
       $('script-room-order').innerHTML='';
