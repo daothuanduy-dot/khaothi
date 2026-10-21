@@ -36,16 +36,27 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
   for(const row of assignments){
     const id=String(row.candidate_id),room=String(row.room_code||'').trim();
     if(!room)continue;
-    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set()});
+    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set(),mandatoryRooms:new Map()});
     const group=byId.get(id);
     const subject=String(row.subject_code||'').toUpperCase();
     const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&(row.subject_type==='mandatory'||(!row.subject_type&&['TOAN','VAN'].includes(subject))));
     const subjects=row.plan_type==='elective'?[row.ca1_subject_code,row.ca2_subject_code].filter(Boolean):[subject].filter(Boolean);
     const label=subjects.length?subjects.map(code=>nameOf(code)).join(' / ')+': '+room:room;
     group[required?'mandatory':'elective'].add(label);
+    if(required){
+      if(!group.mandatoryRooms.has(room))group.mandatoryRooms.set(room,new Set());
+      if(subject)group.mandatoryRooms.get(room).add(subject);
+    }
   }
   return candidates.map(row=>{
     const rooms=byId.get(String(row.id));
+    for(const [room,subjects] of rooms?.mandatoryRooms||[]){
+      if(subjects.has('TOAN')&&subjects.has('VAN')){
+        rooms.mandatory.delete(nameOf('TOAN')+': '+room);
+        rooms.mandatory.delete(nameOf('VAN')+': '+room);
+        rooms.mandatory.add('Toán/Ngữ văn: '+room);
+      }
+    }
     return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng'};
   }).sort((a,b)=>String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
 }
@@ -440,7 +451,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         row.student_name,nameOf(row.subject_one),nameOf(row.subject_two),''])];
     const classSheets=classRoomGroups(forms).map(([code,rows],index)=>[
       `Lop ${index+1} - ${code.replace(/[\\/?*\[\]:]/g,' ').slice(0,18)}`,
-      [header,[settings.classrooms.title],[`Lớp: ${code} Đợt ${forms.roundNo}`],formSpecs.classrooms[2],...rows.map(classRoomValues)],[], 'classrooms'
+      [header,[settings.classrooms.title],[`Lớp: ${code}`],formSpecs.classrooms[2],...rows.map(classRoomValues)],[], 'classrooms'
     ]);
     const sheetSpecs=[
       ...(printType==='mandatory_listing'?(forms.mandatoryGroups||[]).map(({room,subject,rows},i)=>[
@@ -559,7 +570,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       pages.push(`<section class="page roster">${header}<h3>${esc(settings.roster.title)}<br>LỚP ${esc(classCode)}</h3><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>SBD</th><th>Họ và tên</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.student_code||'')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     if(printType==='all'||printType==='classrooms')for(const [code,rows] of classRoomGroups(forms)){
-      pages.push(`<section class="page classrooms">${header}<h3>${esc(settings.classrooms.title)}<br>LỚP ${esc(code)}<br>ĐỢT ${forms.roundNo}</h3><table><thead><tr>${formSpecs.classrooms[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i)=>`<tr>${classRoomValues(row,i).map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số học sinh: ${rows.length}</p></section>`);
+      pages.push(`<section class="page classrooms">${header}<h3>${esc(settings.classrooms.title)}<br>LỚP ${esc(code)}</h3><table><thead><tr>${formSpecs.classrooms[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i)=>`<tr>${classRoomValues(row,i).map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số học sinh: ${rows.length}</p></section>`);
     }
     if(!pages.length)throw new Error('Không có dữ liệu cho biểu mẫu hoặc lớp đang chọn.');
     const printablePages=compactPrintPages(pages).map(page=>page.replace(/<header>[\s\S]*?<\/header><h3>([\s\S]*?)<\/h3>/,(_,title)=>`<header class="form-heading"><div><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b></div><div><b>${esc($('forms-title').value)}</b><h3>${title}</h3></div></header>`));
