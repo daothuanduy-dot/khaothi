@@ -8,12 +8,18 @@ export function wireAccounts({state,$,esc,message}){
   async function rpc(name,args){
     if(state.role!=='admin'||!state.client)throw new Error('Chỉ Admin được quản lý tài khoản.');
     const {data,error}=await state.client.rpc(name,args);
-    if(error)throw error;
+    if(error){
+      if(error.code==='PGRST202'||/schema cache|Could not find the function/i.test(error.message||''))throw new Error('Cơ sở dữ liệu chưa có chức năng tài khoản/nhập điểm. Quản trị cần chạy sql/v0.1.119_accounts_grading_security.sql trong Supabase SQL Editor, sau đó tải lại trang. Tải tệp SQL lên GitHub không tự cập nhật CSDL.');
+      throw error;
+    }
     return data;
   }
   function selectedUser(){return users.find(u=>u.user_id===$('accounts-user').value)}
   function showUser(){
     const user=selectedUser();
+    $('accounts-email').value=user?.email||'';
+    $('accounts-full-name').value=user?.full_name||'';
+    $('accounts-password').value='';
     $('accounts-role').value=user?.role==='admin'?'admin':'grader';
     $('accounts-subject').value=user?.subject_code||'';
     $('accounts-subject').disabled=$('accounts-role').value==='admin';
@@ -61,6 +67,32 @@ export function wireAccounts({state,$,esc,message}){
   $('accounts-role').onchange=()=>{$('accounts-subject').disabled=$('accounts-role').value==='admin'};
   $('accounts-exam').onchange=()=>loadWindow().catch(e=>notify(e.message,'error'));
   action('accounts-refresh',refresh);
+  async function manage(action){
+    if(state.role!=='admin'||!state.client)throw new Error('Chỉ Admin được quản lý tài khoản.');
+    const user=selectedUser();
+    if(action!=='create'&&!user)throw new Error('Hãy chọn tài khoản cần sửa hoặc xóa.');
+    if(action==='delete'&&user.user_id===state.session?.user?.id)throw new Error('Không được xóa tài khoản đang đăng nhập.');
+    const email=$('accounts-email').value.trim(),full_name=$('accounts-full-name').value.trim(),password=$('accounts-password').value;
+    if(action!=='delete'&&(!email||!full_name))throw new Error('Nhập họ tên và email.');
+    if(action==='create'&&password.length<8)throw new Error('Mật khẩu tài khoản mới cần ít nhất 8 ký tự.');
+    if(action==='update'&&password&&password.length<8)throw new Error('Mật khẩu mới cần ít nhất 8 ký tự.');
+    if(action==='delete'&&!confirm(`Xóa tài khoản ${user.email}? Thao tác không thể hoàn tác. Tài khoản có dữ liệu liên quan có thể bị từ chối xóa.`))return;
+    const body=action==='delete'?{action,user_id:user.user_id}:{action,email,full_name,...(password?{password}:{}),...(user&&action==='update'?{user_id:user.user_id}:{})};
+    const {data,error}=await state.client.functions.invoke('manage-exam-accounts',{body});
+    if(error){
+      let detail='';try{detail=(await error.context?.json())?.error||''}catch{}
+      throw new Error(detail||'Không gọi được chức năng quản lý tài khoản. Kiểm tra triển khai Edge Function manage-exam-accounts và phiên đăng nhập.');
+    }
+    if(data?.error)throw new Error(data.error);
+    $('accounts-password').value='';
+    await refresh();
+    if(data?.user_id&&action!=='delete'){$('accounts-user').value=data.user_id;showUser()}
+    notify(action==='create'?'Đã tạo tài khoản. Tiếp theo lưu vai trò/môn, cấp quyền kỳ thi và đặt thời hạn.':action==='delete'?'Đã xóa tài khoản.':'Đã cập nhật tài khoản.','success');
+  }
+  action('accounts-new',async()=>{$('accounts-user').value='';showUser();notify('Nhập họ tên, email và mật khẩu, sau đó chọn Tạo tài khoản.');});
+  action('accounts-create',()=>manage('create'));
+  action('accounts-update',()=>manage('update'));
+  action('accounts-delete',()=>manage('delete'));
   action('accounts-save-role',async()=>{
     const user=selectedUser(),role=$('accounts-role').value,subject=$('accounts-subject').value;
     if(!user)throw new Error('Hãy chọn tài khoản.');

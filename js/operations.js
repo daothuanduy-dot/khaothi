@@ -1302,8 +1302,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     ++graderQueueRequest;graderWindow=null;clearInterval(graderWindowTimer);
     cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
     const{data,error}=await state.client.rpc('exam_list_grading_work');
-    if(error)throw new Error(`Không tải được danh sách kỳ thi/môn được giao: ${error.message}`);
+    if(error)throw new Error(error.code==='PGRST202'?'Cơ sở dữ liệu chưa cập nhật chức năng nhập điểm. Liên hệ quản trị chạy migration v0.1.119.':`Không tải được danh sách kỳ thi/môn được giao: ${error.message}`);
     cache.graderWork=data||[];
+    if(!cache.graderWork.length)message($('grader-message'),state.role==='admin'?'Đang xem giao diện bằng tài khoản Admin. Để nhập điểm, đăng nhập tài khoản giáo viên đã được gán môn và kỳ thi.':'Chưa có bài được giao. Liên hệ quản trị để gán môn, cấp quyền kỳ thi và khóa phương án phách.','info');
     $('grader-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+[...new Map(cache.graderWork.map(work=>[work.exam_id,work])).values()]
       .map(work=>`<option value="${esc(work.exam_id)}">${esc(work.exam_title)}</option>`).join('');
     $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>';
