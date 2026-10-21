@@ -1,3 +1,21 @@
+// Keep printing in this tab. Reuse at most one off-screen document.
+export function createPrintFrame(doc=document){
+  doc.getElementById('exam-print-frame')?.remove();
+  const frame=doc.createElement('iframe');
+  frame.id='exam-print-frame';
+  frame.title='Bản in';
+  frame.setAttribute('aria-hidden','true');
+  frame.tabIndex=-1;
+  frame.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;pointer-events:none';
+  doc.body.appendChild(frame);
+  const win=frame.contentWindow;
+  if(!win){frame.remove();throw new Error('Không tạo được khung in. Hãy tải lại trang rồi thử lại.');}
+  // Open before binding: document.open clears listeners on the print window.
+  win.document.open();
+  win.addEventListener('afterprint',()=>setTimeout(()=>frame.remove(),0),{once:true});
+  return win;
+}
+
 export function groupReceiptRows(rows,electiveOrder=1){
   rows=[...rows];
   // Mandatory subjects share the fixed roster; prefer each subject's actual plan.
@@ -583,8 +601,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const total=widths.reduce((sum,w)=>sum+w,0);
       return `.page.${key} header,.page.${key} header b,.page.${key} h3{${fontCss(config.header)}white-space:normal;overflow-wrap:anywhere}.page.${key} table th,.page.${key} table td{${fontCss(config.body)}}`+widths.map((w,i)=>`.page.${key} table th:nth-child(${i+1}){width:${w/total*100}%}`).join('');
     }).join('');
-    const win=window.open('','_blank');
-    if(!win)throw new Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.');
+    const win=createPrintFrame();
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Biểu mẫu kỳ thi</title><style>
       @page{size:A4 portrait;margin:${settings.margins.top}mm ${settings.margins.right}mm ${settings.margins.bottom}mm ${settings.margins.left}mm}*{box-sizing:border-box}body{margin:0;font-family:${esc(forms.exam.form_font_family||'Times New Roman')},serif;font-size:${Number(forms.exam.form_font_size)||11}pt}
       .page{width:calc(210mm - ${settings.margins.left+settings.margins.right}mm);min-height:calc(297mm - ${settings.margins.top+settings.margins.bottom}mm);break-after:page;page-break-after:always}
