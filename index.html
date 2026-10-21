@@ -78,7 +78,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.122</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.123</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -164,7 +164,7 @@
 .rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.122 · build 2026-10-21-score-table</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.123 · build 2026-10-21-score-bag-entry</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
@@ -176,16 +176,16 @@
       <label class="check-field"><span>Nhập nhanh</span><span><input id="grader-use-default" type="checkbox"> Điền điểm mặc định cho các phách chưa nhập</span></label>
       <input id="grader-default-score" type="hidden">
     </div>
-    <div class="form-actions"><button id="grader-save-all" class="btn btn-primary" type="button">Lưu danh sách</button></div>
+    <div class="form-actions"><button id="grader-save-all" class="btn btn-primary" type="button">Lưu túi bài</button><button id="grader-edit-bag" class="btn btn-light" type="button">Sửa túi bài</button></div>
     <div id="grader-message" class="notice hidden" role="status" aria-live="polite"></div>
     <div id="grader-window-status" class="notice notice-info" role="status">Chọn kỳ thi để xem thời hạn nhập điểm.</div>
-    <p class="help-text">Nhập điểm trực tiếp tại từng phách. Chọn “Không bài” để ghi nhận bài không có; hệ thống lưu riêng trạng thái này, không nhầm với điểm 0. Bấm Sửa để điều chỉnh điểm đã lưu trong thời hạn cho phép.</p>
+    <p class="help-text">Nhập nhanh bằng số liền: 775 → 7,75; 85 → 8,5; 10 → 10. Nhấn Enter để sang phách kế tiếp. “Không bài” được lưu riêng, không nhầm với điểm 0. Lưu và Sửa áp dụng cho toàn bộ túi bài đang mở.</p>
     <div id="grader-score-rules" class="notice notice-info">Điểm được kiểm tra theo cấu hình của môn.</div>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Mã phách</th><th>Điểm nhập</th><th>Không bài</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi và đầu phách.</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Mã phách</th><th>Điểm nhập</th><th>Không bài</th><th>Cập nhật</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và đầu phách.</td></tr></tbody></table></div>
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.122-score-table" data-previous-src="js/app.js?v=0.1.121-literature-score-entry"></script>
+    <script type="module" src="./js/app.js?v=0.1.123-score-bag-entry" data-previous-src="js/app.js?v=0.1.122-score-table"></script>
   <script>
     (() => {
       const form = document.getElementById('setup-form');
