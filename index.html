@@ -10,6 +10,15 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    #login-screen{max-width:520px;margin:48px auto;padding:32px;border:1px solid #dce4f1;border-radius:20px;background:#fff;box-shadow:0 16px 48px #18315312}
+    #login-screen h1{font-size:28px;margin:12px 0}#login-screen .login-intro{line-height:1.65;color:#52627a}
+    #login-form{display:grid;grid-template-columns:1fr;gap:18px;margin-top:24px}#login-form label{display:grid;gap:8px;font-weight:600}
+    #login-form input{width:100%;min-width:0;box-sizing:border-box;min-height:44px}#login-form button,#google-login{min-height:44px}
+    .login-password-field{display:flex;gap:8px;align-items:center}.login-password-field input{flex:1}.login-password-field button{flex:none}
+    #google-login{width:100%}.login-divider{text-align:center;color:#66758a;margin:18px 0}.login-help{font-size:14px;line-height:1.6;color:#52627a}
+    .login-access-note{padding:14px;background:#eff6ff;border-radius:10px;color:#274469;font-size:14px;line-height:1.6}
+    .login-config{margin-top:20px;font-size:13px;color:#52627a}.login-config summary{cursor:pointer}.login-config button{margin-top:12px}
+    @media(max-width:600px){#login-screen{margin:20px 12px;padding:24px 20px}#login-screen h1{font-size:25px}}
     .candidate-toolbar{align-items:center;gap:16px}.candidate-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,1fr) minmax(220px,2fr) auto;gap:12px;align-items:end;margin:18px 0}
     .candidate-bulk-toolbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin-bottom:12px;background:#f5f7fb;border:1px solid #dce4f1;border-radius:12px}
     .select-all-label{display:flex;align-items:center;gap:8px}.candidate-bulk-toolbar span{color:#64748b;margin-right:auto}
@@ -85,13 +94,20 @@
     </section>
 
     <section id="login-screen" class="panel login-panel hidden">
-      <div class="eyebrow">XÁC THỰC</div><h1>Đăng nhập hệ thống</h1><p>Dùng email/mật khẩu Supabase hoặc tài khoản Google đã được cấp quyền.</p>
-      <button id="google-login" class="btn btn-light" type="button">Đăng nhập bằng Google</button>
+      <div class="eyebrow">CỔNG NHẬP ĐIỂM GIÁO VIÊN</div>
+      <h1>Đăng nhập để nhập điểm</h1>
+      <p class="login-intro">Sử dụng tài khoản cá nhân do nhà trường cấp. Môn thi và danh sách bài được hiển thị theo phân công của bạn.</p>
       <form id="login-form" class="form-grid">
-        <label>Email<input id="login-email" type="email" required autocomplete="username"></label>
-        <label>Mật khẩu<input id="login-password" type="password" required autocomplete="current-password"></label>
-        <div class="form-actions"><button class="btn btn-primary" type="submit">Đăng nhập bằng email</button><button class="btn btn-light" id="change-config" type="button">Đổi cấu hình</button></div>
-      </form><div id="login-message" class="notice hidden"></div>
+        <label>Email tài khoản<input id="login-email" type="email" required autocomplete="username" placeholder="giaovien@truong.edu.vn" autocapitalize="none" spellcheck="false"></label>
+        <label>Mật khẩu<span class="login-password-field"><input id="login-password" type="password" required autocomplete="current-password"><button id="login-toggle-password" class="btn btn-light" type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></span></label>
+        <button id="login-submit" class="btn btn-primary" type="submit">Đăng nhập</button>
+      </form>
+      <div id="login-message" class="notice hidden" role="alert" aria-live="polite"></div>
+      <div class="login-divider">hoặc</div>
+      <button id="google-login" class="btn btn-light" type="button">Đăng nhập bằng Google</button>
+      <p class="login-help">Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị nhà trường để được hỗ trợ.</p>
+      <div class="login-access-note">Giáo viên được chuyển đến khu vực nhập điểm. Quản trị viên được chuyển đến trang quản lý theo quyền của tài khoản.</div>
+      <details class="login-config"><summary>Cấu hình kết nối dành cho quản trị</summary><button class="btn btn-light" id="change-config" type="button">Đổi cấu hình</button></details>
     </section>
 
     <section id="app-screen" class="hidden">
@@ -171,7 +187,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.119-forms-20261021" data-previous-src="js/app.js?v=0.1.118"></script>
+    <script type="module" src="./js/app.js?v=0.1.119-teacher-login" data-previous-src="js/app.js?v=0.1.118"></script>
   <script>
     (() => {
       const form = document.getElementById('setup-form');
