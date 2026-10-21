@@ -1,6 +1,6 @@
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.119';
 import {loadTabModules} from './module-loader.js?v=0.1.119';
-import {wireOperations} from './operations.js?v=0.1.119-forms-20261021';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.119-print-frame';
 import {wireAccounts} from './accounts.js?v=0.1.119';
 import {loadExamRounds} from './rounds.js?v=0.1.119';
 const APP_VERSION='v0.1.119';
@@ -133,6 +133,35 @@ async function examDeleteBlockerMessage(examId,deleteError){
     return `Không xóa được kỳ thi: ${original}\nKhông lấy được danh sách việc cần xử lý (${diagnosticError?.message||String(diagnosticError)}). Hãy chạy migration v0.1.76 rồi thử lại để xem các bảng và số bản ghi đang chặn.`;
   }
 }
+async function submitLogin(event){
+  event.preventDefault();
+  const button=$('login-submit');
+  if(button.disabled)return;
+  const google=$('google-login');
+  hide($('login-message'));button.disabled=true;google.disabled=true;
+  button.textContent='Đang đăng nhập…';$('login-form').setAttribute('aria-busy','true');
+  try{
+    if(!state.client)throw new Error('Chưa kết nối hệ thống. Vui lòng liên hệ quản trị nhà trường.');
+    const {data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});
+    if(error)throw error;
+    $('login-password').value='';
+    await enterApp(data.user);
+  }catch(error){
+    const raw=error?.message||String(error);
+    const text=/invalid login credentials/i.test(raw)?'Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra lại.':
+      /email not confirmed/i.test(raw)?'Tài khoản chưa xác nhận email. Vui lòng liên hệ quản trị.':
+      /rate limit|too many requests/i.test(raw)?'Bạn thử đăng nhập quá nhiều lần. Vui lòng đợi rồi thử lại.':
+      /failed to fetch|network/i.test(raw)?'Không kết nối được hệ thống. Kiểm tra mạng và thử lại.':raw;
+    message($('login-message'),text,'error');
+  }finally{
+    button.disabled=false;google.disabled=false;button.textContent='Đăng nhập';
+    $('login-form').setAttribute('aria-busy','false');
+    $('login-password').type='password';$('login-toggle-password').textContent='Hiện';
+    $('login-toggle-password').setAttribute('aria-pressed','false');
+    $('login-toggle-password').setAttribute('aria-label','Hiện mật khẩu');
+  }
+}
+
 async function enterApp(user){
   state.session={user};
   const{data:role,error:roleError}=await state.client.rpc('exam_current_user_role');
@@ -140,6 +169,7 @@ async function enterApp(user){
   state.role=role;
   updateVersionDisplay();$('user-email').textContent=user.email||'';
   if(role==='grader'){
+    $('logout-btn').classList.add('hidden');
     showScreen('grader-screen');
     try{await operations?.enterAsGrader()}
     catch(error){message($('grader-message'),error?.message||String(error),'error')}
@@ -147,7 +177,8 @@ async function enterApp(user){
   }
   if(role!=='admin'){
     await state.client.auth.signOut();state.session=null;state.role=null;showScreen('login-screen');
-    message($('login-message'),'Tài khoản chưa được cấp quyền quản trị hoặc chưa được phân công chấm.','error');return;
+    $('user-email').textContent='';$('logout-btn').classList.add('hidden');
+    message($('login-message'),'Tài khoản chưa được cấp quyền. Vui lòng liên hệ quản trị để được phân công môn nhập điểm.','error');return;
   }
   $('logout-btn').classList.remove('hidden');showScreen('app-screen');await loadExams();renderSubjects();
 }
@@ -1783,7 +1814,7 @@ function printRoomingPDF(){
  const hasSeats=false;
  const posting=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br><b>TRƯỜNG THPT LÊ HỒNG PHONG</b></div><div><b>${escHtml(title)}</b><br><b>DANH SÁCH NIÊM YẾT THÍ SINH</b><br><b>PHÒNG ${escHtml(String(room).replace(/^phòng\s*/i,''))}</b></div></header><table class="${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ${items.length}</p></section>`).join('');
  const receipts=[...roomMap.entries()].map(([room,items])=>`<section class="page"><header><div><b>SỞ GDĐT HẢI PHÒNG</b><br>TRƯỜNG THPT LÊ HỒNG PHONG</div><div><b>${escHtml(title)}</b><br><b>PHIẾU THU BÀI</b><br>Phòng thi số: ${escHtml(room)}</div></header><table class="receipt ${hasSeats?'mandatory':''}"><thead><tr><th>TT</th>${hasSeats?'<th>Vị trí</th>':''}<th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th></tr></thead><tbody>${items.map((a,i)=>`<tr><td>${i+1}</td>${hasSeats?`<td>${a.seat_number}</td>`:''}<td>${escHtml(a.sbd)}</td><td>${escHtml(a.student_name)}</td><td>${escHtml(normalizedDOB(a.date_of_birth))}</td><td>${escHtml(a.class_code)}</td><td>${escHtml(roomSubjectsFor(a))}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table><p class="totals">Tổng số thí sinh: ............; số thí sinh vắng: ............</p><p class="totals">Tổng số bài: ............; Tổng số tờ: ............</p><footer><div><b>Cán bộ coi thi số 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi số 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></footer></section>`).join('');
- const win=window.open('','_blank');if(!win){message($('rooming-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
+ const win=createPrintFrame();
  win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách niêm yết và phiếu thu bài</title><style>
  @page{size:A4 portrait;margin:8mm}
  *{box-sizing:border-box}
@@ -2557,8 +2588,7 @@ function printRosterChoices(){
  for(const row of rows){const key=String(row.class_code||'Chưa xếp lớp');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row)}
  const examTitle=(state.exams.find(e=>e.id===examId)||{}).name||examId;
  const title=`Danh sách môn lựa chọn${cls?' — lớp '+cls:grade?' — khối '+grade:''}`;
- const w=window.open('','_blank','width=1100,height=800');
- if(!w){message($('roster-message'),'Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
+ const w=createPrintFrame();
  const pages=[...groups.entries()].map(([classCode,classRows],pageIndex)=>{const body=classRows.map((c,i)=>{const regs=rosterStudentRegs(c.id),draft=state.rosterDirty.get(String(c.id));const m1=draft?draft.m1:regs.find(r=>Number(r.subject_order)===1)?.subject_code||'',m2=draft?draft.m2:regs.find(r=>Number(r.subject_order)===2)?.subject_code||'';return `<tr><td>${i+1}</td><td>${esc(c.student_code||'')}</td><td>${esc(c.student_name||'')}</td><td>${esc(c.class_code||'')}</td><td>${esc(codeName(m1))}</td><td>${esc(codeName(m2))}</td><td></td></tr>`}).join('');return `<section class="class-page${pageIndex===groups.size-1?' last':''}"><h2>TRƯỜNG THPT LÊ HỒNG PHONG</h2><h3>Danh sách môn lựa chọn — lớp ${esc(classCode)}</h3><p>Kỳ thi: ${esc(examTitle)}</p><table><thead><tr><th>STT</th><th>Mã học sinh</th><th>Họ và tên</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${body}</tbody></table><p class="date">Ngày in: ${new Date().toLocaleDateString('vi-VN')}</p></section>`}).join('');
  w.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0}.class-page{min-height:calc(100vh - 16mm);page-break-after:always;break-after:page;break-inside:avoid;page-break-inside:avoid;padding:0}.class-page.last{page-break-after:auto;break-after:auto}h2,h3,p{text-align:center;margin:4px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:9px}th,td{border:1px solid #555;padding:4px;text-align:left;line-height:1.1}th{background:#eee}.date{text-align:right;margin-top:10px}@media screen{body{padding:20px}.class-page{border-bottom:1px dashed #999;margin-bottom:20px;padding-bottom:20px}}@media print{button{display:none}}</style></head><body>${pages}<script>window.onload=()=>window.print()</script></body></html>`);
  w.document.close();
@@ -2586,7 +2616,7 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-form').addEventListener('submit',async e=>{e.preventDefault();const submit=e.currentTarget.querySelector('button[type=submit]');submit.disabled=true;try{const{data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;await enterApp(data.user)}catch(error){message($('login-message'),error?.message||String(error),'error')}finally{submit.disabled=false}});$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const selectBtn=e.target.closest('[data-select-exam]');
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
