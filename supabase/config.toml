@@ -1,0 +1,4 @@
+# Authentication is validated explicitly in the function with auth.getUser().
+# Keep the platform from rejecting valid sessions before the handler runs.
+[functions.manage-exam-accounts]
+verify_jwt = false

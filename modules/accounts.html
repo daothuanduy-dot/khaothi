@@ -1,6 +1,6 @@
 <section class="tab-panel hidden" id="tab-accounts">
   <h2>Quản lý tài khoản</h2>
-  <p>Tạo tài khoản email cho giáo viên hoặc phân quyền tài khoản đã đăng nhập Google. Sau khi tạo, chọn môn, cấp quyền kỳ thi và thiết lập thời hạn nhập điểm.</p>
+  <p>Tài khoản giáo viên tồn tại độc lập với kỳ thi. Tạo tài khoản hoặc phân quyền tài khoản Google, lưu vai trò và môn phụ trách. Khi giao chấm, chọn giáo viên hoặc nhóm giáo viên; không cần cấp quyền kỳ thi riêng.</p>
   <div id="accounts-message" class="notice hidden" role="status"></div>
   <button id="accounts-refresh" type="button">Tải lại tài khoản</button>
   <button id="accounts-open-grading" type="button" class="btn btn-light">Mở khu vực nhập điểm</button>
@@ -15,15 +15,14 @@
   </div>
   <div class="form-actions"><button id="accounts-new" class="btn btn-light" type="button">Thêm mới</button><button id="accounts-create" class="btn btn-primary" type="button">Tạo tài khoản</button><button id="accounts-update" class="btn btn-light" type="button">Lưu sửa tài khoản</button><button id="accounts-delete" class="btn danger-btn" type="button">Xóa tài khoản</button></div>
   <button id="accounts-save-role" type="button">Lưu vai trò và môn</button>
-  <h3>Phân công và thời hạn nhập điểm</h3>
+  <h3>Thời hạn nhập điểm của kỳ thi</h3>
   <div class="form-grid">
     <label>Kỳ thi<select id="accounts-exam"></select></label>
     <label>Bắt đầu nhập điểm<input id="accounts-start" type="datetime-local"></label>
     <label>Kết thúc nhập điểm<input id="accounts-end" type="datetime-local"></label>
   </div>
   <p>Chưa thiết lập thời hạn: không được nhập điểm. Thời gian hiển thị theo múi giờ của thiết bị.</p>
-  <button id="accounts-assign" type="button">Cho phép giáo viên nhập kỳ thi này</button>
-  <button id="accounts-unassign" type="button">Thu hồi quyền nhập kỳ thi này</button>
+  <p>Giáo viên chỉ nhập các bài được giao trực tiếp hoặc qua nhóm tại Quản lý phách. Chọn kỳ thi ở đây chỉ để đặt thời hạn và xem nhật ký, không gắn tài khoản vào kỳ thi.</p>
   <button id="accounts-save-window" type="button">Lưu thời hạn</button>
   <h3>Nhật ký nhập và sửa điểm</h3>
   <button id="accounts-load-audit" type="button">Tải nhật ký kỳ thi</button>

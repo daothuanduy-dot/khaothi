@@ -134,6 +134,13 @@ test('the script subject selector is populated before exams and configs finish l
   assert.match(bagMigration, /exam_set_script_bag_assignments/);
   assert.match(bagMigration, /exam_script_bag_assignments/);
   const scripts = await readFile(new URL('../modules/scripts.html', import.meta.url), 'utf8');
+  const roundMigration = await readFile(new URL('../sql/v0.1.118_script_round_plans.sql', import.meta.url), 'utf8');
+  assert.match(scripts, /id="script-round"/);
+  assert.match(source, /from\('exam_rooming_round_plans'\)/);
+  assert.match(source, /p_round_no:cache\.scriptRoundNo/);
+  assert.match(roundMigration, /p_round_no smallint default null/);
+  assert.match(roundMigration, /exam_rooming_round_plans/);
+  assert.match(roundMigration, /status='official'/);
   assert.doesNotMatch(scripts, /script-is-essay|Môn có bài tự luận, cần đánh phách/);
   assert.match(source, /data-room-prefix/);
   assert.match(scripts, /đầu phách/i);

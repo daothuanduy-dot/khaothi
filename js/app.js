@@ -1,7 +1,7 @@
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.119';
-import {loadTabModules} from './module-loader.js?v=0.1.119-account-admin';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.119-account-admin';
-import {wireAccounts} from './accounts.js?v=0.1.119-account-admin';
+import {loadTabModules} from './module-loader.js?v=0.1.120-global-graders';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.120-global-graders';
+import {wireAccounts} from './accounts.js?v=0.1.120-global-graders';
 import {loadExamRounds} from './rounds.js?v=0.1.119';
 const APP_VERSION='v0.1.119';
 const APP_BUILD='2026-10-20-accounts-grading';

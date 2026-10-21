@@ -80,14 +80,18 @@ export function wireAccounts({state,$,esc,message}){
     const body=action==='delete'?{action,user_id:user.user_id}:{action,email,full_name,...(password?{password}:{}),...(user&&action==='update'?{user_id:user.user_id}:{})};
     const {data,error}=await state.client.functions.invoke('manage-exam-accounts',{body});
     if(error){
-      let detail='';try{detail=(await error.context?.json())?.error||''}catch{}
-      throw new Error(detail||'Không gọi được chức năng quản lý tài khoản. Kiểm tra triển khai Edge Function manage-exam-accounts và phiên đăng nhập.');
+      let detail='';
+      try{detail=(await error.context?.clone?.().json())?.error||''}catch{}
+      if(!detail&&error.context?.status===401)detail='Phiên đăng nhập đã hết hạn hoặc Edge Function chưa nhận được phiên đăng nhập. Hãy đăng xuất, đăng nhập lại và thử lại.';
+      if(!detail&&error.context?.status===404)detail='Chưa triển khai Edge Function manage-exam-accounts trên đúng Supabase project.';
+      if(!detail&&error.context?.status>=500)detail='Edge Function manage-exam-accounts đang lỗi máy chủ. Kiểm tra biến SUPABASE_URL, SUPABASE_ANON_KEY và SUPABASE_SERVICE_ROLE_KEY.';
+      throw new Error(detail||'Không gọi được chức năng quản lý tài khoản. Hãy triển khai Edge Function manage-exam-accounts và kiểm tra phiên đăng nhập.');
     }
     if(data?.error)throw new Error(data.error);
     $('accounts-password').value='';
     await refresh();
     if(data?.user_id&&action!=='delete'){$('accounts-user').value=data.user_id;showUser()}
-    notify(action==='create'?'Đã tạo tài khoản. Tiếp theo lưu vai trò/môn, cấp quyền kỳ thi và đặt thời hạn.':action==='delete'?'Đã xóa tài khoản.':'Đã cập nhật tài khoản.','success');
+    notify(action==='create'?'Đã tạo tài khoản độc lập với kỳ thi. Lưu vai trò/môn, sau đó chọn giáo viên hoặc nhóm khi giao chấm.':action==='delete'?'Đã xóa tài khoản.':'Đã cập nhật tài khoản.','success');
   }
   action('accounts-new',async()=>{$('accounts-user').value='';showUser();notify('Nhập họ tên, email và mật khẩu, sau đó chọn Tạo tài khoản.');});
   action('accounts-create',()=>manage('create'));
@@ -101,14 +105,6 @@ export function wireAccounts({state,$,esc,message}){
     await rpc('exam_set_account_role',{p_user_id:user.user_id,p_role:role,p_subject_code:role==='grader'?subject:null});
     await refresh();notify('Đã lưu phân quyền. Người dùng cần tải lại trang.','success');
   });
-  for(const [id,active] of [['accounts-assign',true],['accounts-unassign',false]]){
-    action(id,async()=>{
-      const user=selectedUser();
-      if(!user||user.role!=='grader'||!user.subject_code)throw new Error('Hãy lưu vai trò Giáo viên và môn trước.');
-      await rpc('exam_assign_grader',{p_exam_id:examId(),p_subject_code:user.subject_code,p_user_id:user.user_id,p_active:active});
-      notify(active?'Đã cấp quyền nhập điểm kỳ thi.':'Đã thu hồi quyền nhập điểm kỳ thi.','success');
-    });
-  }
   action('accounts-save-window',async()=>{
     const start=new Date($('accounts-start').value),end=new Date($('accounts-end').value);
     if(!Number.isFinite(+start)||!Number.isFinite(+end)||end<=start)throw new Error('Nhập đủ thời hạn; kết thúc phải sau bắt đầu.');

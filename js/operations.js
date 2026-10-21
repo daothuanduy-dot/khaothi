@@ -765,7 +765,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     cache.scriptConfigs=data||[];
     const essay=cache.scriptConfigs.filter(row=>row.is_essay);
     setSubjectOptions('script-subject',allSubjectOptions());
-    setSubjectOptions('grader-assign-subject',essay);
+    setSubjectOptions('grader-assign-subject',allSubjectOptions());
     if(!$('script-subject').value)$('script-subject').value=essay[0]?.subject_code||'TOAN';
     const selected=cache.scriptConfigs.find(row=>row.subject_code===$('script-subject').value);
     $('script-max-score').value=selected?.maximum_score??'';
@@ -981,50 +981,37 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function assignGrader(){
-    const examId=currentExam('script-exam');setAdminExam(examId);
     const userId=$('grader-user-id').value.trim(),subjectCode=$('grader-assign-subject').value;
-    if(!uuidPattern.test(userId))throw new Error('Nhập UUID hợp lệ của tài khoản Supabase Auth.');
-    if(!subjectCode)throw new Error('Chọn môn cần phân công.');
-    if(!cache.scriptConfigs.some(row=>row.subject_code===subjectCode&&row.is_essay))
-      throw new Error(`Hãy lưu thang điểm phần tự luận môn ${nameOf(subjectCode)} trước khi phân công giám khảo.`);
-    const{error}=await state.client.rpc('exam_assign_grader',{
-      p_exam_id:examId,p_subject_code:subjectCode,p_user_id:userId,p_active:true
-    });
-    if(error)throw new Error(`Không phân công được giám khảo: ${error.message}`);
+    if(!uuidPattern.test(userId))throw new Error('Chọn tài khoản giáo viên.');
+    if(!subjectCode)throw new Error('Chọn môn phụ trách.');
     const profile=cache.graderProfiles.find(row=>row.user_id===userId);
-    message($('script-message'),`Đã thêm ${profile?.full_name||profile?.email||userId} vào danh sách giám khảo môn ${nameOf(subjectCode)}.`, 'success');
-    await loadGraderAccounts();
-  }
-
-  async function toggleGraderAssignment(userId,active){
-    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
-    if(!examId||!subjectCode||!uuidPattern.test(userId))throw new Error('Chọn kỳ thi, môn và tài khoản hợp lệ.');
-    const{error}=await state.client.rpc('exam_assign_grader',{
-      p_exam_id:examId,p_subject_code:subjectCode,p_user_id:userId,p_active:!active
+    if(profile?.role==='admin')throw new Error('Hãy dùng Quản lý tài khoản để thay đổi vai trò Admin.');
+    if(profile?.subject_code&&profile.subject_code!==subjectCode&&!confirm('Đổi môn phụ trách sẽ ngừng quyền chấm môn cũ. Tiếp tục?'))return;
+    const{error}=await state.client.rpc('exam_set_account_role',{
+      p_user_id:userId,p_role:'grader',p_subject_code:subjectCode
     });
-    if(error)throw new Error(`Không cập nhật được vai trò giám khảo: ${error.message}`);
-    message($('script-message'),active?'Đã gỡ tài khoản khỏi môn.':'Đã thêm tài khoản vào môn.','success');
+    if(error)throw new Error(`Không lưu được môn giáo viên: ${error.message}`);
+    message($('script-message'),'Đã lưu môn phụ trách trong danh mục dùng chung. Chọn giáo viên hoặc nhóm khi giao túi bài.','success');
     await loadGraderAccounts();
   }
 
   async function loadGraderAccounts(){
-    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
-    if(!examId||!subjectCode)return;
-    const{data,error}=await state.client.from('exam_grader_assignments').select('user_id,active')
-      .eq('exam_id',examId).eq('subject_code',subjectCode).eq('active',true).order('user_id');
-    if(error)throw new Error(`Không tải được tài khoản giám khảo theo môn: ${error.message}`);
-    cache.graderBagAssignments=data||[];
+    const subjectCode=$('grader-assign-subject').value;
+    if(!subjectCode)return;
+    const{data,error}=await state.client.rpc('exam_manage_accounts');
+    if(error)throw new Error(`Không tải được danh mục giáo viên: ${error.message}`);
+    cache.graderBagAssignments=(data||[]).filter(row=>row.role==='grader'&&row.subject_code===subjectCode);
     const{data:profiles,error:profileError}=await state.client.from('exam_user_profiles')
       .select('user_id,email,full_name,teacher_code').order('full_name');
     if(profileError)throw new Error(`Không tải được danh sách tài khoản. Hãy chạy migration v0.1.63. ${profileError.message}`);
-    cache.graderProfiles=profiles||[];
+    cache.graderProfiles=(data||[]).map(account=>({...((profiles||[]).find(row=>row.user_id===account.user_id)||{}),...account}));
     const selected=$('grader-user-id').value;
     $('grader-user-id').innerHTML='<option value="">-- Chọn tài khoản đã đăng nhập --</option>'+cache.graderProfiles.map(profile=>
       `<option value="${esc(profile.user_id)}">${esc([profile.teacher_code,profile.full_name,profile.email].filter(Boolean).join(' · ')||profile.user_id)}</option>`).join('');
     if(cache.graderProfiles.some(profile=>profile.user_id===selected))$('grader-user-id').value=selected;
     const assigned=new Set(cache.graderBagAssignments.map(row=>row.user_id));
     $('grader-account-list').innerHTML=`<table><thead><tr><th>Mã định danh</th><th>Giáo viên</th><th>Email đăng nhập</th><th>Vai trò môn hiện tại</th><th></th></tr></thead><tbody>${cache.graderProfiles.map(profile=>
-      `<tr><td>${esc(profile.teacher_code||'—')}</td><td>${esc(profile.full_name||'—')}</td><td>${esc(profile.email||'—')}</td><td>${assigned.has(profile.user_id)?'Giám khảo':'Chưa phân công'}</td><td>${assigned.has(profile.user_id)?`<button type="button" class="small-btn danger-btn" data-grader-revoke="${esc(profile.user_id)}">Gỡ khỏi môn</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Chưa có tài khoản đăng nhập Google/email.</td></tr>'}</tbody></table>`;
+      `<tr><td>${esc(profile.teacher_code||'—')}</td><td>${esc(profile.full_name||'—')}</td><td>${esc(profile.email||'—')}</td><td>${assigned.has(profile.user_id)?'Giám khảo':'Chưa phân công'}</td><td>Thay đổi tại Quản lý tài khoản</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Chưa có tài khoản đăng nhập Google/email.</td></tr>'}</tbody></table>`;
     await loadGraderGroups();
   }
 
@@ -1041,16 +1028,16 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function loadGraderGroups(){
-    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    const subjectCode=$('grader-assign-subject').value;
     const groupSelect=$('grader-group-select'),membersSelect=$('grader-group-members');
     cache.graderGroups=[];
-    if(!examId||!subjectCode){
+    if(!subjectCode){
       groupSelect.innerHTML='<option value="">-- Tạo nhóm mới --</option>';
       membersSelect.innerHTML='';
       return;
     }
     const{data:groups,error}=await state.client.from('exam_grader_groups').select('id,name')
-      .eq('exam_id',examId).eq('subject_code',subjectCode).order('name');
+      .eq('subject_code',subjectCode).order('name');
     if(error)throw new Error(`Không tải được nhóm giám khảo: ${error.message}`);
     cache.graderGroups=groups||[];
     const{data:members,error:memberError}=cache.graderGroups.length
@@ -1084,12 +1071,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function saveGraderGroup(){
-    const examId=currentExam('script-exam'),subjectCode=$('grader-assign-subject').value;
+    const subjectCode=$('grader-assign-subject').value;
     const userIds=[...$('grader-group-members').selectedOptions].map(option=>option.value);
-    if(!examId||!subjectCode)throw new Error('Chọn kỳ thi và môn trước khi lưu nhóm.');
+    if(!subjectCode)throw new Error('Chọn môn trước khi lưu nhóm.');
     if(!userIds.length)throw new Error('Chọn ít nhất một giám khảo cùng môn cho nhóm.');
     const{data,error}=await state.client.rpc('exam_save_grader_group',{
-      p_exam_id:examId,p_subject_code:subjectCode,
+      p_exam_id:null,p_subject_code:subjectCode,
       p_group_id:$('grader-group-select').value||null,
       p_name:$('grader-group-name').value.trim(),p_user_ids:userIds
     });
@@ -1116,16 +1103,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const records=await readPages(()=>state.client.from('exam_script_records')
       .select('room_code').eq('run_id',runId).order('room_code'));
     const rooms=[...new Set(records.map(row=>row.room_code))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
-    const{data:graders,error:graderError}=await state.client.from('exam_grader_assignments')
-      .select('user_id').eq('exam_id',run.exam_id).eq('subject_code',run.subject_code).eq('active',true).order('user_id');
+    const{data:graders,error:graderError}=await state.client.rpc('exam_manage_accounts');
     if(graderError)throw new Error(`Không tải được giám khảo môn ${nameOf(run.subject_code)}: ${graderError.message}`);
-    const graderIds=[...new Set((graders||[]).map(row=>row.user_id))];
+    const graderIds=[...new Set((graders||[]).filter(row=>row.role==='grader'&&row.subject_code===run.subject_code).map(row=>row.user_id))];
     const{data:profiles,error:profileError}=graderIds.length
       ?await state.client.from('exam_user_profiles').select('user_id,email,full_name,teacher_code').in('user_id',graderIds)
       :{data:[],error:null};
     if(profileError)throw new Error(`Không tải được thông tin giám khảo: ${profileError.message}`);
     const{data:groups,error:groupsError}=await state.client.from('exam_grader_groups')
-      .select('id,name').eq('exam_id',run.exam_id).eq('subject_code',run.subject_code).order('name');
+      .select('id,name').eq('subject_code',run.subject_code).order('name');
     if(groupsError)throw new Error(`Không tải được nhóm giám khảo: ${groupsError.message}`);
     const{data:assigned,error:assignedError}=await state.client.from('exam_script_bag_assignments')
       .select('room_code,user_id,group_id,assignment_method').eq('run_id',runId);
@@ -1143,9 +1129,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const panel=$('script-bag-assignment');
     panel.classList.remove('hidden');
     panel.innerHTML=`<h3>Phân công giám khảo theo túi — ${esc(nameOf(run.subject_code))}</h3>
-      <p>Để “Không phân công riêng”, mọi giám khảo đã được phân môn này đều có thể nhập điểm của túi.</p>
+      <p>Chọn giáo viên hoặc nhóm cùng môn từ danh mục dùng chung. Túi chưa giao không được nhập điểm.</p>
       <table><thead><tr><th>Túi / phòng</th><th>Giám khảo hoặc nhóm</th></tr></thead><tbody>${rooms.map(room=>
-        `<tr><td>${esc(room)}${assignmentByRoom.get(room)?.method==='draw'?' · bốc thăm':''}</td><td><select data-bag-room="${esc(room)}"><option value="">Không phân công riêng (mọi giám khảo môn này)</option>${graderOptions}${groupOptions}</select></td></tr>`).join('')}</tbody></table>
+        `<tr><td>${esc(room)}${assignmentByRoom.get(room)?.method==='draw'?' · bốc thăm':''}</td><td><select data-bag-room="${esc(room)}"><option value="">Chưa giao (không được nhập điểm)</option>${graderOptions}${groupOptions}</select></td></tr>`).join('')}</tbody></table>
       <div class="form-actions"><button type="button" class="btn btn-light" id="draw-bag-assignments">Bốc thăm đều cho giám khảo</button><button type="button" class="btn btn-primary" id="save-bag-assignments">Lưu phân công túi</button>
       <button type="button" class="btn btn-light" id="close-bag-assignments">Đóng</button></div>`;
     for(const select of panel.querySelectorAll('[data-bag-room]')){
@@ -1176,8 +1162,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         const{error}=await state.client.rpc('exam_set_script_bag_assignments',{p_run_id:runId,p_rows:rows});
         if(error)throw new Error(`Không lưu được phân công túi: ${error.message}`);
         message($('script-message'),rows.length
-          ?`Đã phân công ${rows.length} túi cho giám khảo/nhóm. Các túi chưa gán vẫn mở cho mọi giám khảo môn này.`
-          :'Đã bỏ phân công cá nhân; mọi giám khảo môn này có thể chấm tất cả các túi.','success');
+          ?`Đã phân công ${rows.length} túi cho giám khảo/nhóm. Các túi chưa gán không được nhập điểm.`
+          :'Đã bỏ phân công; các túi chưa giao không được nhập điểm.','success');
         panel.classList.add('hidden');
       }catch(error){message($('script-message'),error?.message||String(error),'error')}
       finally{button.disabled=false}
@@ -1508,6 +1494,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('absence-message',saveAbsences,$('absence-save'));
   }
   function wireScripts(){
+    setSubjectOptions('grader-assign-subject',allSubjectOptions());
     setSubjectOptions('script-subject',allSubjectOptions());
     $('script-score-mode').onchange=()=>$('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
     $('script-exam').onchange=()=>{
@@ -1539,10 +1526,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       $('grader-teacher-code').value=profile?.teacher_code||'';
     };
     $('grader-group-select').onchange=renderSelectedGroup;
-    $('grader-account-list').addEventListener('click',event=>{
-      const button=event.target.closest('[data-grader-revoke]');
-      if(button)safeAction('script-message',()=>toggleGraderAssignment(button.dataset.graderRevoke,true),button);
-    });
     $('script-runs-body').addEventListener('click',event=>{
       const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),deleteButton=event.target.closest('[data-script-delete]');
       const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;

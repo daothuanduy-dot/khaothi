@@ -16,22 +16,22 @@
     <label>Thí sinh vắng<select id="script-absence-mode"><option value="compact">Dồn phách, bỏ qua bài vắng</option><option value="gap">Cách phách, giữ chỗ bài vắng</option></select></label>
     <div class="form-actions"><button id="script-load-rooms" class="btn btn-light" type="button">Tải phòng / thứ tự túi</button><button id="script-generate" class="btn btn-primary" type="button">Tạo phương án phách</button></div>
   </div>
-  <p class="help-text">Mỗi phòng có một đầu phách ngẫu nhiên là chữ cái in hoa A–Z; đầu phách không trùng giữa các phòng trong cùng môn, nhưng có thể trùng với môn khác. Có thể thay đầu phách và đảo thứ tự thí sinh trong phòng. Số bài trong phòng được đánh ngắn từ 1; mỗi phòng tối đa 100 bài. Phân công theo túi sau khi khóa là tùy chọn; nếu không phân công riêng, mọi giám khảo đã được phân môn đều có thể chấm.</p>
+  <p class="help-text">Mỗi phòng có một đầu phách ngẫu nhiên là chữ cái in hoa A–Z; đầu phách không trùng giữa các phòng trong cùng môn, nhưng có thể trùng với môn khác. Có thể thay đầu phách và đảo thứ tự thí sinh trong phòng. Số bài trong phòng được đánh ngắn từ 1; mỗi phòng tối đa 100 bài. Sau khi khóa, giao túi bài cho giáo viên hoặc nhóm cùng môn. Túi chưa giao không được nhập điểm.</p>
   <div id="script-room-order" class="table-wrap"></div>
   <div id="script-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div class="form-actions"><button id="script-export-heads" class="btn btn-light" type="button">Xuất bảng đầu phách tổng thể</button></div>
   <div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Môn</th><th>Phương án</th><th>Vắng</th><th>Hồ sơ</th><th>Thí sinh</th><th>Trạng thái</th><th></th></tr></thead><tbody id="script-runs-body"><tr><td colspan="8" class="empty">Chọn kỳ thi và tải dữ liệu.</td></tr></tbody></table></div>
   <div id="script-bag-assignment" class="section-panel hidden"></div>
-  <div class="section-heading subheading"><div><h3>Quản lý tài khoản và nhóm giám khảo</h3><p>Giáo viên đăng nhập lần đầu bằng Google (email công vụ) để xuất hiện trong danh sách. Mật khẩu do Google/Supabase Auth quản lý, ứng dụng không lưu mật khẩu.</p></div></div>
+  <div class="section-heading subheading"><div><h3>Danh mục giáo viên và nhóm dùng chung</h3><p>Tài khoản và nhóm độc lập với kỳ thi. Tạo tài khoản tại Quản lý tài khoản, lưu môn phụ trách rồi tạo nhóm. Khi giao chấm, chọn giáo viên hoặc nhóm cho túi bài cụ thể.</p></div></div>
   <div class="form-grid">
-    <label>Môn thi<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label>Môn phụ trách (dùng chung)<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
     <label>Tài khoản<select id="grader-user-id"><option value="">-- Chọn tài khoản đã đăng nhập --</option></select></label>
     <label>Tên giáo viên<input id="grader-full-name" maxlength="160"></label>
     <label>Mã định danh giáo viên<input id="grader-teacher-code" maxlength="60"></label>
     <div class="form-actions"><button id="grader-profile-save" class="btn btn-light" type="button">Lưu thông tin giáo viên</button></div>
-    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Thêm giám khảo vào môn</button></div>
+    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Lưu môn phụ trách của giáo viên</button></div>
   </div>
-  <div class="section-heading subheading"><div><h3>Nhóm chấm môn hiện tại</h3><p>Mỗi nhóm chỉ gồm giáo viên đã được phân công cùng môn.</p></div></div>
+  <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung theo môn</h3><p>Không cần chọn kỳ thi. Chọn môn để tải giáo viên; mỗi nhóm gồm giáo viên có cùng môn phụ trách. Giữ Ctrl để chọn nhiều thành viên.</p></div></div>
   <div class="form-grid">
     <label>Nhóm<select id="grader-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
     <label>Tên nhóm<input id="grader-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
