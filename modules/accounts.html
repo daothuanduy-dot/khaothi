@@ -1,0 +1,25 @@
+<section class="tab-panel hidden" id="tab-accounts">
+  <h2>Quản lý tài khoản</h2>
+  <p>Giáo viên đăng nhập Google một lần để xuất hiện trong danh sách. Admin phân quyền một môn và cấp quyền nhập điểm theo kỳ thi. Không cần chia sẻ mật khẩu.</p>
+  <div id="accounts-message" class="notice hidden" role="status"></div>
+  <button id="accounts-refresh" type="button">Tải lại tài khoản</button>
+  <div class="form-grid">
+    <label>Tài khoản<select id="accounts-user"></select></label>
+    <label>Vai trò<select id="accounts-role"><option value="grader">Giáo viên</option><option value="admin">Admin</option></select></label>
+    <label>Môn phụ trách<select id="accounts-subject"></select></label>
+  </div>
+  <button id="accounts-save-role" type="button">Lưu vai trò và môn</button>
+  <h3>Phân công và thời hạn nhập điểm</h3>
+  <div class="form-grid">
+    <label>Kỳ thi<select id="accounts-exam"></select></label>
+    <label>Bắt đầu nhập điểm<input id="accounts-start" type="datetime-local"></label>
+    <label>Kết thúc nhập điểm<input id="accounts-end" type="datetime-local"></label>
+  </div>
+  <p>Chưa thiết lập thời hạn: không được nhập điểm. Thời gian hiển thị theo múi giờ của thiết bị.</p>
+  <button id="accounts-assign" type="button">Cho phép giáo viên nhập kỳ thi này</button>
+  <button id="accounts-unassign" type="button">Thu hồi quyền nhập kỳ thi này</button>
+  <button id="accounts-save-window" type="button">Lưu thời hạn</button>
+  <h3>Nhật ký nhập và sửa điểm</h3>
+  <button id="accounts-load-audit" type="button">Tải nhật ký kỳ thi</button>
+  <div class="table-wrap"><table><thead><tr><th>Môn</th><th>Phách</th><th>Giá trị cũ</th><th>Giá trị mới</th><th>Người nhập / sửa</th><th>Thời điểm</th></tr></thead><tbody id="accounts-audit"></tbody></table></div>
+</section>
