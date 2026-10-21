@@ -22,12 +22,14 @@ export function mandatoryListingGroups(assignments){
   for(const row of assignments){
     if(!row.room_code||!(row.plan_type==='mandatory'||(row.plan_type==='subject'&&row.subject_type==='mandatory')))continue;
     const subject=row.subject_code||'';
-    const key=JSON.stringify([subject,row.room_code]);
+    const key=String(row.room_code);
     if(!groups.has(key))groups.set(key,{subject,room:row.room_code,rows:[]});
     const group=groups.get(key);
-    if(!group.rows.some(item=>String(item.candidate_id||item.id)===String(row.candidate_id||row.id)))group.rows.push(row);
+    let item=group.rows.find(item=>String(item.candidate_id||item.id)===String(row.candidate_id||row.id));
+    if(!item){item={...row,subject_codes:[]};group.rows.push(item)}
+    if(subject&&!item.subject_codes.includes(subject))item.subject_codes.push(subject);
   }
-  return [...groups.values()].sort((a,b)=>a.subject.localeCompare(b.subject,'vi')||String(a.room).localeCompare(String(b.room),'vi',{numeric:true}))
+  return [...groups.values()].sort((a,b)=>String(a.room).localeCompare(String(b.room),'vi',{numeric:true}))
     .map(group=>({...group,rows:group.rows.sort((a,b)=>String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}))}));
 }
 
@@ -455,8 +457,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     ]);
     const sheetSpecs=[
       ...(printType==='mandatory_listing'?(forms.mandatoryGroups||[]).map(({room,subject,rows},i)=>[
-        `Bat buoc ${i+1}`,[header,[settings.mandatory_listing.title],[`Đợt ${forms.roundNo} — Phòng: ${room}${subject?` — Môn: ${nameOf(subject)}`:''}`],
-          formSpecs.mandatory_listing[2],...rows.map((row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',nameOf(subject)||'Bắt buộc',row.note||''])],[],'mandatory_listing'
+        `Bat buoc ${i+1}`,[header,[settings.mandatory_listing.title],[`Phòng: ${room}`],
+          formSpecs.mandatory_listing[2],...rows.map((row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''])],[],'mandatory_listing'
       ]):[]),
       ['Danh sach niem yet',listings,[8,15,30,15,12,25,25,25]],
       ['Phieu thu bai',receipts,[7,14,26,15,11,24,10,9,14,24]],
@@ -543,7 +545,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const displayRoom=room=>String(room??'').replace(/^phòng\s*/i,'').trim();
     const header=`<header><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b><br><b>${esc(String($('forms-title').value||'').replace(/[·.]+/g,' ').replace(/\s+/g,' ').trim())}</b></header>`;
     if(printType==='mandatory_listing')for(const {room,subject,rows} of forms.mandatoryGroups||[]){
-      pages.push(`<section class="page mandatory_listing">${header}<h3>${esc(settings.mandatory_listing.title)}<br>ĐỢT ${esc(forms.roundNo)} — PHÒNG ${esc(displayRoom(room))}${subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}</h3><table><thead><tr>${formSpecs.mandatory_listing[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr>${[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',nameOf(subject)||'Bắt buộc',row.note||''].map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
+      pages.push(`<section class="page mandatory_listing">${header}<h3>${esc(settings.mandatory_listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr>${formSpecs.mandatory_listing[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr>${[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''].map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     if(printType==='all'||printType==='listing')for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
       const rows=forms.listingRows.filter(row=>row.room_code===room);
