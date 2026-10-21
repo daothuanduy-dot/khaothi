@@ -1,10 +1,10 @@
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.119';
-import {loadTabModules} from './module-loader.js?v=0.1.120-global-graders';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.120-global-graders';
-import {wireAccounts} from './accounts.js?v=0.1.120-global-graders';
+import {loadTabModules} from './module-loader.js?v=0.1.122-score-table';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.122-score-table';
+import {wireAccounts} from './accounts.js?v=0.1.122-score-table';
 import {loadExamRounds} from './rounds.js?v=0.1.119';
-const APP_VERSION='v0.1.119';
-const APP_BUILD='2026-10-20-accounts-grading';
+const APP_VERSION='v0.1.122';
+const APP_BUILD='2026-10-21-score-table';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;

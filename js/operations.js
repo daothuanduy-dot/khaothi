@@ -1293,10 +1293,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!cache.graderWork.length)message($('grader-message'),state.role==='admin'?'Đang xem giao diện bằng tài khoản Admin. Để nhập điểm, đăng nhập tài khoản giáo viên đã được gán môn và kỳ thi.':'Chưa có bài được giao. Liên hệ quản trị để gán môn, cấp quyền kỳ thi và khóa phương án phách.','info');
     $('grader-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+[...new Map(cache.graderWork.map(work=>[work.exam_id,work])).values()]
       .map(work=>`<option value="${esc(work.exam_id)}">${esc(work.exam_title)}</option>`).join('');
-    $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>';
-    $('grader-table-body').innerHTML='<tr><td colspan="4" class="empty">Chọn kỳ thi và môn được phân công.</td></tr>';
+    $('grader-subject').innerHTML='<option value="VAN">Ngữ văn (VAN)</option>';
+    $('grader-table-body').innerHTML='<tr><td colspan="6" class="empty">Chọn kỳ thi và đầu phách.</td></tr>';
     $('user-email').textContent=state.session?.user?.email||'';
-    $('grader-score').value='';$('grader-quick-score').value='';
   }
   function selectedGraderConfig(){
     return cache.graderWork.find(work=>work.exam_id===$('grader-exam').value&&work.subject_code===$('grader-subject').value);
@@ -1309,7 +1308,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const notice=$('grader-window-status');
     if(notice)notice.textContent=!graderWindow?'Chưa có thời hạn nhập điểm.':
       `${open?'Đang mở nhập điểm':'Ngoài thời hạn nhập điểm'}: ${new Date(graderWindow.start).toLocaleString('vi-VN')} – ${new Date(graderWindow.end).toLocaleString('vi-VN')}.`;
-    for(const id of ['grader-score','grader-quick-score','grader-save-score','grader-apply-default','grader-import-scores']){
+    for(const id of ['grader-save-all']){
       const control=$(id);
       if(control)control.disabled=!open||graderSaving||(!cache.graderQueue.length&&id!=='grader-import-scores');
     }
@@ -1317,20 +1316,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function renderGraderQueue(){
     $('grader-table-body').innerHTML=cache.graderQueue.map((row,index)=>`<tr data-grader-index="${index}" class="${index===cache.graderIndex?'roster-dirty':''}">
-      <td>${index+1}</td><td>${esc(row.phach_code)}</td><td>${row.score??''}</td>
-      <td>${row.updated_at?esc(new Date(row.updated_at).toLocaleString('vi-VN')):'—'}</td></tr>`).join('')||
-      '<tr><td colspan="4" class="empty">Không có phách cho tiền tố đã nhập.</td></tr>';
-    const current=cache.graderQueue[cache.graderIndex];
-    $('grader-current-phach').value=current?.phach_code||'';
-    $('grader-score').value=current?.score??'';
-    $('grader-quick-score').value='';
-    $('grader-save-score').disabled=!current;
-    const picker=$('grader-phach-select');
-    if(picker){
-      picker.innerHTML='<option value="">-- Chọn mã phách --</option>'+cache.graderQueue.map((row,index)=>
-        `<option value="${index}">${esc(row.phach_code)}${row.score==null?'':` — ${esc(row.score)}`}</option>`).join('');
-      picker.value=current?String(cache.graderIndex):'';
-    }
+      <td>${index+1}</td><td>${esc(row.phach_code)}</td>
+      <td><input class="grader-row-score" data-grader-score="${index}" type="number" step="any" value="${row.draftScore??row.score??''}" ${row.no_paper||row.draftNoPaper?'disabled':''} ${row.score!=null&&!row.editing?'readonly':''} aria-label="Điểm mã phách ${esc(row.phach_code)}"></td>
+      <td><input class="grader-no-paper" data-grader-no-paper="${index}" type="checkbox" ${row.draftNoPaper??row.no_paper?'checked':''} ${row.score!=null&&!row.editing?'disabled':''} aria-label="Không bài mã phách ${esc(row.phach_code)}"></td>
+      <td>${row.updated_at?esc(new Date(row.updated_at).toLocaleString('vi-VN')):'—'}</td>
+      <td><button class="btn btn-light" type="button" data-grader-row-action="${index}">${row.score!=null&&!row.editing?'Sửa':'Lưu'}</button></td></tr>`).join('')||
+      '<tr><td colspan="6" class="empty">Không có phách cho đầu phách đã chọn.</td></tr>';
     updateGraderWindow();
   }
   async function loadGraderQueue(){
@@ -1367,47 +1358,50 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     cache.graderQueue=data||[];cache.graderIndex=0;
     $('grader-score-rules').textContent=`Điểm hợp lệ: 0–${config.maximum_score}${config.score_step==null?' (tự do)':`; bước ${config.score_step}`}; tối đa ${config.decimal_places} chữ số thập phân.`;
     $('grader-default-score').value=config.default_score??'';
-    $('grader-score').max=config.maximum_score;
-    $('grader-score').step=config.score_step??'any';
     renderGraderQueue();
   }
-  async function saveGraderScore(scoreOverride){
+  async function saveGraderScores(indexes){
     if(graderSaving)return;
     if(!updateGraderWindow())throw new Error('Hiện không trong thời hạn nhập điểm.');
-    const config=selectedGraderConfig(),row=cache.graderQueue[cache.graderIndex];
-    if(!config||!row)throw new Error('Chọn một phách trong danh sách.');
-    const raw=scoreOverride??$('grader-score').value;
-    const score=Number(raw),invalid=validateEssayScore(raw,config);
-    if(invalid)throw new Error(invalid);
+    const config=selectedGraderConfig();
+    if(!config)throw new Error('Chọn kỳ thi và đầu phách trước.');
+    const rows=indexes.map(index=>{
+      const row=cache.graderQueue[index];
+      const input=document.querySelector(`[data-grader-score="${index}"]`);
+      const check=document.querySelector(`[data-grader-no-paper="${index}"]`);
+      const noPaper=check?.checked??row.draftNoPaper??row.no_paper??false;
+      const raw=noPaper?'0':input?.value??row.draftScore??row.score;
+      const invalid=validateEssayScore(raw,config);
+      if(invalid)throw new Error(`Phách ${row.phach_code}: ${invalid}`);
+      return {index,row,score:Number(raw),no_paper:noPaper};
+    });
+    if(!rows.length)throw new Error('Chưa có phách nào cần lưu.');
     const request=graderQueueRequest;
     graderSaving=true;updateGraderWindow();
     try{
-    const{error}=await state.client.rpc('exam_save_script_score',{
-      p_exam_id:config.exam_id,p_subject_code:config.subject_code,p_phach_code:row.phach_code,p_score:score
-    });
-    if(error)throw new Error(`Không lưu được điểm phách ${row.phach_code}: ${error.message}`);
-    if(request!==graderQueueRequest)return;
-    row.score=score;row.updated_at=new Date().toISOString();
-    cache.graderIndex=Math.min(cache.graderIndex+1,cache.graderQueue.length-1);
-    renderGraderQueue();
-    message($('grader-message'),`Đã lưu điểm ${score} cho phách ${row.phach_code}.`, 'success');
-    }finally{graderSaving=false;updateGraderWindow()}
-  }
-  async function applyGraderDefault(){
-    if(!updateGraderWindow())throw new Error('Hiện không trong thời hạn nhập điểm.');
-    const config=selectedGraderConfig(),value=$('grader-default-score').value;
-    if(!config)throw new Error('Chọn kỳ thi và môn trước.');
-    const invalid=validateEssayScore(value,config);if(invalid)throw new Error(invalid);
-    const pending=cache.graderQueue.filter(row=>row.score==null);
-    if(!pending.length)throw new Error('Danh sách không còn bài chưa nhập điểm.');
-    if(!confirm(`Áp dụng điểm ${value} cho ${pending.length} phách chưa có điểm?`))return;
     const{error}=await state.client.rpc('exam_import_script_scores',{
       p_exam_id:config.exam_id,p_subject_code:config.subject_code,
-      p_rows:pending.map(row=>({phach_code:row.phach_code,score:Number(value)}))
+      p_rows:rows.map(item=>({phach_code:item.row.phach_code,score:item.score,no_paper:item.no_paper}))
     });
-    if(error)throw new Error(`Không áp dụng được điểm mặc định: ${error.message}`);
-    await loadGraderQueue();
-    message($('grader-message'),`Đã áp dụng điểm mặc định cho ${pending.length} phách.`, 'success');
+    if(error)throw new Error(`Không lưu được danh sách điểm: ${error.message}`);
+    if(request!==graderQueueRequest)return;
+    for(const item of rows){
+      item.row.score=item.score;item.row.no_paper=item.no_paper;item.row.updated_at=new Date().toISOString();
+      delete item.row.draftScore;delete item.row.draftNoPaper;item.row.editing=false;
+    }
+    renderGraderQueue();
+    message($('grader-message'),`Đã lưu ${rows.length} phách.`, 'success');
+    }finally{graderSaving=false;updateGraderWindow()}
+  }
+  function applyGraderDefault(){
+    const config=selectedGraderConfig(),value=$('grader-default-score').value;
+    if(!config)throw new Error('Chọn kỳ thi và đầu phách trước.');
+    const invalid=validateEssayScore(value,config);if(invalid)throw new Error(invalid);
+    const pending=cache.graderQueue.filter(row=>row.score==null&&!row.no_paper);
+    if(!pending.length)throw new Error('Danh sách không còn bài chưa nhập điểm.');
+    for(const row of pending)row.draftScore=Number(value);
+    renderGraderQueue();
+    message($('grader-message'),`Đã điền sẵn điểm ${value} cho ${pending.length} phách. Bấm Lưu danh sách để ghi nhận.`, 'info');
   }
   function exportGraderTemplate(){
     const wb=window.XLSX.utils.book_new();
@@ -1539,9 +1533,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ++graderQueueRequest;graderWindow=null;clearInterval(graderWindowTimer);
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
       $('grader-prefix').value='';
-      setSubjectOptions('grader-subject',cache.graderWork.filter(work=>work.exam_id===examId).map(work=>({code:work.subject_code,name:nameOf(work.subject_code)})));
       const assigned=cache.graderWork.filter(work=>work.exam_id===examId);
-      if(assigned.length===1)$('grader-subject').value=assigned[0].subject_code;
+      $('grader-subject').innerHTML='<option value="VAN">Ngữ văn (VAN)</option>';
+      $('grader-subject').value=assigned.some(work=>work.subject_code==='VAN')?'VAN':'';
+      if(!$('grader-subject').value&&examId)message($('grader-message'),'Kỳ thi này chưa có phân công môn Ngữ văn (VAN).','error');
       $('grader-subject').onchange();
     };
     $('grader-subject').onchange=()=>{
@@ -1550,24 +1545,37 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     };
     $('grader-prefix').onchange=()=>loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
     $('grader-table-body').addEventListener('click',event=>{
+      const action=event.target.closest('[data-grader-row-action]');
+      if(action){
+        const index=Number(action.dataset.graderRowAction),row=cache.graderQueue[index];
+        if(row.score!=null&&!row.editing){row.editing=true;renderGraderQueue();return}
+        saveGraderScores([index]).catch(error=>message($('grader-message'),error.message,'error'));return;
+      }
+      if(event.target.closest('input,select,button'))return;
       const row=event.target.closest('[data-grader-index]');if(!row)return;
       cache.graderIndex=Number(row.dataset.graderIndex);renderGraderQueue();
     });
-    $('grader-quick-score').addEventListener('input',()=>{
-      const config=selectedGraderConfig(),parsed=parseQuickScore($('grader-quick-score').value,config?.decimal_places);
-      $('grader-score').value=Number.isFinite(parsed)?String(parsed):'';
+    $('grader-table-body').addEventListener('input',event=>{
+      const input=event.target.closest('[data-grader-score]');
+      if(!input)return;
+      cache.graderQueue[Number(input.dataset.graderScore)].draftScore=input.value;
     });
-    if($('grader-phach-select'))$('grader-phach-select').onchange=()=>{
-      const value=$('grader-phach-select').value;if(value==='')return;
-      cache.graderIndex=Number(value);renderGraderQueue();
+    $('grader-table-body').addEventListener('change',event=>{
+      const checkbox=event.target.closest('[data-grader-no-paper]');
+      if(!checkbox)return;
+      const row=cache.graderQueue[Number(checkbox.dataset.graderNoPaper)];
+      row.draftNoPaper=checkbox.checked;
+      if(checkbox.checked)row.draftScore=0;
+      renderGraderQueue();
+    });
+    $('grader-use-default').onchange=()=>{
+      if(!$('grader-use-default').checked)return;
+      try{applyGraderDefault()}catch(error){$('grader-use-default').checked=false;message($('grader-message'),error.message,'error')}
     };
-    $('grader-quick-score').addEventListener('keydown',event=>{
-      if(event.key==='Enter'){event.preventDefault();saveGraderScore().catch(error=>message($('grader-message'),error.message,'error'))}
-    });
-    safeAction('grader-message',()=>saveGraderScore(),$('grader-save-score'));
-    safeAction('grader-message',applyGraderDefault,$('grader-apply-default'));
-    $('grader-export-template').onclick=exportGraderTemplate;
-    safeAction('grader-message',importGraderScores,$('grader-import-scores'));
+    safeAction('grader-message',()=>{
+      const indexes=cache.graderQueue.map((row,index)=>row.draftScore!==undefined||row.draftNoPaper!==undefined?index:null).filter(index=>index!==null);
+      return saveGraderScores(indexes);
+    },$('grader-save-all'));
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
   }
   function wireScores(){
