@@ -765,7 +765,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     cache.scriptConfigs=data||[];
     const essay=cache.scriptConfigs.filter(row=>row.is_essay);
     setSubjectOptions('script-subject',allSubjectOptions());
-    setSubjectOptions('grader-assign-subject',allSubjectOptions());
     if(!$('script-subject').value)$('script-subject').value=essay[0]?.subject_code||'TOAN';
     const selected=cache.scriptConfigs.find(row=>row.subject_code===$('script-subject').value);
     $('script-max-score').value=selected?.maximum_score??'';
@@ -1456,6 +1455,53 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       finally{target.disabled=false;if(label==='grader-message')updateGraderWindow()}
     };
   }
+  const localDateTime=value=>{
+    if(!value)return '';
+    const date=new Date(value);if(!Number.isFinite(date.getTime()))return '';
+    return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  };
+  async function loadScriptGradingWindow(){
+    const examId=currentExam('script-exam');$('script-grading-start').value='';$('script-grading-end').value='';
+    if(!examId)return;
+    const{data,error}=await state.client.rpc('exam_get_grading_window',{p_exam_id:examId});
+    if(error)throw new Error(`Không tải được thời hạn nhập điểm: ${error.message}`);
+    $('script-grading-start').value=localDateTime(data?.starts_at);$('script-grading-end').value=localDateTime(data?.ends_at);
+  }
+  async function saveScriptGradingWindow(){
+    const examId=currentExam('script-exam');setAdminExam(examId);
+    const start=new Date($('script-grading-start').value),end=new Date($('script-grading-end').value);
+    if(!Number.isFinite(+start)||!Number.isFinite(+end)||end<=start)throw new Error('Nhập đủ thời hạn; kết thúc phải sau bắt đầu.');
+    const{error}=await state.client.rpc('exam_set_grading_window',{p_exam_id:examId,p_starts_at:start.toISOString(),p_ends_at:end.toISOString()});
+    if(error)throw new Error(`Không lưu được thời hạn: ${error.message}`);
+    message($('script-message'),'Đã lưu thời hạn nhập điểm cho toàn bộ môn của kỳ thi.','success');
+  }
+  async function loadScriptGradingStatus(){
+    const examId=currentExam('script-exam');setAdminExam(examId);
+    const panel=$('script-grading-status');panel.innerHTML='Đang tải tiến độ nhập điểm...';
+    const{data:runs,error:runError}=await state.client.from('exam_script_runs').select('id,subject_code,locked_at').eq('exam_id',examId).eq('status','locked').order('locked_at',{ascending:false});
+    if(runError)throw new Error(`Không tải được phương án phách: ${runError.message}`);
+    const latest=new Map();for(const run of runs||[]){if(!latest.has(run.subject_code))latest.set(run.subject_code,run)}
+    const selectedRuns=[...latest.values()];if(!selectedRuns.length){panel.innerHTML='<p class="empty">Chưa có phương án phách đã khóa.</p>';return}
+    const runIds=selectedRuns.map(run=>run.id),runById=new Map(selectedRuns.map(run=>[run.id,run]));
+    const records=await readPages(()=>state.client.from('exam_script_records').select('id,run_id,room_code,phach_code').in('run_id',runIds).not('phach_code','is',null).order('phach_code'));
+    let scores=[];const scoreResult=await state.client.from('exam_script_scores').select('script_record_id,score,no_paper').in('script_record_id',records.map(row=>row.id));
+    if(scoreResult.error)throw new Error(`Không tải được trạng thái điểm: ${scoreResult.error.message}`);scores=scoreResult.data||[];
+    const scoreByRecord=new Map(scores.map(score=>[score.script_record_id,score]));
+    const{data:assignments,error:assignmentError}=await state.client.from('exam_script_bag_assignments').select('run_id,room_code,user_id,group_id').in('run_id',runIds);
+    if(assignmentError)throw new Error(`Không tải được phân công túi: ${assignmentError.message}`);
+    const assignmentByBag=new Map((assignments||[]).map(row=>[`${row.run_id}:${row.room_code}`,row]));
+    const userIds=[...new Set((assignments||[]).map(row=>row.user_id).filter(Boolean))],groupIds=[...new Set((assignments||[]).map(row=>row.group_id).filter(Boolean))];
+    const{data:profiles,error:profileError}=userIds.length?await state.client.from('exam_user_profiles').select('user_id,full_name,email,teacher_code').in('user_id',userIds):{data:[],error:null};
+    if(profileError)throw new Error(`Không tải được người được phân công: ${profileError.message}`);
+    const{data:groups,error:groupError}=groupIds.length?await state.client.from('exam_grader_groups').select('id,name').in('id',groupIds):{data:[],error:null};
+    if(groupError)throw new Error(`Không tải được nhóm được phân công: ${groupError.message}`);
+    const profilesById=new Map((profiles||[]).map(row=>[row.user_id,row])),groupsById=new Map((groups||[]).map(row=>[row.id,row.name]));
+    const assignee=assignment=>!assignment?'Chưa giao':assignment.user_id?([profilesById.get(assignment.user_id)?.teacher_code,profilesById.get(assignment.user_id)?.full_name,profilesById.get(assignment.user_id)?.email].filter(Boolean).join(' · ')||assignment.user_id):`Nhóm: ${groupsById.get(assignment.group_id)||assignment.group_id}`;
+    panel.innerHTML=`<table><thead><tr><th>Môn</th><th>Phách</th><th>Túi / phòng</th><th>Trạng thái</th><th>Điểm</th><th>Được phân công</th></tr></thead><tbody>${records.map(record=>{
+      const score=scoreByRecord.get(record.id),run=runById.get(record.run_id),assignment=assignmentByBag.get(`${record.run_id}:${record.room_code}`);
+      return `<tr><td>${esc(nameOf(run.subject_code))}</td><td>${esc(record.phach_code)}</td><td>${esc(record.room_code||'—')}</td><td>${score?'Đã nhập':'Chưa nhập'}</td><td>${score?(score.no_paper?'Không bài':esc(score.score)):'—'}</td><td>${esc(assignee(assignment))}</td></tr>`;
+    }).join('')||'<tr><td colspan="6" class="empty">Không có phách.</td></tr>'}</tbody></table>`;
+  }
   function wireForms(){
     $('forms-print-type').onchange=showFormSettings;
     showFormSettings();
@@ -1498,13 +1544,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('absence-message',saveAbsences,$('absence-save'));
   }
   function wireScripts(){
-    setSubjectOptions('grader-assign-subject',allSubjectOptions());
     setSubjectOptions('script-subject',allSubjectOptions());
     $('script-score-mode').onchange=()=>$('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
     $('script-exam').onchange=()=>{
       cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptPlanId=null;cache.scriptRoundNo=null;cache.scriptConfigs=[];
       $('script-room-order').innerHTML='';
-      loadScriptRounds($('script-exam').value).then(loadScriptConfigs).catch(error=>message($('script-message'),error.message,'error'));
+      loadScriptRounds($('script-exam').value).then(async()=>{await loadScriptConfigs();await loadScriptGradingWindow()}).catch(error=>message($('script-message'),error.message,'error'));
     };
     $('script-subject').onchange=()=>{
       cache.scriptRooms=[];cache.scriptFinalizationId=null;cache.scriptPlanId=null;cache.scriptRoundNo=null;$('script-room-order').innerHTML='';
@@ -1519,17 +1564,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('script-message',loadScriptRooms,$('script-load-rooms'));
     safeAction('script-message',createScriptRun,$('script-generate'));
     safeAction('script-message',exportScriptHeads,$('script-export-heads'));
-    safeAction('script-message',assignGrader,$('grader-assign-save'));
-    safeAction('script-message',saveGraderProfile,$('grader-profile-save'));
-    safeAction('script-message',saveGraderGroup,$('grader-group-save'));
-    safeAction('script-message',deleteGraderGroup,$('grader-group-delete'));
-    $('grader-assign-subject').onchange=()=>loadGraderAccounts().catch(error=>message($('script-message'),error.message,'error'));
-    $('grader-user-id').onchange=()=>{
-      const profile=cache.graderProfiles.find(row=>row.user_id===$('grader-user-id').value);
-      $('grader-full-name').value=profile?.full_name||'';
-      $('grader-teacher-code').value=profile?.teacher_code||'';
-    };
-    $('grader-group-select').onchange=renderSelectedGroup;
+    safeAction('script-message',saveScriptGradingWindow,$('script-save-grading-window'));
+    safeAction('script-message',loadScriptGradingStatus,$('script-load-grading-status'));
     $('script-runs-body').addEventListener('click',event=>{
       const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),deleteButton=event.target.closest('[data-script-delete]');
       const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;

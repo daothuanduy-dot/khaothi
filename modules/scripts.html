@@ -19,24 +19,16 @@
   <p class="help-text">Mỗi phòng có một đầu phách ngẫu nhiên là chữ cái in hoa A–Z; đầu phách không trùng giữa các phòng trong cùng môn, nhưng có thể trùng với môn khác. Có thể thay đầu phách và đảo thứ tự thí sinh trong phòng. Số bài trong phòng được đánh ngắn từ 1; mỗi phòng tối đa 100 bài. Sau khi khóa, giao túi bài cho giáo viên hoặc nhóm cùng môn. Túi chưa giao không được nhập điểm.</p>
   <div id="script-room-order" class="table-wrap"></div>
   <div id="script-message" class="notice hidden" role="status" aria-live="polite"></div>
+  <div class="section-heading subheading"><div><h3>Thời hạn và tiến độ nhập điểm</h3><p>Thời hạn áp dụng cho toàn bộ các môn trong kỳ thi đang chọn. Theo dõi phách đã nhập, chưa nhập và người/nhóm được giao túi bài.</p></div></div>
+  <div class="form-grid">
+    <label>Bắt đầu nhập điểm<input id="script-grading-start" type="datetime-local"></label>
+    <label>Kết thúc nhập điểm<input id="script-grading-end" type="datetime-local"></label>
+  </div>
+  <div class="form-actions"><button id="script-save-grading-window" class="btn btn-light" type="button">Lưu thời hạn kỳ thi</button><button id="script-load-grading-status" class="btn btn-light" type="button">Xem tiến độ nhập điểm</button></div>
+  <div id="script-grading-status" class="table-wrap"></div>
   <div class="form-actions"><button id="script-export-heads" class="btn btn-light" type="button">Xuất bảng đầu phách tổng thể</button></div>
   <div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Môn</th><th>Phương án</th><th>Vắng</th><th>Hồ sơ</th><th>Thí sinh</th><th>Trạng thái</th><th></th></tr></thead><tbody id="script-runs-body"><tr><td colspan="8" class="empty">Chọn kỳ thi và tải dữ liệu.</td></tr></tbody></table></div>
   <div id="script-bag-assignment" class="section-panel hidden"></div>
-  <div class="section-heading subheading"><div><h3>Danh mục giáo viên và nhóm dùng chung</h3><p>Tài khoản và nhóm độc lập với kỳ thi. Tạo tài khoản tại Quản lý tài khoản, lưu môn phụ trách rồi tạo nhóm. Khi giao chấm, chọn giáo viên hoặc nhóm cho túi bài cụ thể.</p></div></div>
-  <div class="form-grid">
-    <label>Môn phụ trách (dùng chung)<select id="grader-assign-subject"><option value="">-- Chọn môn --</option></select></label>
-    <label>Tài khoản<select id="grader-user-id"><option value="">-- Chọn tài khoản đã đăng nhập --</option></select></label>
-    <label>Tên giáo viên<input id="grader-full-name" maxlength="160"></label>
-    <label>Mã định danh giáo viên<input id="grader-teacher-code" maxlength="60"></label>
-    <div class="form-actions"><button id="grader-profile-save" class="btn btn-light" type="button">Lưu thông tin giáo viên</button></div>
-    <div class="form-actions"><button id="grader-assign-save" class="btn btn-primary" type="button">Lưu môn phụ trách của giáo viên</button></div>
-  </div>
-  <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung theo môn</h3><p>Không cần chọn kỳ thi. Chọn môn để tải giáo viên; mỗi nhóm gồm giáo viên có cùng môn phụ trách. Giữ Ctrl để chọn nhiều thành viên.</p></div></div>
-  <div class="form-grid">
-    <label>Nhóm<select id="grader-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
-    <label>Tên nhóm<input id="grader-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
-    <label>Thành viên<select id="grader-group-members" multiple size="6"></select></label>
-    <div class="form-actions"><button id="grader-group-save" class="btn btn-primary" type="button">Lưu nhóm</button><button id="grader-group-delete" class="btn btn-light" type="button" disabled>Xóa nhóm</button></div>
-  </div>
-  <div id="grader-account-list" class="table-wrap"></div>
+  <!-- Compatibility controls for pre-v0.1.124 script code; account/group management is shown in Quản lý tài khoản. -->
+  <div class="hidden" aria-hidden="true"><select id="grader-assign-subject"></select><select id="grader-user-id"></select><input id="grader-full-name"><input id="grader-teacher-code"><input id="grader-import-file" type="file"><button id="grader-profile-save" type="button"></button><button id="grader-assign-save" type="button"></button><select id="grader-group-select"></select><input id="grader-group-name"><select id="grader-group-members"></select><button id="grader-group-save" type="button"></button><button id="grader-group-delete" type="button"></button><div id="grader-account-list"></div></div>
 </section>

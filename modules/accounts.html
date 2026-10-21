@@ -15,16 +15,14 @@
   </div>
   <div class="form-actions"><button id="accounts-new" class="btn btn-light" type="button">Thêm mới</button><button id="accounts-create" class="btn btn-primary" type="button">Tạo tài khoản</button><button id="accounts-update" class="btn btn-light" type="button">Lưu sửa tài khoản</button><button id="accounts-delete" class="btn danger-btn" type="button">Xóa tài khoản</button></div>
   <button id="accounts-save-role" type="button">Lưu vai trò và môn</button>
-  <h3>Thời hạn nhập điểm của kỳ thi</h3>
+  <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
   <div class="form-grid">
-    <label>Kỳ thi<select id="accounts-exam"></select></label>
-    <label>Bắt đầu nhập điểm<input id="accounts-start" type="datetime-local"></label>
-    <label>Kết thúc nhập điểm<input id="accounts-end" type="datetime-local"></label>
+    <label>Môn của nhóm<select id="accounts-group-subject"></select></label>
+    <label>Tên nhóm<input id="accounts-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
+    <label>Nhóm đã tạo<select id="accounts-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
   </div>
-  <p>Chưa thiết lập thời hạn: không được nhập điểm. Thời gian hiển thị theo múi giờ của thiết bị.</p>
-  <p>Giáo viên chỉ nhập các bài được giao trực tiếp hoặc qua nhóm tại Quản lý phách. Chọn kỳ thi ở đây chỉ để đặt thời hạn và xem nhật ký, không gắn tài khoản vào kỳ thi.</p>
-  <button id="accounts-save-window" type="button">Lưu thời hạn</button>
-  <h3>Nhật ký nhập và sửa điểm</h3>
-  <button id="accounts-load-audit" type="button">Tải nhật ký kỳ thi</button>
-  <div class="table-wrap"><table><thead><tr><th>Môn</th><th>Phách</th><th>Giá trị cũ</th><th>Giá trị mới</th><th>Người nhập / sửa</th><th>Thời điểm</th></tr></thead><tbody id="accounts-audit"></tbody></table></div>
+  <div class="form-actions"><button id="accounts-group-create" class="btn btn-primary" type="button">Tạo / đổi tên nhóm</button><button id="accounts-group-delete" class="btn danger-btn" type="button">Xóa nhóm</button></div>
+  <p>Chọn các tài khoản giáo viên cùng môn rồi bấm Gán vào nhóm.</p>
+  <div id="accounts-group-members" class="table-wrap"></div>
+  <div class="form-actions"><button id="accounts-group-assign" class="btn btn-light" type="button">Gán tài khoản đã chọn vào nhóm</button></div>
 </section>

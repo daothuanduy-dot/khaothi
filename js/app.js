@@ -1,10 +1,10 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.119';
-import {loadTabModules} from './module-loader.js?v=0.1.123-score-bag-entry';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.123-score-bag-entry';
-import {wireAccounts} from './accounts.js?v=0.1.123-score-bag-entry';
-import {loadExamRounds} from './rounds.js?v=0.1.119';
-const APP_VERSION='v0.1.123';
-const APP_BUILD='2026-10-21-score-bag-entry';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.124';
+import {loadTabModules} from './module-loader.js?v=0.1.124';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.124';
+import {wireAccounts} from './accounts.js?v=0.1.124';
+import {loadExamRounds} from './rounds.js?v=0.1.124';
+const APP_VERSION='v0.1.124';
+const APP_BUILD='2026-10-22-account-script-management';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
