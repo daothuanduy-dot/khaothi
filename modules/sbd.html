@@ -1,8 +1,9 @@
 <section class="tab-panel hidden" id="tab-sbd">
-        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p>Với môn lựa chọn: xếp và lưu phòng tổ hợp trước, sau đó cấp SBD theo phòng đã lưu. Mỗi thí sinh có một SBD duy nhất trong kỳ thi; không ghi đè SBD đã cấp.</p></div></div>
+        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p id="sbd-mode-note">Kỳ thi mặc định dùng một SBD chung trong toàn kỳ thi. Kỳ thi theo môn cấp SBD riêng từ 0001 cho từng môn, theo họ và tên.</p></div></div>
         <div class="panel">
           <div class="form-grid">
             <label>Kỳ thi<select id="sbd-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
+            <label id="sbd-subject-wrap" class="hidden">Môn thi<select id="sbd-subject"><option value="">-- Chọn môn thi --</option></select></label>
             <label>Quy tắc sắp xếp<select id="room-sort-mode"><option value="abc">Theo Tên, đệm, họ</option><option value="previous">Theo kết quả kỳ thi trước</option><option value="elective_rooms">Theo phòng thi tổ hợp đã xếp</option></select></label>
             <label>Độ dài số báo danh<select id="sbd-length"><option value="6">6 chữ số</option><option value="8">8 chữ số</option></select></label>
             <label>Số chữ số tiền tố<select id="sbd-prefix-length"><option value="2">2 chữ số đầu</option><option value="3">3 chữ số đầu</option></select></label>

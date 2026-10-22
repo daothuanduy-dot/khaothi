@@ -1,10 +1,10 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.124';
-import {loadTabModules} from './module-loader.js?v=0.1.124';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.124';
-import {wireAccounts} from './accounts.js?v=0.1.124';
-import {loadExamRounds} from './rounds.js?v=0.1.124';
-const APP_VERSION='v0.1.124';
-const APP_BUILD='2026-10-22-account-script-management';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.125';
+import {loadTabModules} from './module-loader.js?v=0.1.125';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.125';
+import {wireAccounts} from './accounts.js?v=0.1.125';
+import {loadExamRounds} from './rounds.js?v=0.1.125';
+const APP_VERSION='v0.1.125';
+const APP_BUILD='2026-10-22-subject-exam-sbd';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -195,7 +195,7 @@ async function loadExams(){
   body.innerHTML='';
   if(!state.exams.length)body.innerHTML='<tr><td colspan="6" class="empty">Chưa có kỳ thi. Hãy tạo kỳ thi đầu tiên.</td></tr>';
   for(const exam of state.exams){
-    const tr=document.createElement('tr'),mode=exam.exam_mode==='choice'?'Kỳ thi lựa chọn':'Kỳ thi mặc định';
+    const tr=document.createElement('tr'),mode=exam.exam_mode==='subject'||exam.exam_mode==='choice'?'Kỳ thi theo môn':'Kỳ thi mặc định';
     tr.innerHTML=`<td><b>${esc(exam.name)}</b><br><small>${esc(exam.id)}</small></td><td>${esc(exam.school_year)}</td><td><span class="tag">${mode}</span></td><td><span class="tag">${esc(exam.status)}</span></td><td>${exam.created_at?new Date(exam.created_at).toLocaleDateString('vi-VN'):'—'}</td><td><button class="small-btn" data-select-exam="${esc(exam.id)}">Chọn kỳ thi</button> <button class="small-btn" data-edit-exam="${esc(exam.id)}">Sửa</button> <button class="small-btn" data-delete-exam="${esc(exam.id)}">Xóa</button></td>`;
     body.append(tr);
   }
@@ -229,25 +229,25 @@ async function createExam(event){
   state.selectedExam=data.id;
   syncSubjectExamMode();
   updateSelectedExamTitle();
-  message($('global-message'),`Đã tạo ${exam_mode==='choice'?'kỳ thi lựa chọn':'kỳ thi mặc định'}.`,'success');
+  message($('global-message'),`Đã tạo ${exam_mode==='subject'?'kỳ thi theo môn':'kỳ thi mặc định'}.`,'success');
   notifyExamSelected(data,true);
 }
 function syncSubjectExamMode(){
   const examId=$('subject-exam-select').value;
   const exam=state.exams.find(x=>x.id===examId);
-  const mode=exam?.exam_mode==='choice'?'choice':'default';
+  const mode=exam?.exam_mode==='subject'||exam?.exam_mode==='choice'?'subject':'default';
   $('subject-config-kind').value=mode;
   const modeSelect=$('subject-mode');
   // The previous implementation only changed the value, leaving `disabled`
   // unchanged. This made the dropdown greyed out when switching from default to choice.
-  modeSelect.disabled=mode!=='choice';
-  if(mode!=='choice')modeSelect.value='required';
-  $('subject-order-wrap').classList.toggle('hidden',mode!=='choice'||modeSelect.value!=='elective');
+  modeSelect.disabled=mode!=='subject';
+  if(mode!=='subject')modeSelect.value='required';
+  $('subject-order-wrap').classList.toggle('hidden',mode!=='subject'||modeSelect.value!=='elective');
   $('subject-scope').dispatchEvent(new Event('change'));
   const note=$('subject-mode-note');
-  if(note)note.textContent=mode==='choice'
-    ?'Đây là kỳ thi lựa chọn: có thể đăng ký môn bắt buộc và môn lựa chọn cho lớp hoặc từng học sinh.'
-    :'Đây là kỳ thi mặc định: chỉ cấu hình môn bắt buộc theo khối/lớp. Muốn đăng ký môn lựa chọn, hãy tạo/chọn kỳ thi loại “Kỳ thi lựa chọn”.';
+  if(note)note.textContent=mode==='subject'
+    ?'Đây là kỳ thi theo môn: danh sách dự thi được quản lý theo từng môn; SBD được cấp riêng cho từng môn.'
+    :'Đây là kỳ thi mặc định: dùng SBD chung trong kỳ thi và cấu hình môn theo khối/lớp.';
 }
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
@@ -264,7 +264,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='sbd'){/* SBD is managed independently from rooming */}
+  if(tab==='sbd')refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
 }
 function renderSubjects(){$('subject-catalog').innerHTML='<div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Toán</strong><small>Lịch thi cứng, cấu hình riêng.</small></div><div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Ngữ văn</strong><small>Lịch thi cứng, cấu hình riêng.</small></div>'+SUBJECTS.map(s=>`<div class="subject-card"><span class="tag">LỰA CHỌN</span><strong>${esc(s.name)}</strong><small>Mã môn: <code>${s.code}</code></small></div>`).join('')}
 function parseCsv(text){
@@ -1851,13 +1851,46 @@ function sbdRoomInputs(){
   prefix:$('sbd-prefix').value.trim(),totalLength:Number($('sbd-length').value),prefixLength:Number($('sbd-prefix-length').value)};
 }
 function invalidateSbdRoomPreview(){sbdRoomPreview=null;$('sbd-room-preview-result').innerHTML=''}
+function isSubjectExam(examId){const mode=state.exams.find(exam=>exam.id===examId)?.exam_mode;return mode==='subject'||mode==='choice'}
+async function refreshSubjectSbdControls(){
+ const examId=$('sbd-exam-select').value,wrap=$('sbd-subject-wrap'),select=$('sbd-subject'),note=$('sbd-mode-note');
+ const subjectExam=isSubjectExam(examId);wrap.classList.toggle('hidden',!subjectExam);
+ for(const id of ['room-sort-mode','sbd-length','sbd-prefix-length','sbd-prefix','room-previous-exam'])$(id)?.closest('label')?.classList.toggle('hidden',subjectExam);
+ if(!subjectExam){select.innerHTML='<option value="">-- Chọn môn thi --</option>';if(note)note.textContent='Kỳ thi mặc định dùng một SBD chung trong toàn kỳ thi.';return false}
+ if(note)note.textContent='Kỳ thi theo môn: chọn môn để lập SBD riêng từ 0001 theo thứ tự họ và tên.';
+ if(!examId||!state.client){select.innerHTML='<option value="">-- Chọn môn thi --</option>';return true}
+ const previous=select.value;
+ const registrations=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code').eq('exam_id',examId).order('subject_code'));
+ const codes=[...new Set(registrations.map(row=>String(row.subject_code||'').trim().toUpperCase()).filter(Boolean))];
+ select.innerHTML='<option value="">-- Chọn môn thi --</option>'+codes.map(code=>`<option value="${esc(code)}">${esc(subjectName(code))} (${esc(code)})</option>`).join('');
+ select.value=codes.includes(previous)?previous:(codes.length===1?codes[0]:'');select.dataset.examId=examId;
+ return true;
+}
+async function assignSubjectSbd(examId){
+ const subjectCode=$('sbd-subject').value;
+ if(!subjectCode)throw new Error('Hãy chọn môn thi trước khi đánh SBD theo môn.');
+ const registrations=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('candidate_id').eq('exam_id',examId).eq('subject_code',subjectCode));
+ const ids=[...new Set(registrations.map(row=>row.candidate_id).filter(Boolean))];
+ if(!ids.length)throw new Error('Môn này chưa có học sinh đăng ký dự thi.');
+ const candidates=await selectAllPages(()=>state.client.from('exam_candidates').select('id,student_code,student_name,class_code').eq('exam_id',examId).in('id',ids));
+ if(candidates.length!==ids.length)throw new Error('Danh sách học sinh dự thi không còn đầy đủ. Hãy tải lại danh sách môn trước khi cấp SBD.');
+ const ordered=[...candidates].sort((a,b)=>compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),'vi',{numeric:true}));
+ const assignments=ordered.map((candidate,index)=>({candidate_id:candidate.id,sbd:String(index+1).padStart(4,'0')}));
+ const{error}=await state.client.rpc('exam_assign_subject_sbd',{p_exam_id:examId,p_subject_code:subjectCode,p_assignments:assignments});
+ if(error)throw new Error(`Không lưu được SBD theo môn. Hãy chạy migration v0.1.125. ${error.message}`);
+ $('sbd-room-preview-result').innerHTML=`<p>Đã cấp ${assignments.length} SBD cho môn ${esc(subjectName(subjectCode))} (${esc(subjectCode)}).</p><div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th></tr></thead><tbody>${ordered.map((candidate,index)=>`<tr><td>${assignments[index].sbd}</td><td>${esc(candidate.student_name)}</td><td>${esc(candidate.class_code||'—')}</td></tr>`).join('')}</tbody></table></div>`;
+ message($('sbd-message'),`Đã cấp ${assignments.length} SBD từ 0001 cho môn ${subjectName(subjectCode)}, theo thứ tự họ và tên.`,'success');
+}
 async function refreshSbdRoomControls(){
+ const examId=$('sbd-exam-select').value;
+ const subjectExam=await refreshSubjectSbdControls();
+ if(subjectExam){$('sbd-room-options').classList.add('hidden');return}
  const active=$('room-sort-mode').value==='elective_rooms';
  $('sbd-room-options').classList.toggle('hidden',!active);
  if(!active)return;
- const examId=$('sbd-exam-select').value,select=$('sbd-room-round');
+ const select=$('sbd-room-round');
  if(!examId||!state.client){select.innerHTML='<option value="">-- Chọn kỳ thi --</option>';return}
- if(state.exams.find(exam=>exam.id===examId)?.exam_mode!=='choice')throw new Error('Cách cấp SBD theo tổ hợp chỉ áp dụng cho kỳ thi lựa chọn.');
+ if(!isSubjectExam(examId))throw new Error('Cách cấp SBD theo tổ hợp chỉ áp dụng cho kỳ thi theo môn.');
  if(select.dataset.examId===examId&&select.value)return;
  const request=++sbdRoundRequest;select.disabled=true;
  try{
@@ -1898,7 +1931,7 @@ async function saveSbdRoomPreview(){
 }
 function wireSbdRoomMode(){
  const refresh=()=>refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
- for(const id of ['sbd-exam-select','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length']){
+ for(const id of ['sbd-exam-select','sbd-subject','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length']){
   const control=$(id);if(control)control.addEventListener('change',()=>{invalidateSbdRoomPreview();refresh()});
  }
  const previewButton=$('sbd-room-preview');
@@ -1909,6 +1942,19 @@ function wireSbdRoomMode(){
 async function resetSbdAndElectivePlan(){
  const examId=$('sbd-exam-select')?.value;
  if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi xoá SBD cũ.','error');return}
+ if(isSubjectExam(examId)){
+  const subjectCode=$('sbd-subject').value;
+  if(!subjectCode){message($('sbd-message'),'Hãy chọn môn thi trước khi xóa SBD theo môn.','error');return}
+  if(!confirm(`Xóa SBD của môn ${subjectName(subjectCode)} để lập lại? Thao tác không xóa học sinh hoặc đăng ký môn.`))return;
+  const button=$('reset-sbd-old');button.disabled=true;
+  try{
+   const{data,error}=await state.client.rpc('exam_reset_subject_sbd',{p_exam_id:examId,p_subject_code:subjectCode});
+   if(error)throw new Error(`Không xóa được SBD theo môn. Hãy chạy migration v0.1.125. ${error.message}`);
+   $('sbd-room-preview-result').innerHTML='';message($('sbd-message'),`Đã xóa ${Number(data?.deleted_count)||0} SBD của môn ${subjectName(subjectCode)}. Có thể lập lại từ 0001.`,'success');
+  }catch(error){message($('sbd-message'),error.message||String(error),'error')}
+  finally{button.disabled=false}
+  return;
+ }
  const exam=state.exams.find(item=>item.id===examId);
  const confirmation=prompt(`Kỳ thi: ${exam?.name||examId}\nLưu trữ SBD và toàn bộ phương án phòng (kể cả chính thức, mọi môn và đợt), sau đó xoá SBD hiện tại để lập lại. Giữ nguyên thí sinh và đăng ký môn. Các danh sách đã in sẽ không còn hiệu lực; cần xếp và chốt lại tất cả phòng.\nHệ thống sẽ chặn nếu đã có điểm, phách hoặc báo vắng.\nNhập LAP LAI SBD để xác nhận:`);
  if(confirmation!=='LAP LAI SBD')return;
@@ -1926,6 +1972,11 @@ async function resetSbdAndElectivePlan(){
 async function assignSbdByRoom(){
  const examId=$('sbd-exam-select')?.value;
  if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi đánh số báo danh.','error');return}
+ if(isSubjectExam(examId)){
+   const btn=$('assign-sbd-rooming');btn.disabled=true;
+   try{await assignSubjectSbd(examId)}catch(error){message($('sbd-message'),error.message||String(error),'error')}finally{btn.disabled=false}
+   return;
+ }
  const totalLength=Number($('sbd-length')?.value||6);
  const prefixLength=Number($('sbd-prefix-length')?.value||2);
  const prefix=String($('sbd-prefix')?.value||'').trim();
@@ -2637,9 +2688,9 @@ function wire(){ $('accounts-open-grading').onclick=async()=>{if(state.role!=='a
     const school_year=prompt('Năm học:',exam.school_year||'');
     if(school_year===null)return;
     if(!school_year.trim()){message($('global-message'),'Năm học không được để trống.','error');return;}
-    const modeInput=prompt('Loại kỳ thi: nhập 1 = Kỳ thi mặc định, 2 = Kỳ thi lựa chọn.',exam.exam_mode==='choice'?'2':'1');
+    const modeInput=prompt('Loại kỳ thi: nhập 1 = Kỳ thi mặc định, 2 = Kỳ thi theo môn.',isSubjectExam(exam.id)?'2':'1');
     if(modeInput===null)return;
-    const exam_mode=modeInput.trim()==='2'?'choice':modeInput.trim()==='1'?'default':null;
+    const exam_mode=modeInput.trim()==='2'?'subject':modeInput.trim()==='1'?'default':null;
     if(!exam_mode){message($('global-message'),'Loại kỳ thi không hợp lệ. Hãy nhập 1 hoặc 2.','error');return;}
     const {error}=await state.client.from('exam_sessions').update({name:name.trim(),school_year:school_year.trim(),exam_mode}).eq('id',exam.id);
     if(error){message($('global-message'),`Không sửa được kỳ thi: ${error.message}`,'error');return;}

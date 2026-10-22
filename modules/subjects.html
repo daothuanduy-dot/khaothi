@@ -2,7 +2,7 @@
         <div class="section-heading"><div><h2>Đăng ký và phân công môn thi</h2><p>Cấu hình danh mục môn thi và quản lý đăng ký đã có. Để nhập danh sách môn lựa chọn từ Excel, chỉ sử dụng mục “Quản lý môn lựa chọn theo lớp” bên dưới.</p></div></div>
         <div class="form-grid">
           <label>Kỳ thi<select id="subject-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
-          <label>Hình thức kỳ thi<select id="subject-config-kind" disabled><option value="default">Kỳ thi mặc định — phân công môn theo lớp</option><option value="choice">Kỳ thi lựa chọn — đăng ký môn theo lớp/học sinh</option></select></label><div id="subject-mode-note" class="notice notice-info" style="grid-column:1/-1">Chọn kỳ thi để tải đúng hình thức cấu hình môn.</div>
+          <label>Hình thức kỳ thi<select id="subject-config-kind" disabled><option value="default">Kỳ thi mặc định — SBD chung theo kỳ</option><option value="subject">Kỳ thi theo môn — SBD riêng từng môn</option></select></label><div id="subject-mode-note" class="notice notice-info" style="grid-column:1/-1">Chọn kỳ thi để tải đúng hình thức cấu hình môn.</div>
           <label>Loại môn<select id="subject-mode"><option value="required">Môn bắt buộc</option><option value="elective">Môn lựa chọn</option><option value="class">Môn tại lớp</option></select></label>
           <label>Phạm vi áp dụng<select id="subject-scope"><option value="grade">Theo khối</option><option value="class">Chọn lớp bằng checkbox</option><option value="class_students">Chọn học sinh trong lớp</option><option value="student">Theo mã học sinh</option></select></label>
           <label id="subject-class-code-wrap" class="hidden">Lớp áp dụng<input id="subject-class-code" placeholder="Ví dụ: 12A1"></label>
