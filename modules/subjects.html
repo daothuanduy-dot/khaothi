@@ -17,6 +17,18 @@
           <div class="hidden" aria-hidden="true"><input id="subject-csv" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"><button id="download-subject-template" type="button"></button></div>
           <div class="form-actions"><button id="apply-subject" class="btn btn-primary" type="button">Áp dụng môn thi</button><button id="load-subject-registrations" class="btn btn-light" type="button">Tải danh sách</button></div>
         </div>
+        <section id="default-subject-class-config" class="panel">
+          <div class="section-heading"><div><h3>Cấu hình môn – lớp</h3><p>Chỉ áp dụng cho kỳ thi mặc định. Chọn các lớp dự thi, rồi xác định thi chia phòng hoặc thi tại lớp.</p></div></div>
+          <div class="form-grid">
+            <label>Môn thi<select id="default-config-subject"></select></label>
+            <label>Hình thức thi<select id="default-config-method"><option value="room">Thi chia phòng</option><option value="class">Thi tại lớp</option></select></label>
+            <label>Loại môn<select id="default-config-subject-type"><option value="required">Bắt buộc</option><option value="elective">Lựa chọn</option></select></label>
+            <label class="check-field"><span>Tổng hợp</span><span><input id="default-config-counted" type="checkbox" checked> Tính điểm tổng hợp</span></label>
+          </div>
+          <div class="picker-panel"><div class="picker-heading"><strong>Chọn lớp áp dụng</strong><div><button id="default-config-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="default-config-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="default-config-classes" class="checkbox-grid"></div></div>
+          <div class="form-actions"><button id="default-config-save" class="btn btn-primary" type="button">Lưu cấu hình môn – lớp</button><button id="default-config-load" class="btn btn-light" type="button">Tải cấu hình</button></div>
+          <div id="default-config-message" class="notice hidden"></div>
+        </section>
         <div class="notice notice-info">Lưu ý: nhập danh sách môn lựa chọn từ Excel tại duy nhất mục “Quản lý môn lựa chọn theo lớp” bên dưới. Khu vực này chỉ dùng để cấu hình môn thi hoặc quản lý đăng ký từng môn, tránh nhập trùng qua nhiều luồng.</div>
         <section class="panel" aria-labelledby="subject-delete-heading">
           <div class="section-heading"><div><h3 id="subject-delete-heading">Xóa đăng ký / phân công môn thi</h3><p>Chỉ xóa các lượt đăng ký môn của kỳ thi; không xóa hồ sơ học sinh, cấu hình môn, điểm hoặc lịch sử chấm.</p></div></div>

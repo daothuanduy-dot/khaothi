@@ -1,10 +1,10 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.125';
-import {loadTabModules} from './module-loader.js?v=0.1.125';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.125';
-import {wireAccounts} from './accounts.js?v=0.1.125';
-import {loadExamRounds} from './rounds.js?v=0.1.125';
-const APP_VERSION='v0.1.125';
-const APP_BUILD='2026-10-22-subject-exam-sbd';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.126';
+import {loadTabModules} from './module-loader.js?v=0.1.126';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.126';
+import {wireAccounts} from './accounts.js?v=0.1.126';
+import {loadExamRounds} from './rounds.js?v=0.1.126';
+const APP_VERSION='v0.1.126';
+const APP_BUILD='2026-10-22-default-subject-class-config';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -248,6 +248,25 @@ function syncSubjectExamMode(){
   if(note)note.textContent=mode==='subject'
     ?'Đây là kỳ thi theo môn: danh sách dự thi được quản lý theo từng môn; SBD được cấp riêng cho từng môn.'
     :'Đây là kỳ thi mặc định: dùng SBD chung trong kỳ thi và cấu hình môn theo khối/lớp.';
+}
+async function loadDefaultSubjectClassConfig(){
+ const examId=$('subject-exam-select').value, panel=$('default-subject-class-config'), box=$('default-config-classes');
+ const enabled=!!examId&&!isSubjectExam(examId);panel.classList.toggle('hidden',!enabled);if(!enabled)return;
+ const candidates=await selectAllPages(()=>state.client.from('exam_candidates').select('class_code').eq('exam_id',examId).order('class_code'));
+ const classes=[...new Set(candidates.map(row=>String(row.class_code||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+ const catalog=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];
+ $('default-config-subject').innerHTML=catalog.map(item=>`<option value="${esc(item.code)}">${esc(item.name)} (${esc(item.code)})</option>`).join('');
+ box.innerHTML=classes.map(code=>`<label class="picker-option"><input class="default-config-class" type="checkbox" value="${esc(code)}"> <span>${esc(code)}</span></label>`).join('')||'<div class="picker-empty">Chưa có lớp trong kỳ thi.</div>';
+ const{data,error}=await state.client.from('exam_subject_class_configs').select('class_code,exam_method,subject_type,is_counted').eq('exam_id',examId).eq('subject_code',$('default-config-subject').value);
+ if(error)throw new Error(`Không tải được cấu hình môn – lớp. Hãy chạy migration v0.1.126. ${error.message}`);
+ const rows=data||[];for(const row of rows){const input=box.querySelector(`[value="${CSS.escape(row.class_code)}"]`);if(input)input.checked=true}
+ if(rows[0]){$('default-config-method').value=rows[0].exam_method;$('default-config-subject-type').value=rows[0].subject_type;$('default-config-counted').checked=rows[0].is_counted}
+}
+async function saveDefaultSubjectClassConfig(){
+ const examId=$('subject-exam-select').value,classes=[...document.querySelectorAll('.default-config-class:checked')].map(input=>input.value);
+ const{error}=await state.client.rpc('exam_save_subject_class_config',{p_exam_id:examId,p_subject_code:$('default-config-subject').value,p_exam_method:$('default-config-method').value,p_subject_type:$('default-config-subject-type').value,p_is_counted:$('default-config-counted').checked,p_class_codes:classes});
+ if(error)throw new Error(error.message);await loadDefaultSubjectClassConfig();await loadSubjectRegistrations();
+ message($('default-config-message'),'Đã lưu cấu hình môn – lớp và danh sách học sinh dự thi.','success');
 }
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
@@ -2847,6 +2866,14 @@ async function boot(){
   }catch(error){
     console.error('Không khởi tạo được các handler nghiệp vụ:',error);
   }
+  try{
+    $('default-config-load').onclick=()=>loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
+    $('default-config-subject').onchange=()=>$('default-config-load').click();
+    $('default-config-select-all').onclick=()=>document.querySelectorAll('.default-config-class').forEach(input=>input.checked=true);
+    $('default-config-clear').onclick=()=>document.querySelectorAll('.default-config-class').forEach(input=>input.checked=false);
+    $('default-config-save').onclick=async()=>{const button=$('default-config-save');button.disabled=true;try{await saveDefaultSubjectClassConfig()}catch(error){message($('default-config-message'),error.message,'error')}finally{button.disabled=false}};
+    $('subject-exam-select').addEventListener('change',()=>loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error')));
+  }catch(error){console.error('Không khởi tạo được cấu hình môn – lớp:',error)}
   // Keep the school roster independent from every other module. A failure in
   // another module must never prevent its filters and actions from working.
   try{
