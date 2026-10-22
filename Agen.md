@@ -2,6 +2,14 @@
 
 Cập nhật: 2026-10-21. Tài liệu ghi nhận trao đổi và yêu cầu của chủ dự án.
 
+## Cập nhật triển khai — 2026-10-22
+
+Đã triển khai mảng đầu tiên của cấu hình kỳ thi: hệ thống dùng hai loại kỳ thi là
+**mặc định** và **theo môn**. Kỳ thi theo môn lập SBD riêng cho từng môn, bắt đầu
+từ `0001` và sắp theo họ tên (tên → đệm → họ; cùng tên thì theo mã học sinh).
+SBD này độc lập với SBD chung của kỳ thi mặc định. Migration triển khai là
+[v0.1.125_subject_exam_sbd.sql](./sql/v0.1.125_subject_exam_sbd.sql).
+
 ## Cách sử dụng tài liệu
 
 Trước khi cập nhật, bổ sung cấu hình kỳ thi, môn, lớp, nhóm, phòng, SBD, tài khoản,
@@ -37,9 +45,9 @@ luồng nhập điểm theo phách.
 
 ## 2. Loại kỳ thi và cấu hình môn
 
-Phân biệt **môn lựa chọn** (loại môn) với **kỳ thi lựa chọn** (loại kỳ thi).
+Phân biệt **môn lựa chọn** (loại môn) với **kỳ thi theo môn** (loại kỳ thi).
 
-| Chức năng | Kỳ thi mặc định | Kỳ thi lựa chọn |
+| Chức năng | Kỳ thi mặc định | Kỳ thi theo môn |
 |---|---|---|
 | Thêm, sửa, xóa và cấu hình môn tại giao diện này | Có | Không có cụm chức năng này |
 | Gán môn cho cả lớp và chọn hình thức thi theo môn–lớp | Có | Không áp dụng |
@@ -63,7 +71,7 @@ Môn không được chọn Tính điểm vẫn có bài thi và kết quả ri�
   thành phần và cách nhập điểm nói. Không tự mặc định cộng thẳng hoặc lấy trung bình.
 - Sao chép cấu hình phải bao gồm thuộc tính thành phần của môn đã thiết lập.
 
-Trong kỳ thi lựa chọn, không giới hạn đăng ký môn theo danh sách môn đã gán cho lớp
+Trong kỳ thi theo môn, không giới hạn đăng ký môn theo danh sách môn đã gán cho lớp
 hoặc môn học sinh đang học. Đây là yêu cầu nghiệp vụ chủ dự án đã xác nhận;
 tài liệu này không phải kết quả thẩm định văn bản pháp luật.
 
@@ -94,6 +102,9 @@ tài liệu này không phải kết quả thẩm định văn bản pháp luậ
   khoảng trống SBD chỉ vì nhóm trước còn ghế trống.
 - Ví dụ 24 học sinh/phòng: nhóm 1 có 50 em dùng ba phòng (24,24,2), SBD 0001–0050;
   nhóm 2 có 30 em dùng hai phòng mới (24,6), SBD 0051–0080.
+- Yêu cầu cần triển khai tiếp tại tab **Quản lý SBD** cho kỳ thi toàn trường: cấu hình đầu SBD
+  riêng theo từng khối (10, 11, 12 hoặc đầu số do quản trị nhập) và chọn quy tắc xếp số cho
+  từng khối. Chưa thay đổi cơ chế cấp SBD hiện tại cho đến khi triển khai riêng mảng này.
 - Không gán một lớp trùng vào nhiều nhóm trong cùng phương án.
 - Cần chốt chiều sắp theo tổng điểm, xử lý trùng toàn bộ họ tên và học sinh không có
   kết quả kỳ trước. Không yêu cầu xác nhận lại việc dùng tổng thay vì trung bình.
@@ -207,7 +218,7 @@ Các ví dụ đã được chủ dự án xác nhận:
 ## 11. Tổng điểm, trung bình và xếp thứ hạng
 
 - Kỳ thi mặc định: xét các môn được đánh dấu Tính điểm.
-- Kỳ thi lựa chọn: xét tất cả bài thi của học sinh.
+- Kỳ thi theo môn: xét tất cả bài thi của học sinh.
 - Trong cả hai loại kỳ thi, loại môn vắng khỏi tổng và mẫu số tính trung bình,
   bao gồm cả điểm bổ sung của môn vắng.
 - Nếu thiếu bài một môn, vẫn tính tổng và trung bình trên các môn có kết quả

@@ -1,10 +1,10 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.127';
-import {loadTabModules} from './module-loader.js?v=0.1.127';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.127';
-import {wireAccounts} from './accounts.js?v=0.1.127';
-import {loadExamRounds} from './rounds.js?v=0.1.127';
-const APP_VERSION='v0.1.127';
-const APP_BUILD='2026-10-22-default-subject-config-management';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.128';
+import {loadTabModules} from './module-loader.js?v=0.1.128';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.128';
+import {wireAccounts} from './accounts.js?v=0.1.128';
+import {loadExamRounds} from './rounds.js?v=0.1.128';
+const APP_VERSION='v0.1.128';
+const APP_BUILD='2026-10-22-subject-class-method-exclusion';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -260,23 +260,28 @@ async function loadDefaultSubjectClassConfig(){
  const subjectSelect=$('default-config-subject'), selected=subjectSelect.value;
  subjectSelect.innerHTML=catalog.map(item=>`<option value="${esc(item.code)}">${esc(item.name)} (${esc(item.code)})</option>`).join('');
  subjectSelect.value=catalog.some(item=>item.code===selected)?selected:catalog[0].code;
- box.innerHTML=classes.map(code=>`<label class="picker-option"><input class="default-config-class" type="checkbox" value="${esc(code)}"> <span>${esc(code)}</span></label>`).join('')||'<div class="picker-empty">Chưa có lớp trong kỳ thi.</div>';
  const{data,error}=await state.client.from('exam_subject_class_configs').select('subject_code,class_code,exam_method,subject_type,is_counted').eq('exam_id',examId).order('subject_code').order('class_code');
  if(error)throw new Error(`Không tải được cấu hình môn – lớp. Hãy chạy migration v0.1.126. ${error.message}`);
- const allRows=data||[],rows=allRows.filter(row=>row.subject_code===subjectSelect.value);for(const row of rows){const input=box.querySelector(`[value="${CSS.escape(row.class_code)}"]`);if(input)input.checked=true}
- if(rows[0]){$('default-config-method').value=rows[0].exam_method;$('default-config-subject-type').value=rows[0].subject_type;$('default-config-counted').checked=rows[0].is_counted}
- else{$('default-config-method').value='room';$('default-config-subject-type').value='required';$('default-config-counted').checked=true}
+ const allRows=data||[],method=$('default-config-method').value,subjectRows=allRows.filter(row=>row.subject_code===subjectSelect.value),rows=subjectRows.filter(row=>row.exam_method===method),occupied=new Set(subjectRows.filter(row=>row.exam_method!==method).map(row=>row.class_code));
+ const available=classes.filter(code=>!occupied.has(code));
+ box.innerHTML=available.map(code=>`<label class="picker-option"><input class="default-config-class" type="checkbox" value="${esc(code)}"> <span>${esc(code)}</span></label>`).join('')||'<div class="picker-empty">Không còn lớp có thể chọn theo hình thức thi này.</div>';
+ for(const row of rows){const input=box.querySelector(`[value="${CSS.escape(row.class_code)}"]`);if(input)input.checked=true}
+ const unavailable=[...occupied].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+ $('default-config-availability').textContent=unavailable.length?`Đã ẩn ${unavailable.join(', ')} vì các lớp này đã được cấu hình ${method==='room'?'thi tại lớp':'thi chia phòng'} cho môn này.`:'Các lớp chưa được cấu hình theo hình thức còn lại đều có thể chọn.';
+ const configRow=rows[0]||subjectRows[0];
+ if(configRow){$('default-config-subject-type').value=configRow.subject_type;$('default-config-counted').checked=configRow.is_counted}
+ else{$('default-config-subject-type').value='required';$('default-config-counted').checked=true}
  renderDefaultSubjectConfigList(allRows,catalog);
 }
 function renderDefaultSubjectConfigList(rows,catalog){
  const body=$('default-config-list-body'), byCode=new Map(catalog.map(item=>[item.code,item.name]));
- const groups=new Map();for(const row of rows){if(!groups.has(row.subject_code))groups.set(row.subject_code,[]);groups.get(row.subject_code).push(row)}
+ const groups=new Map();for(const row of rows){const key=`${row.subject_code}:${row.exam_method}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row)}
  if(!groups.size){body.innerHTML='<tr><td colspan="6" class="empty">Chưa có môn nào được cấu hình.</td></tr>';return}
- body.innerHTML=[...groups.entries()].map(([code,items])=>{const first=items[0],classes=items.map(item=>item.class_code).join(', ');return `<tr><td><b>${esc(byCode.get(code)||code)}</b><br><small>${esc(code)}</small></td><td>${first.subject_type==='elective'?'Lựa chọn':'Bắt buộc'}</td><td>${first.exam_method==='class'?'Thi tại lớp':'Thi chia phòng'}</td><td>${esc(classes)}</td><td>${first.is_counted?'Có':'Không'}</td><td><button class="small-btn" data-default-config-edit="${esc(code)}">Sửa</button> <button class="small-btn danger-btn" data-default-config-delete="${esc(code)}">Xóa</button></td></tr>`}).join('');
+ body.innerHTML=[...groups.values()].map(items=>{const first=items[0],code=first.subject_code,classes=items.map(item=>item.class_code).join(', ');return `<tr><td><b>${esc(byCode.get(code)||code)}</b><br><small>${esc(code)}</small></td><td>${first.subject_type==='elective'?'Lựa chọn':'Bắt buộc'}</td><td>${first.exam_method==='class'?'Thi tại lớp':'Thi chia phòng'}</td><td>${esc(classes)}</td><td>${first.is_counted?'Có':'Không'}</td><td><button class="small-btn" data-default-config-edit="${esc(code)}" data-default-config-method="${esc(first.exam_method)}">Sửa</button> <button class="small-btn danger-btn" data-default-config-delete="${esc(code)}">Xóa</button></td></tr>`}).join('');
 }
 function resetDefaultSubjectClassConfig(){
  $('default-config-subject').selectedIndex=0;$('default-config-method').value='room';$('default-config-subject-type').value='required';$('default-config-counted').checked=true;
- document.querySelectorAll('.default-config-class').forEach(input=>input.checked=false);
+ loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
  $('default-config-message').classList.add('hidden');
 }
 async function saveDefaultSubjectClassConfig(){
@@ -2893,6 +2898,7 @@ async function boot(){
   }
   try{
     $('default-config-subject').onchange=()=>loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
+    $('default-config-method').onchange=()=>loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
     $('default-config-select-all').onclick=()=>document.querySelectorAll('.default-config-class').forEach(input=>input.checked=true);
     $('default-config-clear').onclick=()=>document.querySelectorAll('.default-config-class').forEach(input=>input.checked=false);
     $('default-config-save').onclick=async()=>{const button=$('default-config-save');button.disabled=true;try{await saveDefaultSubjectClassConfig()}catch(error){message($('default-config-message'),error.message,'error')}finally{button.disabled=false}};
@@ -2900,7 +2906,7 @@ async function boot(){
     $('settings-exam-select').addEventListener('change',()=>loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error')));
     $('default-config-list-body').addEventListener('click',event=>{
       const edit=event.target.closest('[data-default-config-edit]');
-      if(edit){$('default-config-subject').value=edit.dataset.defaultConfigEdit;loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));return}
+      if(edit){$('default-config-subject').value=edit.dataset.defaultConfigEdit;$('default-config-method').value=edit.dataset.defaultConfigMethod;loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));return}
       const remove=event.target.closest('[data-default-config-delete]');
       if(remove)deleteDefaultSubjectClassConfig(remove.dataset.defaultConfigDelete).catch(error=>message($('default-config-message'),error.message,'error'));
     });

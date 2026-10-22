@@ -1,6 +1,6 @@
 const TAB_MODULES = ['exams', 'school-students', 'candidates', 'subjects', 'sbd', 'rooming', 'forms', 'absences', 'scripts', 'accounts', 'scores', 'settings'];
 // Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
-const MODULE_VERSION = '0.1.127';
+const MODULE_VERSION = '0.1.128';
 // Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
 
 export async function loadTabModules() {
