@@ -1,10 +1,10 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.128';
-import {loadTabModules} from './module-loader.js?v=0.1.128';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.128';
-import {wireAccounts} from './accounts.js?v=0.1.128';
-import {loadExamRounds} from './rounds.js?v=0.1.128';
-const APP_VERSION='v0.1.128';
-const APP_BUILD='2026-10-22-subject-class-method-exclusion';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.129';
+import {loadTabModules} from './module-loader.js?v=0.1.129';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.129';
+import {wireAccounts} from './accounts.js?v=0.1.129';
+import {loadExamRounds} from './rounds.js?v=0.1.129';
+const APP_VERSION='v0.1.129';
+const APP_BUILD='2026-10-22-independent-subject-method-score-flag';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
