@@ -1,15 +1,17 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.130';
-import {loadTabModules} from './module-loader.js?v=0.1.130';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.130';
-import {wireAccounts} from './accounts.js?v=0.1.130';
-import {loadExamRounds} from './rounds.js?v=0.1.130';
-const APP_VERSION='v0.1.130';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.132';
+import {loadTabModules} from './module-loader.js?v=0.1.132';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.132';
+import {wireAccounts} from './accounts.js?v=0.1.132';
+import {wireTeaching} from './teaching.js?v=0.1.132';
+import {loadExamRounds} from './rounds.js?v=0.1.132';
+const APP_VERSION='v0.1.132';
 const APP_BUILD='2026-10-22-independent-subject-method-score-flag';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
 let operations=null;
 let accounts=null;
+let teaching=null;
 let schoolStudents=[];
 let schoolStudentCatalog=[];
 let schoolStudentLoadToken=0;
@@ -312,6 +314,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
+  if(tab==='teaching')teaching?.refresh();
   if(tab==='sbd')refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
   if(tab==='settings')loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
 }
@@ -2876,6 +2879,8 @@ async function boot(){
   }
   try{accounts=wireAccounts({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
+  try{teaching=wireTeaching({state,$,esc,message,subjects:SUBJECTS})}
+  catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
   try{
     operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){
