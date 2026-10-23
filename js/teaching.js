@@ -40,7 +40,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
   const notice=(text,type='info')=>message($('teaching-message'),text,type);
   const requireAdmin=()=>{if(state.role!=='admin'||!state.client)throw new Error('Chỉ Admin được quản lý phân công giảng dạy.')};
   async function checked(request){const {data,error}=await request;if(error){
-    if(['42P01','42703','PGRST202','PGRST205'].includes(error.code))throw new Error('Cần chạy migration 130 và 132 để dùng phân công giảng dạy.');
+    if(['42P01','42703','PGRST202','PGRST205'].includes(error.code))throw new Error('Cần chạy migration 130, 132 và 136 để dùng phân công và liên kết học kỳ.');
     throw new Error(error.message||String(error));
   }return data}
   // Supabase returns at most a page by default; assignments can exceed 1,000 cells.
@@ -122,7 +122,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
     return {classes:results[0].value,assignments:results[1].value,homerooms:results[2].value};
   }
-  async function load(id=periodId,requestedExamId=sourceExamId){
+  async function load(id=periodId,requestedExamId=sourceExamId,useLinkedPeriod=false){
     requireAdmin();
     const results=await Promise.allSettled([
       all('school_teaching_periods','id,school_year,semester',q=>q.order('school_year',{ascending:false}).order('semester',{ascending:false})),
@@ -131,10 +131,14 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     ]);
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
     const nextPeriods=results[0].value;
-    const nextId=nextPeriods.some(row=>row.id===id)?id:nextPeriods[0]?.id||'';
+    let nextId=nextPeriods.some(row=>row.id===id)?id:nextPeriods[0]?.id||'';
     const year=nextPeriods.find(row=>row.id===nextId)?.school_year;
     const exams=(state.exams||[]).filter(row=>normalizeYear(row.school_year)===year);
     const exam=exams.find(row=>row.id===requestedExamId)||exams.find(row=>row.id===state.selectedExam)||exams[0];
+    if(exam&&useLinkedPeriod){
+      const setup=await checked(state.client.rpc('exam_get_ranking_setup',{p_exam_id:exam.id}));
+      if(setup?.period_id&&nextPeriods.some(row=>row.id===setup.period_id))nextId=setup.period_id;
+    }
     const nextCatalog=await readExamSubjects(exam);
     const data=nextId===id?results[2].value:await readPeriod(nextId);
     periods=nextPeriods;catalog=nextCatalog;sourceExamId=exam?.id||'';teachers=results[1].value;
@@ -165,7 +169,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
   $('teaching-source-exam').onchange=()=>{
     const id=$('teaching-source-exam').value;
     if(!id||!mayDiscard()){$('teaching-source-exam').value=sourceExamId;return}
-    return run(async()=>{try{await load(periodId,id)}catch(error){$('teaching-source-exam').value=sourceExamId;throw error}});
+    return run(async()=>{try{await load(periodId,id,true)}catch(error){$('teaching-source-exam').value=sourceExamId;throw error}});
   };
   $('teaching-grade').onchange=render;$('teaching-search').oninput=render;$('teaching-missing').onchange=render;
   $('teaching-matrix').onchange=event=>{
@@ -245,5 +249,5 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     notice(`Đã điền ${count} ô trống cho các lớp/môn trùng mã. Kiểm tra và nhấn Lưu thay đổi.`);
   });
   window.addEventListener('beforeunload',event=>{if(draft.changes.size){event.preventDefault();event.returnValue=''}});
-  return {refresh:()=>{if(busy||draft.changes.size)return Promise.resolve();return run(()=>load())}};
+  return {refresh:()=>{if(busy||draft.changes.size)return Promise.resolve();return run(()=>load(undefined,undefined,true))}};
 }

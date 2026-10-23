@@ -1,17 +1,19 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.135';
-import {loadTabModules} from './module-loader.js?v=0.1.135';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.135';
-import {wireAccounts} from './accounts.js?v=0.1.135';
-import {wireTeaching} from './teaching.js?v=0.1.135';
-import {loadExamRounds} from './rounds.js?v=0.1.135';
-const APP_VERSION='v0.1.135';
-const APP_BUILD='2026-10-23-teaching-exam-subjects';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.136';
+import {loadTabModules} from './module-loader.js?v=0.1.136';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.136';
+import {wireAccounts} from './accounts.js?v=0.1.136';
+import {wireTeaching} from './teaching.js?v=0.1.136';
+import {wireRanking} from './ranking.js?v=0.1.136';
+import {loadExamRounds} from './rounds.js?v=0.1.136';
+const APP_VERSION='v0.1.136';
+const APP_BUILD='2026-10-23-exam-period-ranking-bans';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
 let operations=null;
 let accounts=null;
 let teaching=null;
+let ranking=null;
 let schoolStudents=[];
 let schoolStudentCatalog=[];
 let schoolStudentLoadToken=0;
@@ -319,7 +321,7 @@ function switchTab(tab){
     else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html, sau đó tải lại bằng Ctrl+F5.','error');
   }
   if(tab==='sbd')refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
-  if(tab==='settings')loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
+  if(tab==='settings'){ranking?.refresh();loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'))}
 }
 function renderSubjects(){$('subject-catalog').innerHTML='<div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Toán</strong><small>Lịch thi cứng, cấu hình riêng.</small></div><div class="subject-card"><span class="tag">BẮT BUỘC</span><strong>Ngữ văn</strong><small>Lịch thi cứng, cấu hình riêng.</small></div>'+SUBJECTS.map(s=>`<div class="subject-card"><span class="tag">LỰA CHỌN</span><strong>${esc(s.name)}</strong><small>Mã môn: <code>${s.code}</code></small></div>`).join('')}
 function parseCsv(text){
@@ -2885,6 +2887,8 @@ async function boot(){
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
   try{teaching=wireTeaching({state,$,esc,message,subjects:SUBJECTS})}
   catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
+  try{ranking=wireRanking({state,$,esc,message})}
+  catch(error){console.error('Không khởi tạo được cấu hình ban:',error);message($('ranking-message'),error.message,'error')}
   try{
     operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){

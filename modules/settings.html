@@ -1,6 +1,23 @@
 <section class="tab-panel hidden" id="tab-settings">
   <div class="section-heading"><div><h2>Cấu hình kỳ thi</h2><p>Thiết lập môn, lớp và hình thức thi trước khi xếp phòng, đánh phách hoặc nhập điểm.</p></div></div>
   <div class="form-grid"><label>Kỳ thi<select id="settings-exam-select"><option value="">-- Chọn kỳ thi --</option></select></label></div>
+  <section id="ranking-setup" class="panel">
+    <h3>Học kỳ phân công và ban xếp hạng</h3>
+    <div id="ranking-message" class="notice hidden" role="status"></div>
+    <label>Học kỳ lấy giáo viên<select id="ranking-period"><option value="">-- Chọn học kỳ --</option></select></label>
+    <p>Liên kết này dùng để tra giáo viên dạy từng lớp, môn và GVCN khi thống kê.</p>
+    <div class="form-actions"><button id="ranking-refresh" class="btn btn-light" type="button">Tải lại</button><button id="ranking-save" class="btn btn-primary" type="button" disabled>Lưu liên kết và các ban</button><button id="ranking-new" class="btn btn-light" type="button">Thêm ban</button></div>
+    <p id="ranking-summary" role="status"></p>
+    <div id="ranking-list" class="table-wrap"></div>
+    <div id="ranking-editor" hidden>
+      <h4 id="ranking-editor-title">Thiết lập ban</h4>
+      <div class="form-grid"><label>Tên ban<input id="ranking-name" maxlength="100" placeholder="Ví dụ: Khoa học tự nhiên"></label><label>Khối<select id="ranking-grade"></select></label></div>
+      <p>Chọn các lớp cùng khối. Mỗi lớp chỉ thuộc một ban trong kỳ thi.</p>
+      <div id="ranking-classes" class="checkbox-grid"></div>
+      <div class="form-actions"><button id="ranking-apply" class="btn btn-light" type="button">Đưa vào danh sách ban</button><button id="ranking-cancel" class="btn btn-light" type="button">Hủy sửa ban</button></div>
+    </div>
+    <p>Chỉ xếp hạng trong cùng ban. Hệ thống kiểm tra các lớp có cùng bộ môn Tính điểm; ban chưa phù hợp vẫn lưu được để hoàn thiện, nhưng chưa đủ điều kiện xếp hạng.</p>
+  </section>
   <div id="default-subject-class-config" class="panel hidden">
     <div class="section-heading"><div><h3>Thêm hoặc sửa cấu hình môn</h3><p>Chọn môn, các lớp dự thi và hình thức thi. Nút Lưu sẽ thêm mới hoặc cập nhật cấu hình của môn đang chọn.</p></div></div>
     <div class="form-grid">
