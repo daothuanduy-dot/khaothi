@@ -2,20 +2,28 @@
   <h2>Quản lý tài khoản</h2>
   <p>Tài khoản giáo viên tồn tại độc lập với kỳ thi. Tạo tài khoản hoặc phân quyền tài khoản Google, lưu vai trò và môn phụ trách. Khi giao chấm, chọn giáo viên hoặc nhóm giáo viên; không cần cấp quyền kỳ thi riêng.</p>
   <div id="accounts-message" class="notice hidden" role="status"></div>
-  <button id="accounts-refresh" type="button">Tải lại tài khoản</button>
+  <div class="form-actions"><button id="accounts-new" class="btn btn-primary" type="button">Thêm tài khoản</button><button id="accounts-refresh" class="btn btn-light" type="button">Tải lại danh sách</button></div>
   <button id="accounts-open-grading" type="button" class="btn btn-light">Mở khu vực nhập điểm</button>
   <p>Giáo viên đăng nhập tài khoản đã được phân quyền sẽ tự vào khu vực nhập điểm. Admin mở khu vực này để kiểm tra giao diện; không tự có quyền nhập thay giáo viên.</p>
+  <label>Tìm tài khoản<input id="accounts-search" type="search" placeholder="Họ tên, tên tắt hoặc email"></label>
+  <p id="accounts-count" role="status"></p>
+  <div class="table-wrap"><table><thead><tr><th>Họ và tên</th><th>Tên thống kê</th><th>Email</th><th>Vai trò</th><th>Môn phụ trách</th><th>Thao tác</th></tr></thead><tbody id="accounts-list"><tr><td colspan="6">Đang chờ tải danh sách tài khoản.</td></tr></tbody></table></div>
+  <dialog id="accounts-dialog" class="candidate-modal" aria-labelledby="accounts-form-title">
+  <form id="accounts-form">
+  <div class="modal-heading"><h3 id="accounts-form-title">Thêm tài khoản</h3><button id="accounts-close" class="modal-close" type="button" aria-label="Đóng">×</button></div>
+  <div id="accounts-form-message" class="notice hidden" role="status"></div>
+  <input id="accounts-user" type="hidden">
   <div class="form-grid">
-    <label>Tài khoản<select id="accounts-user"></select></label>
-    <label>Họ và tên<input id="accounts-full-name" autocomplete="off" maxlength="160"></label>
+    <label>Họ và tên<input id="accounts-full-name" autocomplete="off" maxlength="160" required></label>
     <label>Tên trên thống kê<input id="accounts-report-name" autocomplete="off" maxlength="40" placeholder="Ví dụ: N.Thanh"><small>Tên ngắn gọn của giáo viên dùng trên báo cáo.</small></label>
-    <label>Email<input id="accounts-email" type="email" autocomplete="off" maxlength="254"></label>
+    <label>Email<input id="accounts-email" type="email" autocomplete="off" maxlength="254" required></label>
     <label>Mật khẩu mới<input id="accounts-password" type="password" autocomplete="new-password" minlength="8"><small>Bắt buộc khi tạo mới; để trống khi sửa nếu giữ mật khẩu cũ.</small></label>
     <label>Vai trò<select id="accounts-role"><option value="grader">Giáo viên</option><option value="admin">Admin</option></select></label>
     <label>Môn phụ trách<select id="accounts-subject"></select></label>
   </div>
-  <div class="form-actions"><button id="accounts-new" class="btn btn-light" type="button">Thêm mới</button><button id="accounts-create" class="btn btn-primary" type="button">Tạo tài khoản</button><button id="accounts-update" class="btn btn-light" type="button">Lưu sửa tài khoản</button><button id="accounts-delete" class="btn danger-btn" type="button">Xóa tài khoản</button></div>
-  <button id="accounts-save-role" type="button">Lưu vai trò và môn</button>
+  <div class="modal-actions"><button id="accounts-delete" class="btn danger-btn" type="button" hidden>Xóa tài khoản</button><button id="accounts-cancel" class="btn btn-light" type="button">Hủy</button><button id="accounts-create" class="btn btn-primary" type="submit">Tạo tài khoản</button><button id="accounts-update" class="btn btn-primary" type="submit" hidden>Lưu thay đổi</button></div>
+  </form>
+  </dialog>
   <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
   <div class="form-grid">
     <label>Môn của nhóm<select id="accounts-group-subject"></select></label>
