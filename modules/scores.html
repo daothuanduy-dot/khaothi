@@ -32,13 +32,15 @@
     <p id="scores-exam-label" role="status"></p>
     <select id="scores-exam" hidden aria-hidden="true" tabindex="-1"><option value="">-- Chọn kỳ thi --</option></select>
     <label>Môn thi<select id="scores-subject"><option value="">-- Chọn môn --</option></select></label>
+    <label>Hình thức tính điểm<select id="scores-mode"><option value="">-- Đọc hình thức đã lưu --</option><option value="essay">Chỉ tự luận</option><option value="mcq">Chỉ trắc nghiệm</option><option value="combined">Tự luận + trắc nghiệm</option></select></label>
+    <div class="form-actions"><button id="scores-load-mode" class="btn btn-light" type="button">Đọc hình thức đã lưu</button><button id="scores-save-mode" class="btn btn-light" type="button">Lưu hình thức tính điểm</button></div>
     <label>Tệp kết quả trắc nghiệm<input id="scores-file" type="file" accept=".xlsx,.xls,.csv"></label>
     <label>Cột SBD<input id="scores-sbd-column" type="text" value="B" maxlength="3" placeholder="B"></label>
     <label>Cột điểm trắc nghiệm<input id="scores-mcq-column" type="text" value="F" maxlength="3" placeholder="F"></label>
     <label>Dòng dữ liệu đầu tiên<input id="scores-first-row" type="number" min="1" step="1" value="2"></label>
     <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-load" class="btn btn-light" type="button">Tải điểm tổng hợp</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
   </div>
-  <p class="help-text">Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F. Với mẫu SBD ở A, điểm ở B: nhập A và B. Dòng đầu thường là tiêu đề nên bắt đầu từ dòng 2. Điểm tổng chỉ được tính khi đã có cả hai phần và bằng tự luận + trắc nghiệm.</p>
+  <p class="help-text">Chọn môn và đọc hình thức đã lưu; chỉ bấm Lưu nếu cần thay đổi. Tự luận lấy điểm qua phách, trắc nghiệm đối chiếu SBD. Môn kết hợp cộng hai thành phần khi đủ điểm. Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F; dòng dữ liệu thường bắt đầu từ dòng 2.</p>
   <div id="scores-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div id="scores-summary" class="metric-grid"></div>
   <div id="scores-preview" class="table-wrap"></div>

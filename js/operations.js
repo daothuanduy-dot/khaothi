@@ -1,3 +1,11 @@
+export function subjectResultStatus(row){
+  if(row.is_absent)return 'Vắng';
+  if(row.essay_missing&&row.mcq_missing)return 'Thiếu cả hai phần';
+  if(row.essay_missing)return 'Thiếu tự luận';
+  if(row.mcq_missing)return 'Thiếu trắc nghiệm';
+  if(row.no_paper)return 'Không bài';
+  return row.total_score==null?'Chưa đủ điểm':'Đủ điểm';
+}
 // Keep printing in this tab. Reuse at most one off-screen document.
 export function createPrintFrame(doc=document){
   doc.getElementById('exam-print-frame')?.remove();
@@ -1226,9 +1234,27 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const id of ['scores-preview','scores-results','scores-summary'])$(id).innerHTML='';
     $('scores-import').disabled=true;$('scores-export').disabled=true;
   }
+  async function loadScoreMode(){
+    const examId=state.selectedExam,subject=$('scores-subject').value,key=scoreKey();
+    setAdminExam(examId);if(!subject)throw new Error('Chọn môn thi.');
+    const{data,error}=await state.client.from('exam_subject_assessment_configs')
+      .select('score_mode,is_essay').eq('exam_id',examId).eq('subject_code',subject).single();
+    if(error)throw new Error(`Chưa đọc được hình thức tính điểm. Kiểm tra SQL 143 và cấu hình môn. ${error.message}`);
+    if(key!==scoreKey())return;
+    $('scores-mode').value=data.score_mode||(data.is_essay?'combined':'mcq');
+  }
+  async function saveScoreMode(){
+    const examId=state.selectedExam,subject=$('scores-subject').value,mode=$('scores-mode').value,key=scoreKey();
+    setAdminExam(examId);if(!subject||!mode)throw new Error('Chọn môn và hình thức tính điểm.');
+    const{error}=await state.client.rpc('exam_set_subject_score_mode',{p_exam_id:examId,p_subject_code:subject,p_score_mode:mode});
+    if(error)throw new Error(error.message);
+    if(key!==scoreKey())return;
+    resetScores();$('scores-mode').value=mode;
+    message($('scores-message'),'Đã lưu hình thức. Nhấn Tải điểm tổng hợp để xem kết quả.','success');
+  }
   function refreshScores(){
     const examId=state.selectedExam||'';
-    if(scoresExamId!==examId){resetScores();scoresExamId=examId;$('scores-file').value='';}
+    if(scoresExamId!==examId){resetScores();scoresExamId=examId;$('scores-file').value='';$('scores-mode').value='';}
     $('scores-exam').value=examId;
     const exam=state.exams.find(row=>row.id===examId);
     if($('scores-exam-label'))$('scores-exam-label').textContent=exam?'Kỳ thi đang chọn: '+exam.name+' ('+exam.school_year+')':'Chọn kỳ thi tại tab Kỳ thi trước khi nhập hoặc tổng hợp điểm.';
@@ -1275,8 +1301,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const uniqueSbd=new Set(rows.map(row=>row.sbd));
     if(uniqueSbd.size!==rows.length)throw new Error('Tệp có SBD bị lặp; hãy sửa tệp trước khi nhập.');
     const{data:config,error}=await state.client.from('exam_subject_assessment_configs')
-      .select('mcq_maximum_score').eq('exam_id',examId).eq('subject_code',subjectCode).single();
+      .select('mcq_maximum_score,score_mode').eq('exam_id',examId).eq('subject_code',subjectCode).single();
     if(error)throw new Error(`Không tải được điểm tối đa trắc nghiệm. Hãy lưu cấu hình môn trước. ${error.message}`);
+    if(config.score_mode==='essay')throw new Error('Môn chỉ tự luận lấy điểm qua phách, không nhập trắc nghiệm tại đây.');
     const outOfRange=rows.find(row=>row.score>Number(config.mcq_maximum_score));
     if(outOfRange)throw new Error(`Điểm ${outOfRange.score} của SBD ${outOfRange.sbd} vượt mức tối đa ${config.mcq_maximum_score}.`);
     if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
@@ -1307,23 +1334,24 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     setAdminExam(examId);
     if(!subjectCode)throw new Error('Chọn môn thi cần tổng hợp.');
     const key=scoreKey(),revision=scoreRevision;
-    const{data,error}=await state.client.rpc('exam_get_combined_scores',{
+    const{data,error}=await state.client.rpc('exam_get_subject_results',{
       p_exam_id:examId,p_subject_code:subjectCode
     });
     if(error)throw new Error(`Không tải được điểm tổng hợp: ${error.message}`);
     if(key!==scoreKey()||revision!==scoreRevision)return;
     combinedContext=key;
     cache.combinedScores=data||[];
+    if(data?.length&&data[0].score_mode)$('scores-mode').value=data[0].score_mode;
     const missingEssay=cache.combinedScores.filter(row=>row.essay_missing).length;
     const missingMcq=cache.combinedScores.filter(row=>row.mcq_missing).length;
     const complete=cache.combinedScores.filter(row=>row.total_score!==null).length;
     $('scores-summary').innerHTML=[
-      ['Thí sinh',cache.combinedScores.length],['Đã đủ hai phần',complete],
+      ['Thí sinh',cache.combinedScores.length],['Đã đủ điểm',complete],
       ['Thiếu điểm tự luận',missingEssay],['Thiếu điểm trắc nghiệm',missingMcq]
     ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
     $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng</th><th>Trạng thái</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
       const completeScore=row.total_score!==null;
-      const status=row.essay_missing&&row.mcq_missing?'Thiếu cả hai phần':row.essay_missing?'Thiếu tự luận':row.mcq_missing?'Thiếu trắc nghiệm':'Đủ điểm';
+      const status=subjectResultStatus(row);
       return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td></tr>`;
     }).join('')||'<tr><td colspan="7" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
     $('scores-export').disabled=!cache.combinedScores.length;
@@ -1336,7 +1364,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ...cache.combinedScores.map(row=>[
         row.sbd,row.student_code,row.student_name,row.class_code,row.essay_score??'',
         row.mcq_score??'',row.total_score??'',
-        row.essay_missing&&row.mcq_missing?'Thiếu cả hai phần':row.essay_missing?'Thiếu tự luận':row.mcq_missing?'Thiếu trắc nghiệm':'Đủ điểm'
+        subjectResultStatus(row)
       ])
     ];
     const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
@@ -1704,7 +1732,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function wireScores(){
     $('scores-exam').onchange=refreshScores;
-    $('scores-subject').onchange=resetScores;
+    $('scores-subject').onchange=()=>{resetScores();$('scores-mode').value='';};
+    safeAction('scores-message',loadScoreMode,$('scores-load-mode'));
+    safeAction('scores-message',saveScoreMode,$('scores-save-mode'));
     for(const id of ['scores-file','scores-sbd-column','scores-mcq-column','scores-first-row']){
       $(id).addEventListener('change',resetScores);
       if(id!=='scores-file')$(id).addEventListener('input',resetScores);
