@@ -1,5 +1,5 @@
 <section class="tab-panel hidden" id="tab-absences">
-  <div class="section-heading"><div><h2>Báo vắng thí sinh</h2><p>Khai báo trước khi đánh phách. Có thể đánh dấu vắng toàn kỳ hoặc chỉ vắng một/một số môn.</p></div></div>
+  <div class="section-heading"><div><h2>Vắng thi / Vi phạm quy chế</h2><p>Báo vắng theo môn và cập nhật mức xử lý vi phạm. Điểm gốc của bài thi được giữ nguyên.</p></div></div>
   <div class="form-grid">
     <label>Kỳ thi<select id="absence-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
     <label>Khối<select id="absence-grade-filter"><option value="">Tất cả khối</option></select></label>
@@ -15,4 +15,26 @@
     <label>Hiển thị danh sách<select id="absence-report-filter"><option value="all">Tất cả thí sinh vắng</option><option value="*">Vắng toàn kỳ</option></select></label>
   </div>
   <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phạm vi vắng</th><th>Thao tác</th></tr></thead><tbody id="absence-report-body"><tr><td colspan="5" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
+  <section id="violation-panel" class="panel">
+    <h3>Vi phạm quy chế theo môn</h3>
+    <div id="violation-message" class="notice hidden" role="status"></div>
+    <button id="violation-load" class="btn btn-light" type="button">Tải danh sách vi phạm</button>
+    <div class="form-grid">
+      <label>Đợt<select id="violation-round"><option value="">Tất cả đợt</option><option value="0">Chưa phân đợt</option><option value="1">Đợt 1</option><option value="2">Đợt 2</option></select></label>
+      <label>Lớp<select id="violation-class"><option value="">Tất cả lớp</option></select></label>
+      <label>Tìm học sinh<input id="violation-search" type="search" placeholder="SBD, mã hoặc họ tên"></label>
+    </div>
+    <div class="form-grid">
+      <label>Học sinh<select id="violation-candidate"><option value="">-- Chọn học sinh --</option></select></label>
+      <label>Môn vi phạm<select id="violation-subject"><option value="">-- Chọn môn --</option></select></label>
+      <label>Hình thức xử lý<select id="violation-type"><option value="percent">Trừ % điểm bài thi</option><option value="zero">Điểm 0</option></select></label>
+      <label>Tỷ lệ trừ (%)<input id="violation-percent" type="number" min="0" max="100" step="0.01" placeholder="Ví dụ: 25"></label>
+      <label>Ghi chú / quyết định xử lý<textarea id="violation-note" maxlength="1000" rows="2"></textarea></label>
+    </div>
+    <p id="violation-scope" role="status"></p>
+    <p>Nhập mức xử lý theo quyết định áp dụng. Trừ 25% nghĩa là bài được 8 điểm còn 6 điểm; hệ thống không ghi đè điểm gốc. Các môn khác không bị ảnh hưởng.</p>
+    <div class="form-actions"><button id="violation-save" class="btn btn-primary" type="button">Lưu vi phạm</button><button id="violation-clear" class="btn btn-light" type="button">Bỏ thay đổi</button></div>
+    <p id="violation-count" role="status"></p>
+    <div class="table-wrap"><table><thead><tr><th>Học sinh</th><th>Lớp</th><th>Đợt</th><th>Môn</th><th>Xử lý</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody id="violation-list"><tr><td colspan="7">Chọn kỳ thi rồi tải dữ liệu.</td></tr></tbody></table></div>
+  </section>
 </section>

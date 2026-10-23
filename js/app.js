@@ -1,12 +1,13 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.136';
-import {loadTabModules} from './module-loader.js?v=0.1.136';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.136';
-import {wireAccounts} from './accounts.js?v=0.1.136';
-import {wireTeaching} from './teaching.js?v=0.1.136';
-import {wireRanking} from './ranking.js?v=0.1.136';
-import {loadExamRounds} from './rounds.js?v=0.1.136';
-const APP_VERSION='v0.1.136';
-const APP_BUILD='2026-10-23-exam-period-ranking-bans';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.137';
+import {loadTabModules} from './module-loader.js?v=0.1.137';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.137';
+import {wireAccounts} from './accounts.js?v=0.1.137';
+import {wireTeaching} from './teaching.js?v=0.1.137';
+import {wireRanking} from './ranking.js?v=0.1.137';
+import {wireViolations} from './violations.js?v=0.1.137';
+import {loadExamRounds} from './rounds.js?v=0.1.137';
+const APP_VERSION='v0.1.137';
+const APP_BUILD='2026-10-23-exam-violations';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -14,6 +15,7 @@ let operations=null;
 let accounts=null;
 let teaching=null;
 let ranking=null;
+let violations=null;
 let schoolStudents=[];
 let schoolStudentCatalog=[];
 let schoolStudentLoadToken=0;
@@ -316,6 +318,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
+  if(tab==='absences')violations?.refresh();
   if(tab==='teaching'){
     if(teaching)teaching.refresh();
     else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html, sau đó tải lại bằng Ctrl+F5.','error');
@@ -2889,6 +2892,8 @@ async function boot(){
   catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
   try{ranking=wireRanking({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được cấu hình ban:',error);message($('ranking-message'),error.message,'error')}
+  try{violations=wireViolations({state,$,esc,message,subjectName})}
+  catch(error){console.error('Không khởi tạo được vi phạm:',error);message($('violation-message'),error.message,'error')}
   try{
     operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){
