@@ -66,7 +66,14 @@ export function wireViolations({state,$,esc,message,subjectName=code=>code,creat
     const c=candidates.find(row=>row.id===candidateId);if(!c||!subject)throw new Error('Chọn học sinh và môn.');
     const row=await rpc('exam_save_violation',{p_exam_id:examId,p_candidate_id:c.id,p_round_no:c.round_no,p_subject_code:subject,
       p_penalty_type:$('violation-type').value,p_deduction_percent:penaltyValue($('violation-type').value,$('violation-percent').value),p_note:$('violation-note').value.trim(),p_expected_version:current()?.version??null,p_delete:false});
-    decisions=decisions.filter(item=>item.id!==row.id);decisions.push(row);dirty=false;fillForm();notify('Đã lưu mức xử lý vi phạm. Điểm gốc được giữ nguyên.','success');
+    decisions=decisions.filter(item=>item.id!==row.id);decisions.push(row);dirty=false;
+    const penalty=row.penalty_type==='zero'?'Cho điểm 0 (trừ 100%)':`Trừ ${row.deduction_percent}% số điểm`;
+    window.alert(`Đã lưu vi phạm quy chế thành công.\n\nHọc sinh: ${c.student_name}\nLớp: ${c.class_code}\nSBD / mã học sinh: ${c.sbd||c.student_code||''}\nMôn vi phạm: ${subjectName(row.subject_code)}\nMức xử lý: ${penalty}\n\nĐiểm gốc được giữ nguyên.`);
+    candidateId='';subject='';
+    $('violation-class').value='';$('violation-round').value='';
+    studentPicker?.close();fillForm();
+    $('violation-student-input').value='';
+    notify('Đã lưu vi phạm. Chọn học sinh và môn để nhập trường hợp tiếp theo.','success');
   });
   $('violation-list').onclick=event=>{
     if(busy)return;const edit=event.target.closest('[data-violation-edit]'),remove=event.target.closest('[data-violation-delete]');
