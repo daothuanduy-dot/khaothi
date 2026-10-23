@@ -21,6 +21,7 @@ export function wireAccounts({state,$,esc,message}){
   function showUser(){
     const user=selectedUser();
     $('accounts-email').value=user?.email||'';$('accounts-full-name').value=user?.full_name||'';$('accounts-password').value='';
+    $('accounts-report-name').value=user?.report_name||'';
     $('accounts-role').value=user?.role==='admin'?'admin':'grader';$('accounts-subject').value=user?.subject_code||'';
     $('accounts-subject').disabled=$('accounts-role').value==='admin';
   }
@@ -60,11 +61,13 @@ export function wireAccounts({state,$,esc,message}){
     const user=selectedUser();if(actionName!=='create'&&!user)throw new Error('Hãy chọn tài khoản cần sửa hoặc xóa.');
     if(actionName==='delete'&&user.user_id===state.session?.user?.id)throw new Error('Không được xóa tài khoản đang đăng nhập.');
     const email=$('accounts-email').value.trim(),full_name=$('accounts-full-name').value.trim(),password=$('accounts-password').value;
+    const report_name=$('accounts-report-name').value.trim();
+    if(actionName!=='delete'&&report_name.length>40)throw new Error('Tên trên thống kê tối đa 40 ký tự.');
     if(actionName!=='delete'&&(!email||!full_name))throw new Error('Nhập họ tên và email.');
     if(actionName==='create'&&password.length<8)throw new Error('Mật khẩu tài khoản mới cần ít nhất 8 ký tự.');
     if(actionName==='update'&&password&&password.length<8)throw new Error('Mật khẩu mới cần ít nhất 8 ký tự.');
     if(actionName==='delete'&&!confirm(`Xóa tài khoản ${user.email}? Thao tác không thể hoàn tác.`))return;
-    const body=actionName==='delete'?{action:actionName,user_id:user.user_id}:{action:actionName,email,full_name,...(password?{password}:{}),...(user&&actionName==='update'?{user_id:user.user_id}:{})};
+    const body=actionName==='delete'?{action:actionName,user_id:user.user_id}:{action:actionName,email,full_name,report_name,...(password?{password}:{}),...(user&&actionName==='update'?{user_id:user.user_id}:{})};
     const{data,error}=await state.client.functions.invoke('manage-exam-accounts',{body});
     if(error)throw new Error('Không gọi được chức năng quản lý tài khoản. Kiểm tra Edge Function và phiên đăng nhập.');
     if(data?.error)throw new Error(data.error);$('accounts-password').value='';await refresh();
