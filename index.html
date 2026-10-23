@@ -10,6 +10,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    .absence-outside-note{max-width:350px;padding:8px;margin-top:7px;background:#fff3dd;color:#805600;border-radius:7px;font-size:12px}
+    .absence-outside-note label{display:flex;gap:7px;align-items:center;margin-top:5px}
+    .absence-outside-note input{width:16px!important;min-height:16px!important;height:16px;flex:none}
     .absence-subject-checks{display:grid;grid-template-columns:repeat(2,minmax(100px,1fr));gap:7px 12px;min-width:240px;max-height:150px;overflow:auto;border:1px solid #dce4f1;border-radius:8px;padding:8px;margin:0}
     .absence-subject-checks label{display:flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;font-weight:400}
     .absence-subject-checks input[type="checkbox"]{width:16px!important;min-height:16px!important;height:16px;flex:none;margin:0}
@@ -112,7 +115,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.139</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.140</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -220,7 +223,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.139" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script type="module" src="./js/app.js?v=0.1.140" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       // Runs independently of app.js, including when an old app/loader is served.
