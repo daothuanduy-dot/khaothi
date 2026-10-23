@@ -29,7 +29,8 @@
   </section>
   <h3>Nhập trắc nghiệm và ghép điểm</h3>
   <div class="form-grid">
-    <label>Kỳ thi<select id="scores-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+    <p id="scores-exam-label" role="status"></p>
+    <select id="scores-exam" hidden aria-hidden="true" tabindex="-1"><option value="">-- Chọn kỳ thi --</option></select>
     <label>Môn thi<select id="scores-subject"><option value="">-- Chọn môn --</option></select></label>
     <label>Tệp kết quả trắc nghiệm<input id="scores-file" type="file" accept=".xlsx,.xls,.csv"></label>
     <label>Cột SBD<input id="scores-sbd-column" type="text" value="B" maxlength="3" placeholder="B"></label>

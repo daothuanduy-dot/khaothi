@@ -1217,6 +1217,24 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     await loadScriptRuns();
   }
 
+  let scoresExamId='',scoreRevision=0,scoreImportContext=null,combinedContext=null;
+  const scoreKey=()=>JSON.stringify([state.selectedExam||'',$('scores-subject').value]);
+  const importKey=()=>JSON.stringify([scoreKey(),$('scores-sbd-column').value,$('scores-mcq-column').value,$('scores-first-row').value]);
+  function resetScores(){
+    ++scoreRevision;scoreImportContext=null;combinedContext=null;
+    cache.scoreImportRows=[];cache.combinedScores=[];
+    for(const id of ['scores-preview','scores-results','scores-summary'])$(id).innerHTML='';
+    $('scores-import').disabled=true;$('scores-export').disabled=true;
+  }
+  function refreshScores(){
+    const examId=state.selectedExam||'';
+    if(scoresExamId!==examId){resetScores();scoresExamId=examId;$('scores-file').value='';}
+    $('scores-exam').value=examId;
+    const exam=state.exams.find(row=>row.id===examId);
+    if($('scores-exam-label'))$('scores-exam-label').textContent=exam?'Kỳ thi đang chọn: '+exam.name+' ('+exam.school_year+')':'Chọn kỳ thi tại tab Kỳ thi trước khi nhập hoặc tổng hợp điểm.';
+    for(const id of ['scores-read-file','scores-load'])$(id).disabled=!examId;
+  }
+
   function renderScorePreview(){
     const rows=cache.scoreImportRows.slice(0,25);
     $('scores-preview').innerHTML=rows.length
@@ -1227,11 +1245,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function readMultipleChoiceFile(){
-    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value;
+    const examId=(state.selectedExam||''),subjectCode=$('scores-subject').value;
     setAdminExam(examId);
     if(!subjectCode)throw new Error('Chọn môn thi cần nhập điểm.');
     const file=$('scores-file').files?.[0];
     if(!file)throw new Error('Chọn tệp Excel hoặc CSV kết quả trắc nghiệm.');
+    resetScores();
+    const revision=scoreRevision,key=importKey();
     const sbdIndex=excelColumnIndex($('scores-sbd-column').value);
     const scoreIndex=excelColumnIndex($('scores-mcq-column').value);
     if(sbdIndex===scoreIndex)throw new Error('Cột SBD và cột điểm phải khác nhau.');
@@ -1259,32 +1279,40 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(error)throw new Error(`Không tải được điểm tối đa trắc nghiệm. Hãy lưu cấu hình môn trước. ${error.message}`);
     const outOfRange=rows.find(row=>row.score>Number(config.mcq_maximum_score));
     if(outOfRange)throw new Error(`Điểm ${outOfRange.score} của SBD ${outOfRange.sbd} vượt mức tối đa ${config.mcq_maximum_score}.`);
+    if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
+    scoreImportContext={key,file};
     cache.scoreImportRows=rows;
     renderScorePreview();
     message($('scores-message'),`Đã kiểm tra ${rows.length} dòng. Khi nhập, điểm hiện có của các SBD này sẽ được cập nhật theo tệp mới.`,'success');
   }
 
   async function importMultipleChoiceScores(){
-    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value,file=$('scores-file').files?.[0];
-    if(!cache.scoreImportRows.length||!file)throw new Error('Hãy đọc và kiểm tra tệp trước khi nhập điểm.');
+    const examId=(state.selectedExam||''),subjectCode=$('scores-subject').value,file=$('scores-file').files?.[0];
+    setAdminExam(examId);
+    if(!scoreImportContext||scoreImportContext.key!==importKey()||scoreImportContext.file!==file||!cache.scoreImportRows.length||!file)throw new Error('Hãy đọc và kiểm tra tệp trước khi nhập điểm.');
     if(!confirm(`Nhập ${cache.scoreImportRows.length} điểm trắc nghiệm môn ${nameOf(subjectCode)}? Điểm đã nhập của các SBD này sẽ bị thay bằng dữ liệu mới.`))return;
+    const key=scoreKey(),revision=scoreRevision;
     const{data,error}=await state.client.rpc('exam_import_mcq_scores',{
       p_exam_id:examId,p_subject_code:subjectCode,p_source_file:file.name,
       p_rows:cache.scoreImportRows
     });
     if(error)throw new Error(`Không nhập được điểm trắc nghiệm: ${error.message}`);
+    if(key!==scoreKey()||revision!==scoreRevision)return;
     message($('scores-message'),`Đã nhập ${data.imported_count} điểm trắc nghiệm môn ${nameOf(subjectCode)}.`,'success');
     await loadCombinedScores();
   }
 
   async function loadCombinedScores(){
-    const examId=currentExam('scores-exam'),subjectCode=$('scores-subject').value;
+    const examId=(state.selectedExam||''),subjectCode=$('scores-subject').value;
     setAdminExam(examId);
     if(!subjectCode)throw new Error('Chọn môn thi cần tổng hợp.');
+    const key=scoreKey(),revision=scoreRevision;
     const{data,error}=await state.client.rpc('exam_get_combined_scores',{
       p_exam_id:examId,p_subject_code:subjectCode
     });
     if(error)throw new Error(`Không tải được điểm tổng hợp: ${error.message}`);
+    if(key!==scoreKey()||revision!==scoreRevision)return;
+    combinedContext=key;
     cache.combinedScores=data||[];
     const missingEssay=cache.combinedScores.filter(row=>row.essay_missing).length;
     const missingMcq=cache.combinedScores.filter(row=>row.mcq_missing).length;
@@ -1302,7 +1330,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   function exportCombinedScores(){
-    if(!cache.combinedScores.length)throw new Error('Chưa có điểm tổng hợp để xuất.');
+    if(combinedContext!==scoreKey()||!cache.combinedScores.length)throw new Error('Chưa có điểm tổng hợp để xuất.');
     const rows=[
       ['SBD','Mã học sinh','Họ và tên','Lớp','Điểm tự luận','Điểm trắc nghiệm','Tổng điểm','Trạng thái'],
       ...cache.combinedScores.map(row=>[
@@ -1313,7 +1341,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     ];
     const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
     window.XLSX.utils.book_append_sheet(wb,ws,'Tong hop diem');
-    window.XLSX.writeFile(wb,`tong-hop-diem-${currentExam('scores-exam')}-${$('scores-subject').value}.xlsx`);
+    window.XLSX.writeFile(wb,`tong-hop-diem-${(state.selectedExam||'')}-${$('scores-subject').value}.xlsx`);
   }
 
   async function enterAsGrader(){
@@ -1485,7 +1513,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       target.disabled=true;
       try{await action()}
       catch(error){message($(label),error?.message||String(error),'error')}
-      finally{target.disabled=false;if(label==='grader-message')updateGraderWindow()}
+      finally{
+        target.disabled=false;
+        if(label==='grader-message')updateGraderWindow();
+        if(label==='scores-message'){
+          refreshScores();
+          $('scores-import').disabled=!cache.scoreImportRows.length||scoreImportContext?.key!==importKey()||scoreImportContext?.file!==$('scores-file').files?.[0];
+        }
+      }
     };
   }
   const localDateTime=value=>{
@@ -1668,17 +1703,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
   }
   function wireScores(){
-    $('scores-exam').onchange=()=>{
-      cache.scoreImportRows=[];cache.combinedScores=[];
-      $('scores-preview').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';
-      $('scores-import').disabled=true;$('scores-export').disabled=true;
-      setSubjectOptions('scores-subject',allSubjectOptions());
-    };
-    $('scores-subject').onchange=()=>{
-      cache.scoreImportRows=[];cache.combinedScores=[];
-      $('scores-preview').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';
-      $('scores-import').disabled=true;$('scores-export').disabled=true;
-    };
+    $('scores-exam').onchange=refreshScores;
+    $('scores-subject').onchange=resetScores;
+    for(const id of ['scores-file','scores-sbd-column','scores-mcq-column','scores-first-row']){
+      $(id).addEventListener('change',resetScores);
+      if(id!=='scores-file')$(id).addEventListener('input',resetScores);
+    }
+    setSubjectOptions('scores-subject',allSubjectOptions());
+    refreshScores();
     safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
     safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
     safeAction('scores-message',loadCombinedScores,$('scores-load'));
@@ -1692,9 +1724,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     catch(error){message($(notice),`Không khởi tạo được chức năng này. Hãy cập nhật đầy đủ các tệp giao diện. ${error.message}`,'error')}
   }
   return{
-    refreshExamSelectors:setExamOptions,
+    refreshExamSelectors:()=>{setExamOptions();refreshScores();},
+    refreshScores,
     invalidateCombinedScores:()=>{
-      cache.combinedScores=[];$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
+      ++scoreRevision;combinedContext=null;cache.combinedScores=[];$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
       message($('scores-message'),'Điểm tự luận đã thay đổi. Nhấn Tải điểm tổng hợp để tính lại.','info');
     },
     refreshAbsences:async examId=>{

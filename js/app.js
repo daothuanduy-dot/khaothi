@@ -1,15 +1,15 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.141';
-import {loadTabModules} from './module-loader.js?v=0.1.141';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.141';
-import {wireAccounts} from './accounts.js?v=0.1.141';
-import {wireTeaching} from './teaching.js?v=0.1.141';
-import {wireRanking} from './ranking.js?v=0.1.141';
-import {wireViolations} from './violations.js?v=0.1.141';
-import {createStudentPicker} from './student-picker.js?v=0.1.141';
-import {wireScoreControl} from './score-control.js?v=0.1.141';
-import {loadExamRounds} from './rounds.js?v=0.1.141';
-const APP_VERSION='v0.1.141';
-const APP_BUILD='2026-10-24-script-score-control';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.142';
+import {loadTabModules} from './module-loader.js?v=0.1.142';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.142';
+import {wireAccounts} from './accounts.js?v=0.1.142';
+import {wireTeaching} from './teaching.js?v=0.1.142';
+import {wireRanking} from './ranking.js?v=0.1.142';
+import {wireViolations} from './violations.js?v=0.1.142';
+import {createStudentPicker} from './student-picker.js?v=0.1.142';
+import {wireScoreControl} from './score-control.js?v=0.1.142';
+import {loadExamRounds} from './rounds.js?v=0.1.142';
+const APP_VERSION='v0.1.142';
+const APP_BUILD='2026-10-24-shared-score-exam';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -321,7 +321,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='scores')scoreControl?.refresh();
+  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();}
   if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
     .then(ready=>{if(ready)return violations?.refresh()})
     .catch(error=>message($('absence-message'),error.message,'error'));
