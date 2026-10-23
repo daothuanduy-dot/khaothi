@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    #accounts-dialog [hidden]{display:none!important}
+    #accounts-dialog{max-height:90vh;overflow:auto}
     #login-screen{max-width:520px;margin:48px auto;padding:32px;border:1px solid #dce4f1;border-radius:20px;background:#fff;box-shadow:0 16px 48px #18315312}
     #login-screen h1{font-size:28px;margin:12px 0}#login-screen .login-intro{line-height:1.65;color:#52627a}
     #login-form{display:grid;grid-template-columns:1fr;gap:18px;margin-top:24px}#login-form label{display:grid;gap:8px;font-weight:600}
@@ -78,7 +80,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.130</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.131</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -185,7 +187,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.130" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script type="module" src="./js/app.js?v=0.1.131" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       const form = document.getElementById('setup-form');
