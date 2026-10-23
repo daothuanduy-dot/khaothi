@@ -31,6 +31,8 @@
     </details>
   </div>
   <h3>3. Phân công giáo viên</h3>
+  <label>Kỳ thi lấy danh sách môn<select id="teaching-source-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+  <p id="teaching-subject-source-status" role="status"></p>
   <div class="form-grid">
     <label>Khối<select id="teaching-grade"><option value="">Tất cả khối</option></select></label>
     <label>Tìm lớp<input id="teaching-search" type="search" placeholder="Ví dụ: 11B1"></label>
@@ -39,15 +41,6 @@
   <div class="form-actions"><button id="teaching-refresh" class="btn btn-light" type="button">Tải lại</button><button id="teaching-save" class="btn btn-primary" type="button" disabled>Lưu thay đổi</button><button id="teaching-discard" class="btn btn-light" type="button" disabled>Bỏ thay đổi</button></div>
   <p id="teaching-summary" role="status"></p>
   <div id="teaching-matrix" class="table-wrap"><p>Chọn hoặc tạo kỳ học để phân công.</p></div>
-  <details class="panel"><summary>Danh mục môn học</summary>
-    <div id="teaching-subject-form" class="form-grid" role="group" aria-label="Thêm môn học">
-      <label>Mã môn<input id="teaching-subject-code" maxlength="40" placeholder="TOAN"></label>
-      <label>Tên môn<input id="teaching-subject-name" maxlength="100" placeholder="Toán"></label>
-      <div class="form-actions"><button id="teaching-subject-add" class="btn btn-light" type="button">Thêm môn học</button></div>
-    </div>
-    <button id="teaching-standard-subjects" class="btn btn-light" type="button">Bổ sung danh mục môn có sẵn</button>
-    <p>Danh mục môn dùng chung cho các kỳ học và độc lập với môn thi, môn tính điểm. Có thể thêm các môn ngoài danh mục có sẵn.</p>
-  </details>
   <details class="panel"><summary>Gán nhanh và sao chép phân công</summary>
     <div class="form-grid">
       <label>Môn / Chủ nhiệm<select id="teaching-bulk-subject"></select></label>

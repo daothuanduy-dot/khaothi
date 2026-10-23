@@ -28,6 +28,15 @@ export function createTeachingDraft(assignments=[],homerooms=[]){
 export function wireTeaching({state,$,esc,message,subjects=[]}){
   let periods=[],classes=[],catalog=[],teachers=[],draft=createTeachingDraft(),periodId='',busy=false;
   let rosterClasses=[],selectedClasses=new Set();
+  let sourceExamId='';
+  const normalizeYear=value=>String(value||'').replace(/[–—/]/g,'-').replace(/\s/g,'');
+  const subjectLabel=code=>[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...subjects].find(row=>row.code===code)?.name||code;
+  async function readExamSubjects(exam){
+    if(!exam)return [];
+    const table=exam.exam_mode==='subject'?'exam_round_subjects':'exam_subject_class_configs';
+    const rows=await all(table,'subject_code',q=>q.eq('exam_id',exam.id).order('subject_code').order(table==='exam_round_subjects'?'round_no':'class_code'));
+    return [...new Set(rows.map(row=>row.subject_code))].sort().map(code=>({subject_code:code,subject_name:subjectLabel(code)}));
+  }
   const notice=(text,type='info')=>message($('teaching-message'),text,type);
   const requireAdmin=()=>{if(state.role!=='admin'||!state.client)throw new Error('Chỉ Admin được quản lý phân công giảng dạy.')};
   async function checked(request){const {data,error}=await request;if(error){
@@ -59,6 +68,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     $('teaching-class-add').disabled=busy||!periodId;
     const period=periods.find(row=>row.id===periodId);
     $('teaching-period-status').textContent=period?`Đang mở ${period.school_year} · Học kỳ ${period.semester} · ${classes.length} lớp đã gán`:'Tạo hoặc mở học kỳ ở trên để chọn lớp.';
+    $('teaching-subject-source-status').textContent=!sourceExamId?'Chọn kỳ thi cùng năm học để lấy các môn đã cấu hình.':catalog.length?`Đang dùng ${catalog.length} môn từ cấu hình kỳ thi, gồm cả môn không tính điểm.`:'Kỳ thi chưa có cấu hình môn. Hãy thiết lập tại Cấu hình kỳ thi rồi tải lại; không lấy môn từ danh mục chung.';
     const select=(cls,subject='')=>{
       const teacher=draft.value(cls,subject),key=cellKey(cls,subject),profile=teachers.find(row=>row.user_id===teacher);
       return `<td class="${teacher?'':'teaching-empty'} ${draft.changes.has(key)?'teaching-dirty':''}"><select data-teaching-class="${esc(cls)}" data-teaching-subject="${esc(subject)}" aria-label="${esc(`${cls} - ${subject||'GVCN'}`)}" title="${esc(profile?.full_name||'Chưa phân công')}" ${busy?'disabled':''}>${teacherOptions(teacher)}</select></td>`;
@@ -91,6 +101,9 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     const label=row=>`${row.school_year} · Học kỳ ${row.semester}`;
     $('teaching-period').innerHTML='<option value="">-- Chọn năm học / học kỳ --</option>'+periods.map(row=>`<option value="${esc(row.id)}">${esc(label(row))}</option>`).join('');
     $('teaching-period').value=periodId;
+    const year=periods.find(row=>row.id===periodId)?.school_year;
+    $('teaching-source-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+(state.exams||[]).filter(row=>normalizeYear(row.school_year)===year).map(row=>`<option value="${esc(row.id)}">${esc(row.name)} (${esc(row.school_year)})</option>`).join('');
+    $('teaching-source-exam').value=sourceExamId;
     $('teaching-copy-period').innerHTML='<option value="">-- Chọn kỳ nguồn --</option>'+periods.filter(row=>row.id!==periodId).map(row=>`<option value="${esc(row.id)}">${esc(label(row))}</option>`).join('');
     const grade=$('teaching-grade').value;
     $('teaching-grade').innerHTML='<option value="">Tất cả khối</option>'+[...new Set(classes.map(row=>row.grade_code))].sort().map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
@@ -109,19 +122,23 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
     return {classes:results[0].value,assignments:results[1].value,homerooms:results[2].value};
   }
-  async function load(id=periodId){
+  async function load(id=periodId,requestedExamId=sourceExamId){
     requireAdmin();
     const results=await Promise.allSettled([
       all('school_teaching_periods','id,school_year,semester',q=>q.order('school_year',{ascending:false}).order('semester',{ascending:false})),
-      all('school_teaching_subjects','subject_code,subject_name,is_active',q=>q.order('subject_code')),
       all('exam_user_profiles','user_id,full_name,email,report_name',q=>q.order('user_id')),
       readPeriod(id)
     ]);
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
-    periods=results[0].value;catalog=results[1].value;teachers=results[2].value;
+    const nextPeriods=results[0].value;
+    const nextId=nextPeriods.some(row=>row.id===id)?id:nextPeriods[0]?.id||'';
+    const year=nextPeriods.find(row=>row.id===nextId)?.school_year;
+    const exams=(state.exams||[]).filter(row=>normalizeYear(row.school_year)===year);
+    const exam=exams.find(row=>row.id===requestedExamId)||exams.find(row=>row.id===state.selectedExam)||exams[0];
+    const nextCatalog=await readExamSubjects(exam);
+    const data=nextId===id?results[2].value:await readPeriod(nextId);
+    periods=nextPeriods;catalog=nextCatalog;sourceExamId=exam?.id||'';teachers=results[1].value;
     teachers.sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email,'vi'));
-    const nextId=periods.some(row=>row.id===id)?id:periods[0]?.id||'';
-    const data=nextId===id?results[3].value:await readPeriod(nextId);
     if(periodId!==nextId){rosterClasses=[];selectedClasses.clear();$('teaching-class-picker').hidden=true}
     periodId=nextId;classes=data.classes;draft=createTeachingDraft(data.assignments,data.homerooms);
     for(const code of selectedClasses)if(classes.some(row=>row.class_code===code))selectedClasses.delete(code);
@@ -145,6 +162,11 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     $(id).onkeydown=event=>{if(event.key==='Enter'&&event.target.tagName==='INPUT'){event.preventDefault();return run(fn)}};
   };
   $('teaching-period').onchange=()=>{const id=$('teaching-period').value;if(!mayDiscard()){$('teaching-period').value=periodId;return}return run(async()=>{try{await load(id)}catch(error){$('teaching-period').value=periodId;throw error}})};
+  $('teaching-source-exam').onchange=()=>{
+    const id=$('teaching-source-exam').value;
+    if(!id||!mayDiscard()){$('teaching-source-exam').value=sourceExamId;return}
+    return run(async()=>{try{await load(periodId,id)}catch(error){$('teaching-source-exam').value=sourceExamId;throw error}});
+  };
   $('teaching-grade').onchange=render;$('teaching-search').oninput=render;$('teaching-missing').onchange=render;
   $('teaching-matrix').onchange=event=>{
     const input=event.target.closest('[data-teaching-class]');if(!input||busy)return;
@@ -155,6 +177,10 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
   button('teaching-save',async()=>{
     periodRequired();if(!draft.changes.size)return;
     const rows=[...draft.changes.values()];
+    const codes=new Set(rows.map(row=>row.subject_code).filter(Boolean));
+    if([...codes].some(code=>!catalog.some(row=>row.subject_code===code)))throw new Error('Có môn không nằm trong cấu hình kỳ thi đang chọn. Hãy tải lại bảng.');
+    // Keep the existing FK catalog as storage only; it never determines displayed columns.
+    if(codes.size)await checked(state.client.from('school_teaching_subjects').upsert(catalog.filter(row=>codes.has(row.subject_code)),{onConflict:'subject_code',ignoreDuplicates:true}));
     await checked(state.client.rpc('school_save_teaching_matrix',{p_period_id:periodId,p_rows:rows}));
     // A successful write must never be sent again with stale expected timestamps.
     for(const row of rows){const key=cellKey(row.class_code,row.subject_code||'');
@@ -198,17 +224,6 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     if(!rows.length)throw new Error('Hãy chọn ít nhất một lớp chưa gán.');
     await checked(state.client.from('school_teaching_classes').upsert(rows,{onConflict:'period_id,class_code',ignoreDuplicates:true}));
     selectedClasses.clear();await load();notice(`Đã gán ${rows.length} lớp vào học kỳ đang mở.`,'success');
-  });
-  group('teaching-subject-form','teaching-subject-add',async()=>{
-    if(draft.changes.size)throw new Error('Lưu hoặc bỏ thay đổi phân công trước khi thêm môn.');
-    const subject_code=$('teaching-subject-code').value.trim().toUpperCase(),subject_name=$('teaching-subject-name').value.trim();
-    if(!subject_code||!subject_name)throw new Error('Nhập mã và tên môn.');
-    await checked(state.client.from('school_teaching_subjects').insert({subject_code,subject_name}));await load();notice('Đã thêm môn học.','success');
-  });
-  button('teaching-standard-subjects',async()=>{
-    if(draft.changes.size)throw new Error('Lưu hoặc bỏ thay đổi phân công trước khi bổ sung môn.');
-    const rows=[...new Map([{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...subjects].map(row=>[row.code,{subject_code:row.code,subject_name:row.name}])).values()];
-    await checked(state.client.from('school_teaching_subjects').upsert(rows,{onConflict:'subject_code',ignoreDuplicates:true}));await load();notice('Đã bổ sung danh mục môn, giữ nguyên các môn đã có.','success');
   });
   button('teaching-bulk-apply',async()=>{
     periodRequired();const subject=$('teaching-bulk-subject').value,teacher=$('teaching-bulk-teacher').value,rows=visibleClasses();
