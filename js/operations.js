@@ -84,6 +84,10 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_SIZE=500;
 
+export function absenceSubjectValues(row){
+  return [...row.querySelectorAll('[data-absence-subject]:checked')].map(control=>control.value);
+}
+
 export function excelColumnIndex(value){
   const letters=String(value??'').trim().toUpperCase();
   if(!/^[A-Z]{1,3}$/.test(letters))throw new Error('Cột Excel phải là chữ cái từ A đến XFD.');
@@ -631,12 +635,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const[candidates,registrations,absenceResult]=await Promise.all([
       readPages(()=>state.client.from('exam_candidates').select('id,sbd,student_code,student_name,grade_code,class_code').eq('exam_id',examId).order('grade_code').order('class_code').order('sbd')),
       readPages(()=>state.client.from('exam_candidate_subjects').select('candidate_id,subject_code').eq('exam_id',examId)),
-      state.client.from('exam_absences').select('candidate_id,subject_code,reason').eq('exam_id',examId)
+      readPages(()=>state.client.from('exam_absences').select('candidate_id,subject_code,reason').eq('exam_id',examId).order('candidate_id').order('subject_code')).then(data=>({data,error:null}))
     ]);
     if(request!==absenceRequest||examId!==currentExam('absence-exam'))return;
     if(absenceResult.error)throw new Error(`Không tải được báo vắng. Hãy chạy migration v0.1.59. ${absenceResult.error.message}`);
     absenceExamId=examId;absenceDirty=false;absenceStudentId='';$('absence-search').value='';
-    const codes=[...new Set(['TOAN','VAN',...(registrations||[]).map(row=>String(row.subject_code).toUpperCase())])].sort();
+    const codes=[...new Set(['TOAN','VAN',...(registrations||[]).map(row=>String(row.subject_code).toUpperCase()),...(absenceResult.data||[]).filter(row=>row.subject_code!=='*').map(row=>row.subject_code)])].sort();
     const reportFilter=$('absence-report-filter'),selectedFilter=reportFilter.value;
     reportFilter.innerHTML='<option value="all">Tất cả thí sinh vắng</option><option value="*">Vắng toàn kỳ</option>'+
       codes.map(code=>`<option value="${esc(code)}">Vắng môn ${esc(nameOf(code))}</option>`).join('');
@@ -649,7 +653,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('absence-table-body').innerHTML=cache.absences
       .map(row=>`<tr data-candidate="${esc(row.id)}"><td>${esc(row.sbd||'')}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code||'')}</td>
         <td><input type="checkbox" data-absence-all ${row.absentAll?'checked':''} aria-label="Vắng toàn kỳ"></td>
-        <td><select multiple data-absence-subjects ${row.absentAll?'disabled':''}>${codes.map(code=>`<option value="${esc(code)}" ${row.absentSubjects.includes(code)?'selected':''}>${esc(nameOf(code))}</option>`).join('')}</select></td>
+        <td><fieldset class="absence-subject-checks" data-absence-subjects aria-label="Các môn vắng của ${esc(row.student_name)}" ${row.absentAll?'disabled':''}>${codes.map(code=>`<label><input type="checkbox" data-absence-subject value="${esc(code)}" ${row.absentSubjects.includes(code)?'checked':''}><span>${esc(nameOf(code))}</span></label>`).join('')}</fieldset></td>
         <td><input type="text" data-absence-reason value="${esc(row.reason)}" maxlength="200"></td></tr>`).join('')||
       '<tr><td colspan="6" class="empty">Không có thí sinh trong kỳ thi.</td></tr>';
     $('absence-table-body').querySelectorAll('[data-absence-all]').forEach(control=>control.addEventListener('change',()=>{
@@ -710,7 +714,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const tr=edited.get(String(candidate.id));
       const absentAll=tr?tr.querySelector('[data-absence-all]').checked:candidate.absentAll;
       const absentSubjects=tr&&!absentAll
-        ?[...tr.querySelector('[data-absence-subjects]').selectedOptions].map(option=>option.value)
+        ?absenceSubjectValues(tr)
         :absentAll?[]:candidate.absentSubjects;
       return {...candidate,absentAll,absentSubjects};
     }).filter(candidate=>{
@@ -742,7 +746,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       .find(item=>item.dataset.candidate===String(candidateId));
     if(!row)return;
     row.querySelector('[data-absence-all]').checked=false;
-    [...row.querySelector('[data-absence-subjects]').options].forEach(option=>{option.selected=false});
+    row.querySelectorAll('[data-absence-subject]').forEach(control=>{control.checked=false});
     row.querySelector('[data-absence-subjects]').disabled=false;
     row.querySelector('[data-absence-reason]').value='';
     absenceDirty=true;
@@ -758,7 +762,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const tr=edited.get(String(candidate.id));
       const absentAll=tr?tr.querySelector('[data-absence-all]').checked:candidate.absentAll;
       const reason=tr?tr.querySelector('[data-absence-reason]').value.trim():candidate.reason;
-      const absentSubjects=tr?[...tr.querySelector('[data-absence-subjects]').selectedOptions].map(option=>option.value):candidate.absentSubjects;
+      const absentSubjects=tr?absenceSubjectValues(tr):candidate.absentSubjects;
       if(absentAll)rows.push({candidate_id:candidate.id,subject_code:'*',reason});
       else for(const subjectCode of absentSubjects)rows.push({candidate_id:candidate.id,subject_code:subjectCode,reason});
     }
@@ -1550,7 +1554,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('absence-report-filter').onchange=renderAbsenceReport;
     $('absence-table-body').addEventListener('change',event=>{
       absenceDirty=true;
-      if(event.target.matches('[data-absence-subjects]'))renderAbsenceReport();
+      if(event.target.matches('[data-absence-subject]'))renderAbsenceReport();
     });
     $('absence-report-body').addEventListener('click',event=>{
       const edit=event.target.closest('[data-absence-edit]'),remove=event.target.closest('[data-absence-delete]');
