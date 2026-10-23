@@ -41,8 +41,14 @@
     <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-load" class="btn btn-light" type="button">Tải điểm tổng hợp</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
   </div>
   <p class="help-text">Chọn môn và đọc hình thức đã lưu; chỉ bấm Lưu nếu cần thay đổi. Tự luận lấy điểm qua phách, trắc nghiệm đối chiếu SBD. Môn kết hợp cộng hai thành phần khi đủ điểm. Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F; dòng dữ liệu thường bắt đầu từ dòng 2.</p>
+  <div class="form-grid">
+    <label><input id="scores-include-absent" type="checkbox"> Tính học sinh vắng (0 điểm môn vắng)</label>
+    <label><input id="scores-include-violations" type="checkbox"> Tính học sinh vi phạm (điểm sau xử lý)</label>
+  </div>
+  <p class="help-text">Bỏ tích để loại trường hợp tương ứng khỏi thống kê môn. Đổi lựa chọn rồi nhấn Tải điểm tổng hợp. Khi vừa vắng vừa vi phạm, chỉ đưa vào thống kê nếu tích cả hai; điểm tính là 0. Điểm gốc được giữ nguyên.</p>
   <div id="scores-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div id="scores-summary" class="metric-grid"></div>
   <div id="scores-preview" class="table-wrap"></div>
   <div id="scores-results" class="table-wrap"></div>
+  <div id="scores-class-results" class="table-wrap"></div>
 </section>

@@ -6,6 +6,11 @@ export function subjectResultStatus(row){
   if(row.no_paper)return 'Không bài';
   return row.total_score==null?'Chưa đủ điểm':'Đủ điểm';
 }
+export function subjectStatisticsReason(row){
+  return ({absent_excluded:'Loại: vắng',violation_excluded:'Loại: vi phạm',absent_zero:'Vắng tính 0',
+    violation_zero:'Vi phạm: 0 điểm',missing_score:'Loại: chưa đủ điểm',violation_adjusted:'Vi phạm: trừ '+(row.deduction_percent??0)+'%',
+    scored:'Tính thống kê'})[row.statistics_reason]||'';
+}
 // Keep printing in this tab. Reuse at most one off-screen document.
 export function createPrintFrame(doc=document){
   doc.getElementById('exam-print-frame')?.remove();
@@ -1227,11 +1232,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
 
   let scoresExamId='',scoreRevision=0,scoreImportContext=null,combinedContext=null;
   const scoreKey=()=>JSON.stringify([state.selectedExam||'',$('scores-subject').value]);
+  const statisticsKey=()=>JSON.stringify([scoreKey(),!!$('scores-include-absent').checked,!!$('scores-include-violations').checked]);
   const importKey=()=>JSON.stringify([scoreKey(),$('scores-sbd-column').value,$('scores-mcq-column').value,$('scores-first-row').value]);
   function resetScores(){
     ++scoreRevision;scoreImportContext=null;combinedContext=null;
     cache.scoreImportRows=[];cache.combinedScores=[];
-    for(const id of ['scores-preview','scores-results','scores-summary'])$(id).innerHTML='';
+    cache.subjectStatistics=null;
+    for(const id of ['scores-preview','scores-results','scores-summary','scores-class-results'])$(id).innerHTML='';
     $('scores-import').disabled=true;$('scores-export').disabled=true;
   }
   async function loadScoreMode(){
@@ -1333,42 +1340,52 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const examId=(state.selectedExam||''),subjectCode=$('scores-subject').value;
     setAdminExam(examId);
     if(!subjectCode)throw new Error('Chọn môn thi cần tổng hợp.');
-    const key=scoreKey(),revision=scoreRevision;
-    const{data,error}=await state.client.rpc('exam_get_subject_results',{
-      p_exam_id:examId,p_subject_code:subjectCode
+    const key=statisticsKey(),revision=scoreRevision;
+    const{data,error}=await state.client.rpc('exam_get_subject_statistics',{
+      p_exam_id:examId,p_subject_code:subjectCode,
+      p_include_absent:!!$('scores-include-absent').checked,p_include_violations:!!$('scores-include-violations').checked
     });
     if(error)throw new Error(`Không tải được điểm tổng hợp: ${error.message}`);
-    if(key!==scoreKey()||revision!==scoreRevision)return;
+    if(key!==statisticsKey()||revision!==scoreRevision)return;
     combinedContext=key;
-    cache.combinedScores=data||[];
-    if(data?.length&&data[0].score_mode)$('scores-mode').value=data[0].score_mode;
+    cache.subjectStatistics=data;
+    cache.combinedScores=data?.rows||[];
+    if(cache.combinedScores.length)$('scores-mode').value=cache.combinedScores[0].score_mode;
     const missingEssay=cache.combinedScores.filter(row=>row.essay_missing).length;
     const missingMcq=cache.combinedScores.filter(row=>row.mcq_missing).length;
     const complete=cache.combinedScores.filter(row=>row.total_score!==null).length;
     $('scores-summary').innerHTML=[
       ['Thí sinh',cache.combinedScores.length],['Đã đủ điểm',complete],
-      ['Thiếu điểm tự luận',missingEssay],['Thiếu điểm trắc nghiệm',missingMcq]
+      ['Thiếu điểm tự luận',missingEssay],['Thiếu điểm trắc nghiệm',missingMcq],
+      ['Được tính thống kê',data?.summary?.included_count??0],['Loại khỏi thống kê',data?.summary?.excluded_count??0],
+      ['Điểm TB thống kê',data?.summary?.average_score==null?'—':Number(data.summary.average_score).toFixed(3)]
     ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
-    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng</th><th>Trạng thái</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
+    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
       const completeScore=row.total_score!==null;
       const status=subjectResultStatus(row);
-      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td></tr>`;
-    }).join('')||'<tr><td colspan="7" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td><td>${esc(row.statistics_score??'')}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
+    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
+    $('scores-class-results').innerHTML=`<h3>Thống kê môn theo lớp</h3><table><thead><tr><th>Lớp</th><th>Dự thi</th><th>Được tính</th><th>Loại</th><th>Điểm TB</th></tr></thead><tbody>${(data?.classes||[]).map(row=>`<tr><td>${esc(row.class_code)}</td><td>${row.candidates}</td><td>${row.included_count}</td><td>${row.excluded_count}</td><td>${row.average_score==null?'—':Number(row.average_score).toFixed(3)}</td></tr>`).join('')}</tbody></table>`;
     $('scores-export').disabled=!cache.combinedScores.length;
   }
 
   function exportCombinedScores(){
-    if(combinedContext!==scoreKey()||!cache.combinedScores.length)throw new Error('Chưa có điểm tổng hợp để xuất.');
+    if(combinedContext!==statisticsKey()||!cache.combinedScores.length)throw new Error('Chưa có điểm tổng hợp để xuất.');
     const rows=[
-      ['SBD','Mã học sinh','Họ và tên','Lớp','Điểm tự luận','Điểm trắc nghiệm','Tổng điểm','Trạng thái'],
+      ['SBD','Mã học sinh','Họ và tên','Lớp','Điểm tự luận','Điểm trắc nghiệm','Tổng gốc','Trạng thái','Điểm thống kê','Xử lý thống kê'],
       ...cache.combinedScores.map(row=>[
         row.sbd,row.student_code,row.student_name,row.class_code,row.essay_score??'',
         row.mcq_score??'',row.total_score??'',
-        subjectResultStatus(row)
+        subjectResultStatus(row),row.statistics_score??'',subjectStatisticsReason(row)
       ])
     ];
     const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
     window.XLSX.utils.book_append_sheet(wb,ws,'Tong hop diem');
+    const classRows=[['Lớp','Dự thi','Được tính','Loại','Điểm TB'],...(cache.subjectStatistics?.classes||[]).map(r=>[r.class_code,r.candidates,r.included_count,r.excluded_count,r.average_score??''])];
+    window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet(classRows),'Thong ke lop');
+    window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet([
+      ['Tính học sinh vắng',!!$('scores-include-absent').checked],['Tính học sinh vi phạm',!!$('scores-include-violations').checked]
+    ]),'Lua chon thong ke');
     window.XLSX.writeFile(wb,`tong-hop-diem-${(state.selectedExam||'')}-${$('scores-subject').value}.xlsx`);
   }
 
@@ -1731,6 +1748,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
   }
   function wireScores(){
+    for(const id of ['scores-include-absent','scores-include-violations'])$(id).onchange=()=>{
+      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;
+      for(const target of ['scores-results','scores-summary','scores-class-results'])$(target).innerHTML='';
+      $('scores-export').disabled=true;
+    };
     $('scores-exam').onchange=refreshScores;
     $('scores-subject').onchange=()=>{resetScores();$('scores-mode').value='';};
     safeAction('scores-message',loadScoreMode,$('scores-load-mode'));
@@ -1757,7 +1779,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     refreshExamSelectors:()=>{setExamOptions();refreshScores();},
     refreshScores,
     invalidateCombinedScores:()=>{
-      ++scoreRevision;combinedContext=null;cache.combinedScores=[];$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
+      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;$('scores-class-results').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
       message($('scores-message'),'Điểm tự luận đã thay đổi. Nhấn Tải điểm tổng hợp để tính lại.','info');
     },
     refreshAbsences:async examId=>{
