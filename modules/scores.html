@@ -1,5 +1,33 @@
 <section class="tab-panel hidden" id="tab-scores">
   <div class="section-heading"><div><h2>Tổng hợp điểm</h2><p>Nhập điểm trắc nghiệm từ Excel theo cột SBD/điểm tùy chọn, ghép với điểm tự luận đã nhập theo phách.</p></div></div>
+  <section id="score-control" class="panel">
+    <h3>Kiểm soát điểm tự luận theo phách</h3>
+    <p id="score-control-exam" role="status">Chọn kỳ thi ở tab Kỳ thi.</p>
+    <div id="score-control-message" class="notice hidden" role="status"></div>
+    <div class="form-grid">
+      <label>Môn đã có phách<select id="score-control-subject"></select></label>
+      <label>Phương án phách đã khóa<select id="score-control-run"></select></label>
+      <label>Đầu phách<select id="score-control-head"><option value="">Tất cả đầu phách</option></select></label>
+      <label>Trạng thái<select id="score-control-filter"><option value="all">Tất cả</option><option value="missing">Chưa nhập điểm (không gồm vắng)</option><option value="scored">Có điểm / đã ghi Không bài</option><option value="zero">Điểm 0</option><option value="no_paper">Không bài</option><option value="absent">Vắng</option><option value="violation">Có vi phạm</option></select></label>
+      <label>Tìm phách / SBD<input id="score-control-search" type="search" placeholder="Mã phách hoặc SBD"></label>
+    </div>
+    <div class="form-actions"><button id="score-control-refresh" class="btn btn-light" type="button">Tải lại</button><button id="score-control-select-visible" class="btn btn-light" type="button">Chọn các phách có điểm đang hiện</button><button id="score-control-clear-selection" class="btn btn-light" type="button">Bỏ chọn tất cả</button></div>
+    <p id="score-control-summary" role="status"></p>
+    <div id="score-control-head-summary" class="table-wrap score-control-scroll"></div>
+    <div id="score-control-rows" class="table-wrap score-control-scroll"></div>
+    <p id="score-control-selected" role="status"></p>
+    <div class="form-actions"><button id="score-control-preview-selected" class="btn danger-btn" type="button" disabled>Xem trước xóa điểm các phách đã chọn</button><button id="score-control-preview-head" class="btn danger-btn" type="button" disabled>Xem trước xóa điểm cả đầu phách</button></div>
+    <section id="score-control-preview" class="panel" hidden>
+      <h4>Xác nhận phạm vi xóa điểm tự luận</h4>
+      <p id="score-control-preview-summary"></p>
+      <div id="score-control-preview-rows" class="table-wrap score-control-scroll"></div>
+      <label>Ghi chú thao tác<input id="score-control-note" maxlength="500" placeholder="Không bắt buộc"></label>
+      <p>Điểm bị xóa trở về chưa nhập. Phách, phân công, báo vắng, vi phạm và nhật ký cũ được giữ nguyên.</p>
+      <div class="form-actions"><button id="score-control-confirm" class="btn danger-btn" type="button" disabled>Xác nhận xóa điểm</button><button id="score-control-cancel" class="btn btn-light" type="button">Hủy</button></div>
+    </section>
+    <details><summary>Nhật ký xóa điểm</summary><button id="score-control-audit-load" class="btn btn-light" type="button">Tải 100 bản ghi xóa gần nhất</button><div id="score-control-audit" class="table-wrap score-control-scroll"></div></details>
+  </section>
+  <h3>Nhập trắc nghiệm và ghép điểm</h3>
   <div class="form-grid">
     <label>Kỳ thi<select id="scores-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
     <label>Môn thi<select id="scores-subject"><option value="">-- Chọn môn --</option></select></label>

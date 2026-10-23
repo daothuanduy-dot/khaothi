@@ -1693,6 +1693,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   return{
     refreshExamSelectors:setExamOptions,
+    invalidateCombinedScores:()=>{
+      cache.combinedScores=[];$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
+      message($('scores-message'),'Điểm tự luận đã thay đổi. Nhấn Tải điểm tổng hợp để tính lại.','info');
+    },
     refreshAbsences:async examId=>{
       $('absence-load').disabled=!examId;
       if(absenceExamId===examId&&examId)return true;
