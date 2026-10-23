@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    #teaching-class-picker[hidden]{display:none!important}
+    #teaching-picker-list{max-height:350px;overflow:auto;margin:12px 0}
     #teaching-matrix{max-height:65vh;overflow:auto}
     #teaching-matrix table{border-collapse:separate;border-spacing:0}
     #teaching-matrix thead th{position:sticky;top:0;z-index:2;background:#eef3fa}
@@ -88,7 +90,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.132</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.134</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -196,9 +198,17 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.132" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script type="module" src="./js/app.js?v=0.1.134" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
+      // Runs independently of app.js, including when an old app/loader is served.
+      document.addEventListener('click', event => {
+        if (!event.target.closest('[data-tab="teaching"]')) return;
+        if (document.getElementById('tab-teaching')) return;
+        const notice=document.getElementById('global-message');
+        notice.textContent='Chưa tải được giao diện Phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html rồi tải lại bằng Ctrl+F5. Chạy SQL riêng không bổ sung được giao diện này.';
+        notice.className='notice notice-error';
+      });
       const form = document.getElementById('setup-form');
       form.addEventListener('submit', event => {
         if (form.dataset.connectionHandler === 'ready') return;

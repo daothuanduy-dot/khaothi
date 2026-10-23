@@ -1,11 +1,11 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.132';
-import {loadTabModules} from './module-loader.js?v=0.1.132';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.132';
-import {wireAccounts} from './accounts.js?v=0.1.132';
-import {wireTeaching} from './teaching.js?v=0.1.132';
-import {loadExamRounds} from './rounds.js?v=0.1.132';
-const APP_VERSION='v0.1.132';
-const APP_BUILD='2026-10-22-independent-subject-method-score-flag';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.134';
+import {loadTabModules} from './module-loader.js?v=0.1.134';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.134';
+import {wireAccounts} from './accounts.js?v=0.1.134';
+import {wireTeaching} from './teaching.js?v=0.1.134';
+import {loadExamRounds} from './rounds.js?v=0.1.134';
+const APP_VERSION='v0.1.134';
+const APP_BUILD='2026-10-23-teaching-period-class-picker';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -314,7 +314,10 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='teaching')teaching?.refresh();
+  if(tab==='teaching'){
+    if(teaching)teaching.refresh();
+    else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html, sau đó tải lại bằng Ctrl+F5.','error');
+  }
   if(tab==='sbd')refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
   if(tab==='settings')loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
 }
@@ -2870,7 +2873,8 @@ function wireRoomingEditor(){
 }
 async function boot(){
   try{
-    await loadTabModules();
+    const moduleVersion=await loadTabModules();
+    if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
     ensureCandidateClassDropdown();
   }catch(error){
     showScreen('setup-screen');

@@ -1,8 +1,37 @@
 <section class="tab-panel hidden" id="tab-teaching">
   <div class="section-heading"><div><h2>Phân công giảng dạy</h2><p>Phân công đầy đủ các môn theo lớp và học kỳ. Tên giáo viên trên thống kê lấy từ phân công tương ứng.</p></div></div>
   <div id="teaching-message" class="notice hidden" role="status"></div>
+  <div class="panel">
+    <h3>1. Chọn hoặc tạo học kỳ</h3>
+    <div id="teaching-period-form" class="form-grid" role="group" aria-label="Tạo hoặc mở học kỳ">
+      <label>Năm học<input id="teaching-year" placeholder="2026-2027" maxlength="20"></label>
+      <label>Học kỳ<select id="teaching-semester"><option value="1">Học kỳ I</option><option value="2">Học kỳ II</option></select></label>
+      <div class="form-actions"><button id="teaching-period-open" class="btn btn-primary" type="button">Tạo / Mở học kỳ</button></div>
+    </div>
+    <label>Học kỳ đã có<select id="teaching-period"><option value="">-- Chọn năm học / học kỳ --</option></select></label>
+    <p id="teaching-period-status" role="status">Tạo học kỳ trước, sau đó chọn các lớp cần phân công.</p>
+  </div>
+  <div class="panel">
+    <h3>2. Gán lớp vào học kỳ</h3>
+    <button id="teaching-load-classes" class="btn btn-primary" type="button" disabled>Chọn lớp từ danh sách học sinh</button>
+    <p>Có thể chọn nhiều lớp hoặc chọn cả khối. Các lớp đã có trong học kỳ được giữ nguyên.</p>
+    <div id="teaching-class-picker" hidden>
+      <div class="form-grid"><label>Khối<select id="teaching-picker-grade"><option value="">Tất cả khối</option></select></label><label>Tìm lớp<input id="teaching-picker-search" type="search" placeholder="Tên lớp"></label></div>
+      <div class="form-actions"><button id="teaching-picker-all" class="btn btn-light" type="button">Chọn tất cả đang lọc</button><button id="teaching-picker-none" class="btn btn-light" type="button">Bỏ chọn đang lọc</button></div>
+      <p id="teaching-picker-count" role="status"></p>
+      <div id="teaching-picker-list" class="table-wrap"></div>
+      <button id="teaching-picker-save" class="btn btn-primary" type="button" disabled>Gán các lớp đã chọn vào học kỳ</button>
+    </div>
+    <details><summary>Thêm lớp thủ công</summary>
+      <div id="teaching-class-form" class="form-grid" role="group" aria-label="Thêm lớp thủ công">
+        <label>Mã lớp<input id="teaching-class-code" maxlength="40" placeholder="11B1"></label>
+        <label>Khối<input id="teaching-class-grade" maxlength="20" placeholder="11"></label>
+        <div class="form-actions"><button id="teaching-class-add" class="btn btn-light" type="button" disabled>Thêm lớp</button></div>
+      </div>
+    </details>
+  </div>
+  <h3>3. Phân công giáo viên</h3>
   <div class="form-grid">
-    <label>Kỳ học<select id="teaching-period"><option value="">-- Chọn năm học / học kỳ --</option></select></label>
     <label>Khối<select id="teaching-grade"><option value="">Tất cả khối</option></select></label>
     <label>Tìm lớp<input id="teaching-search" type="search" placeholder="Ví dụ: 11B1"></label>
     <label class="check-field"><span>Lọc phân công</span><span><input id="teaching-missing" type="checkbox"> Chỉ lớp còn thiếu phân công</span></label>
@@ -10,24 +39,12 @@
   <div class="form-actions"><button id="teaching-refresh" class="btn btn-light" type="button">Tải lại</button><button id="teaching-save" class="btn btn-primary" type="button" disabled>Lưu thay đổi</button><button id="teaching-discard" class="btn btn-light" type="button" disabled>Bỏ thay đổi</button></div>
   <p id="teaching-summary" role="status"></p>
   <div id="teaching-matrix" class="table-wrap"><p>Chọn hoặc tạo kỳ học để phân công.</p></div>
-  <details class="panel"><summary>Thiết lập năm học, lớp và môn học</summary>
-    <form id="teaching-period-form" class="form-grid">
-      <label>Năm học<input id="teaching-year" placeholder="2026-2027" pattern="[0-9]{4}-[0-9]{4}" required></label>
-      <label>Học kỳ<select id="teaching-semester"><option value="1">Học kỳ I</option><option value="2">Học kỳ II</option></select></label>
-      <div class="form-actions"><button class="btn btn-light" type="submit">Tạo kỳ học</button></div>
-    </form>
-    <form id="teaching-class-form" class="form-grid">
-      <label>Mã lớp<input id="teaching-class-code" maxlength="40" placeholder="11B1" required></label>
-      <label>Khối<input id="teaching-class-grade" maxlength="20" placeholder="11" required></label>
-      <div class="form-actions"><button class="btn btn-light" type="submit">Thêm lớp vào kỳ đang chọn</button></div>
-    </form>
-    <button id="teaching-load-classes" class="btn btn-light" type="button">Bổ sung lớp từ danh sách học sinh</button>
-    <p>Kiểm tra đúng danh sách học sinh của năm học trước khi bổ sung lớp. Các lớp đã có được giữ nguyên.</p>
-    <form id="teaching-subject-form" class="form-grid">
-      <label>Mã môn<input id="teaching-subject-code" maxlength="40" placeholder="TOAN" required></label>
-      <label>Tên môn<input id="teaching-subject-name" maxlength="100" placeholder="Toán" required></label>
-      <div class="form-actions"><button class="btn btn-light" type="submit">Thêm môn học</button></div>
-    </form>
+  <details class="panel"><summary>Danh mục môn học</summary>
+    <div id="teaching-subject-form" class="form-grid" role="group" aria-label="Thêm môn học">
+      <label>Mã môn<input id="teaching-subject-code" maxlength="40" placeholder="TOAN"></label>
+      <label>Tên môn<input id="teaching-subject-name" maxlength="100" placeholder="Toán"></label>
+      <div class="form-actions"><button id="teaching-subject-add" class="btn btn-light" type="button">Thêm môn học</button></div>
+    </div>
     <button id="teaching-standard-subjects" class="btn btn-light" type="button">Bổ sung danh mục môn có sẵn</button>
     <p>Danh mục môn dùng chung cho các kỳ học và độc lập với môn thi, môn tính điểm. Có thể thêm các môn ngoài danh mục có sẵn.</p>
   </details>
