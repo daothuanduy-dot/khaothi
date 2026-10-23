@@ -10,6 +10,23 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    #tab-absences [hidden]{display:none!important}
+    .attendance-scroll{max-height:440px;overflow:auto;scroll-margin-top:20px}
+    .attendance-report{max-height:300px}
+    .attendance-scroll table{border-collapse:separate;border-spacing:0}
+    .attendance-scroll thead th{position:sticky;top:0;z-index:1;background:#eef3fa}
+    .attendance-scroll td{vertical-align:middle}
+    .student-picker{position:relative;min-width:0}
+    .student-picker>label{display:block;margin-bottom:7px}
+    .student-picker-field{display:flex;border:1px solid #cad6e8;border-radius:10px;background:white;overflow:hidden}
+    .student-picker-field input{flex:1;min-width:0;width:100%;border:0!important;box-shadow:none!important}
+    .student-picker-field button{flex:none;border:0;background:#f1f5fb;min-width:38px;cursor:pointer}
+    .student-picker-field:focus-within{outline:2px solid #2563eb;outline-offset:1px}
+    .student-picker-options{position:absolute;top:100%;left:0;right:0;z-index:20;max-height:260px;overflow:auto;background:white;border:1px solid #cad6e8;border-radius:10px;box-shadow:0 12px 28px #172d4a22}
+    .student-picker-option{padding:10px 12px;cursor:pointer;overflow-wrap:anywhere}
+    .student-picker-option:hover,.student-picker-option.active{background:#e8f0ff}
+    .student-picker-option[aria-selected="true"]{font-weight:600;color:#1d4ed8}
+    .student-picker-empty{padding:12px;color:#64748b}
     #ranking-editor[hidden]{display:none!important}
     #teaching-class-picker[hidden]{display:none!important}
     #teaching-picker-list{max-height:350px;overflow:auto;margin:12px 0}
@@ -91,7 +108,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.137</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.138</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -199,7 +216,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.137" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script type="module" src="./js/app.js?v=0.1.138" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       // Runs independently of app.js, including when an old app/loader is served.

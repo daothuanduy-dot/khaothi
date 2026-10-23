@@ -1,20 +1,28 @@
 <section class="tab-panel hidden" id="tab-absences">
   <div class="section-heading"><div><h2>Vắng thi / Vi phạm quy chế</h2><p>Báo vắng theo môn và cập nhật mức xử lý vi phạm. Điểm gốc của bài thi được giữ nguyên.</p></div></div>
+  <p id="attendance-exam-label" class="notice notice-info" role="status">Chọn kỳ thi tại tab Kỳ thi trước khi báo vắng hoặc vi phạm.</p>
+  <select id="absence-exam" hidden aria-hidden="true" tabindex="-1"><option value="">-- Chọn kỳ thi --</option></select>
+  <input id="absence-search" type="hidden">
+  <div class="form-actions"><a class="btn btn-light" href="#absence-roster">Báo vắng</a><a class="btn btn-light" href="#violation-panel">Vi phạm quy chế</a></div>
+  <h3>Báo vắng</h3>
   <div class="form-grid">
-    <label>Kỳ thi<select id="absence-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
     <label>Khối<select id="absence-grade-filter"><option value="">Tất cả khối</option></select></label>
     <label>Lớp<select id="absence-class-filter"><option value="">Tất cả lớp</option></select></label>
-    <label>Tìm SBD / mã học sinh / họ tên<input id="absence-search" type="search" placeholder="Nhập từ khóa"></label>
-    <div class="form-actions"><button id="absence-load" class="btn btn-light" type="button">Tải thí sinh</button><button id="absence-save" class="btn btn-primary" type="button">Lưu báo vắng</button></div>
+    <div class="student-picker" id="absence-student-picker">
+      <label for="absence-student-input">Học sinh</label>
+      <div class="student-picker-field"><input id="absence-student-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="absence-student-options" autocomplete="off" placeholder="Gõ tên, nmk, SBD hoặc mã học sinh"><button id="absence-student-toggle" type="button" aria-label="Mở danh sách học sinh">▾</button></div>
+      <div id="absence-student-options" class="student-picker-options" role="listbox" aria-label="Học sinh báo vắng" hidden></div>
+    </div>
+    <div class="form-actions"><button id="absence-load" class="btn btn-light" type="button">Tải lại</button><button id="absence-save" class="btn btn-primary" type="button">Lưu báo vắng</button></div>
   </div>
-  <div class="notice notice-info">Chọn khối, lớp hoặc tìm theo SBD/mã học sinh/họ tên để thu hẹp danh sách. Chọn “Vắng toàn kỳ” nếu thí sinh không dự thi môn nào; nếu chỉ vắng một số môn, bỏ chọn trạng thái toàn kỳ và đánh dấu môn tương ứng. Mọi thay đổi, kể cả xóa báo vắng, chỉ có hiệu lực sau khi bấm Lưu.</div>
+  <p>Gõ trực tiếp trong danh sách học sinh; ví dụ “nmk” tìm Nguyễn Minh Khang. Chọn “Tất cả học sinh” để xem lại bảng. Thay đổi báo vắng chỉ có hiệu lực sau khi bấm Lưu.</p>
   <div id="absence-message" class="notice hidden" role="status" aria-live="polite"></div>
-  <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Vắng toàn kỳ</th><th>Các môn vắng</th><th>Ghi chú</th></tr></thead><tbody id="absence-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
+  <div id="absence-roster" class="table-wrap attendance-scroll"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Vắng toàn kỳ</th><th>Các môn vắng</th><th>Ghi chú</th></tr></thead><tbody id="absence-table-body"><tr><td colspan="6" class="empty">Chọn kỳ thi tại tab Kỳ thi.</td></tr></tbody></table></div>
   <div class="section-heading"><div><h3>Danh sách kiểm soát thí sinh vắng</h3><p>Danh sách cập nhật theo các lựa chọn hiện tại, kể cả thay đổi chưa lưu.</p></div></div>
   <div class="form-grid">
     <label>Hiển thị danh sách<select id="absence-report-filter"><option value="all">Tất cả thí sinh vắng</option><option value="*">Vắng toàn kỳ</option></select></label>
   </div>
-  <div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phạm vi vắng</th><th>Thao tác</th></tr></thead><tbody id="absence-report-body"><tr><td colspan="5" class="empty">Chọn kỳ thi rồi tải thí sinh.</td></tr></tbody></table></div>
+  <div class="table-wrap attendance-scroll attendance-report"><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phạm vi vắng</th><th>Thao tác</th></tr></thead><tbody id="absence-report-body"><tr><td colspan="5" class="empty">Chọn kỳ thi tại tab Kỳ thi.</td></tr></tbody></table></div>
   <section id="violation-panel" class="panel">
     <h3>Vi phạm quy chế theo môn</h3>
     <div id="violation-message" class="notice hidden" role="status"></div>
@@ -22,10 +30,14 @@
     <div class="form-grid">
       <label>Đợt<select id="violation-round"><option value="">Tất cả đợt</option><option value="0">Chưa phân đợt</option><option value="1">Đợt 1</option><option value="2">Đợt 2</option></select></label>
       <label>Lớp<select id="violation-class"><option value="">Tất cả lớp</option></select></label>
-      <label>Tìm học sinh<input id="violation-search" type="search" placeholder="SBD, mã hoặc họ tên"></label>
     </div>
     <div class="form-grid">
-      <label>Học sinh<select id="violation-candidate"><option value="">-- Chọn học sinh --</option></select></label>
+      <select id="violation-candidate" hidden aria-hidden="true" tabindex="-1"><option value="">-- Chọn học sinh --</option></select>
+      <div class="student-picker" id="violation-student-picker">
+        <label for="violation-student-input">Học sinh</label>
+        <div class="student-picker-field"><input id="violation-student-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="violation-student-options" autocomplete="off" placeholder="Gõ tên, nmk, SBD hoặc mã học sinh"><button id="violation-student-toggle" type="button" aria-label="Mở danh sách học sinh">▾</button></div>
+        <div id="violation-student-options" class="student-picker-options" role="listbox" aria-label="Học sinh vi phạm" hidden></div>
+      </div>
       <label>Môn vi phạm<select id="violation-subject"><option value="">-- Chọn môn --</option></select></label>
       <label>Hình thức xử lý<select id="violation-type"><option value="percent">Trừ % điểm bài thi</option><option value="zero">Điểm 0</option></select></label>
       <label>Tỷ lệ trừ (%)<input id="violation-percent" type="number" min="0" max="100" step="0.01" placeholder="Ví dụ: 25"></label>
@@ -33,8 +45,8 @@
     </div>
     <p id="violation-scope" role="status"></p>
     <p>Nhập mức xử lý theo quyết định áp dụng. Trừ 25% nghĩa là bài được 8 điểm còn 6 điểm; hệ thống không ghi đè điểm gốc. Các môn khác không bị ảnh hưởng.</p>
-    <div class="form-actions"><button id="violation-save" class="btn btn-primary" type="button">Lưu vi phạm</button><button id="violation-clear" class="btn btn-light" type="button">Bỏ thay đổi</button></div>
+    <div class="form-actions"><button id="violation-save" class="btn btn-primary" type="button" disabled>Lưu vi phạm</button><button id="violation-clear" class="btn btn-light" type="button">Bỏ thay đổi</button></div>
     <p id="violation-count" role="status"></p>
-    <div class="table-wrap"><table><thead><tr><th>Học sinh</th><th>Lớp</th><th>Đợt</th><th>Môn</th><th>Xử lý</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody id="violation-list"><tr><td colspan="7">Chọn kỳ thi rồi tải dữ liệu.</td></tr></tbody></table></div>
+    <div class="table-wrap attendance-scroll attendance-report"><table><thead><tr><th>Học sinh</th><th>Lớp</th><th>Đợt</th><th>Môn</th><th>Xử lý</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody id="violation-list"><tr><td colspan="7">Chọn kỳ thi tại tab Kỳ thi.</td></tr></tbody></table></div>
   </section>
 </section>

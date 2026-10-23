@@ -1,13 +1,14 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.137';
-import {loadTabModules} from './module-loader.js?v=0.1.137';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.137';
-import {wireAccounts} from './accounts.js?v=0.1.137';
-import {wireTeaching} from './teaching.js?v=0.1.137';
-import {wireRanking} from './ranking.js?v=0.1.137';
-import {wireViolations} from './violations.js?v=0.1.137';
-import {loadExamRounds} from './rounds.js?v=0.1.137';
-const APP_VERSION='v0.1.137';
-const APP_BUILD='2026-10-23-exam-violations';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.138';
+import {loadTabModules} from './module-loader.js?v=0.1.138';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.138';
+import {wireAccounts} from './accounts.js?v=0.1.138';
+import {wireTeaching} from './teaching.js?v=0.1.138';
+import {wireRanking} from './ranking.js?v=0.1.138';
+import {wireViolations} from './violations.js?v=0.1.138';
+import {createStudentPicker} from './student-picker.js?v=0.1.138';
+import {loadExamRounds} from './rounds.js?v=0.1.138';
+const APP_VERSION='v0.1.138';
+const APP_BUILD='2026-10-23-attendance-student-picker';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -318,7 +319,9 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='absences')violations?.refresh();
+  if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
+    .then(ready=>{if(ready)return violations?.refresh()})
+    .catch(error=>message($('absence-message'),error.message,'error'));
   if(tab==='teaching'){
     if(teaching)teaching.refresh();
     else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html, sau đó tải lại bằng Ctrl+F5.','error');
@@ -2892,10 +2895,10 @@ async function boot(){
   catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
   try{ranking=wireRanking({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được cấu hình ban:',error);message($('ranking-message'),error.message,'error')}
-  try{violations=wireViolations({state,$,esc,message,subjectName})}
+  try{violations=wireViolations({state,$,esc,message,subjectName,createStudentPicker})}
   catch(error){console.error('Không khởi tạo được vi phạm:',error);message($('violation-message'),error.message,'error')}
   try{
-    operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
+    operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,createStudentPicker,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
   }catch(error){
     console.error('Không khởi tạo được operations.js:',error);
     message($('forms-message'),`Không khởi tạo được biểu mẫu: ${error.message||String(error)}. Hãy cập nhật đồng bộ các tệp ứng dụng.`,'error');

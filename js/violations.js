@@ -4,8 +4,9 @@ export function penaltyValue(type,value){
   if(type!=='percent'||!/^\d+(?:\.\d{1,2})?$/.test(text)||Number(text)>100)throw new Error('Nhập mức trừ từ 0 đến 100%, tối đa hai chữ số thập phân.');
   return Number(text);
 }
-export function wireViolations({state,$,esc,message,subjectName=code=>code}){
+export function wireViolations({state,$,esc,message,subjectName=code=>code,createStudentPicker}){
   let examId='',candidates=[],decisions=[],candidateId='',subject='',dirty=false,busy=false;
+  let studentPicker=null;
   const notify=(text,type='info')=>message($('violation-message'),text,type);
   const current=()=>decisions.find(row=>row.candidate_id===candidateId&&row.subject_code===subject&&row.round_no===candidates.find(c=>c.id===candidateId)?.round_no);
   const discard=()=>!dirty||confirm('Có thông tin vi phạm chưa lưu. Bỏ thay đổi này?');
@@ -14,21 +15,20 @@ export function wireViolations({state,$,esc,message,subjectName=code=>code}){
     const {data,error}=await state.client.rpc(name,args);if(error){if(error.code==='PGRST202')throw new Error('Cần chạy migration 137 để dùng chức năng vi phạm quy chế.');throw new Error(error.message)}return data;
   }
   const matches=c=>(!$('violation-class').value||c.class_code===$('violation-class').value)
-    &&($('violation-round').value===''||String(c.round_no)===$('violation-round').value)
-    &&[c.student_name,c.student_code,c.sbd].some(value=>String(value||'').toLocaleLowerCase('vi').includes($('violation-search').value.trim().toLocaleLowerCase('vi')));
+    &&($('violation-round').value===''||String(c.round_no)===$('violation-round').value);
   function render(){
     const selected=candidates.find(row=>row.id===candidateId),visible=candidates.filter(matches);
     if(selected&&!visible.some(row=>row.id===selected.id))visible.push(selected);
     $('violation-candidate').innerHTML='<option value="">-- Chọn học sinh --</option>'+visible.map(c=>`<option value="${esc(c.id)}">${esc([c.class_code,c.sbd||c.student_code,c.student_name].filter(Boolean).join(' · '))}</option>`).join('');
     $('violation-candidate').value=candidateId;
+    studentPicker?.setItems(visible,candidateId);
     $('violation-save').disabled=busy||!examId||examId!==$('absence-exam').value||!candidateId||!subject;
     $('violation-percent').disabled=busy||$('violation-type').value==='zero';
     $('violation-scope').textContent=selected?`${selected.student_name} · ${selected.class_code} · ${selected.round_no?`Đợt ${selected.round_no}`:'Chưa phân đợt'} · ${subjectName(subject)||'Chọn môn'}${dirty?' · Chưa lưu':''}`:'Chọn học sinh và môn trong kỳ thi ở đầu trang.';
     const rows=decisions.filter(row=>{
       const c=candidates.find(c=>c.id===row.candidate_id);
-      return c&&(!$('violation-class').value||c.class_code===$('violation-class').value)
-        &&($('violation-round').value===''||String(row.round_no)===$('violation-round').value)
-        &&[c.student_name,c.student_code,c.sbd].some(value=>String(value||'').toLocaleLowerCase('vi').includes($('violation-search').value.trim().toLocaleLowerCase('vi')));
+      return c&&(!candidateId||c.id===candidateId)&&(!$('violation-class').value||c.class_code===$('violation-class').value)
+        &&($('violation-round').value===''||String(row.round_no)===$('violation-round').value);
     });
     $('violation-count').textContent=`${rows.length}/${decisions.length} vi phạm đã lưu`;
     $('violation-list').innerHTML=rows.map(row=>{
@@ -53,9 +53,12 @@ export function wireViolations({state,$,esc,message,subjectName=code=>code}){
   async function run(fn){if(busy)return;busy=true;const controls=[...$('violation-panel').querySelectorAll('input,select,textarea,button'),$('absence-exam')],previous=controls.map(c=>c.disabled);controls.forEach(c=>c.disabled=true);
     try{await fn()}catch(error){notify(error.message||String(error),'error')}finally{busy=false;controls.forEach((c,i)=>c.disabled=previous[i]);render()}}
   $('violation-load').onclick=()=>run(async()=>{if(discard()){await load($('absence-exam').value);notify('Đã tải vi phạm đã lưu.','success')}});
-  $('violation-class').onchange=render;$('violation-round').onchange=render;$('violation-search').oninput=render;
+  $('violation-class').onchange=render;$('violation-round').onchange=render;
   $('violation-candidate').onchange=()=>{const id=$('violation-candidate').value;if(!discard()){$('violation-candidate').value=candidateId;return}candidateId=id;subject='';fillForm()};
   $('violation-subject').onchange=()=>{const code=$('violation-subject').value;if(!discard()){$('violation-subject').value=subject;return}subject=code;fillForm()};
+  if(createStudentPicker)studentPicker=createStudentPicker({root:$('violation-student-picker'),input:$('violation-student-input'),list:$('violation-student-options'),toggle:$('violation-student-toggle'),esc,emptyLabel:'-- Chọn học sinh --',onSelect:id=>{
+    $('violation-candidate').value=id;$('violation-candidate').onchange();return candidateId===id;
+  }});
   for(const id of ['violation-type','violation-percent','violation-note'])$(id).oninput=()=>{dirty=true;if($('violation-type').value==='zero')$('violation-percent').value='100';render()};
   $('violation-clear').onclick=()=>{if(discard())fillForm()};
   $('violation-save').onclick=()=>run(async()=>{
@@ -83,5 +86,9 @@ export function wireViolations({state,$,esc,message,subjectName=code=>code}){
     const id=$('absence-exam').value;run(()=>load(id));
   },true);
   window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue=''}});
-  return {refresh:()=>busy||dirty?Promise.resolve():run(()=>load($('absence-exam').value))};
+  return {refresh:()=>{
+    if(busy||examId===$('absence-exam').value)return Promise.resolve();
+    if(!discard())return Promise.resolve();
+    return run(()=>load($('absence-exam').value));
+  }};
 }
