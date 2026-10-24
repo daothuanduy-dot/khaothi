@@ -1,16 +1,17 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.146';
-import {loadTabModules} from './module-loader.js?v=0.1.146';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.146';
-import {wireAccounts} from './accounts.js?v=0.1.146';
-import {wireTeaching} from './teaching.js?v=0.1.146';
-import {wireRanking} from './ranking.js?v=0.1.146';
-import {wireViolations} from './violations.js?v=0.1.146';
-import {createStudentPicker} from './student-picker.js?v=0.1.146';
-import {wireScoreControl} from './score-control.js?v=0.1.146';
-import {wireClassReport} from './class-report.js?v=0.1.146';
-import {loadExamRounds} from './rounds.js?v=0.1.146';
-const APP_VERSION='v0.1.146';
-const APP_BUILD='2026-10-24-class-statistics-report';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
+import {loadTabModules} from './module-loader.js?v=0.1.147';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
+import {wireAccounts} from './accounts.js?v=0.1.147';
+import {wireTeaching} from './teaching.js?v=0.1.147';
+import {wireRanking} from './ranking.js?v=0.1.147';
+import {wireViolations} from './violations.js?v=0.1.147';
+import {createStudentPicker} from './student-picker.js?v=0.1.147';
+import {wireScoreControl} from './score-control.js?v=0.1.147';
+import {wireClassReport} from './class-report.js?v=0.1.147';
+import {wireChoiceReports} from './choice-report.js?v=0.1.147';
+import {loadExamRounds} from './rounds.js?v=0.1.147';
+const APP_VERSION='v0.1.147';
+const APP_BUILD='2026-10-24-choice-reports-pdf';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -21,6 +22,7 @@ let ranking=null;
 let violations=null;
 let scoreControl=null;
 let classReport=null;
+let choiceReports=null;
 let schoolStudents=[];
 let schoolStudentCatalog=[];
 let schoolStudentLoadToken=0;
@@ -323,7 +325,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();classReport?.refresh();}
+  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();classReport?.refresh();choiceReports?.refresh();}
   if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
     .then(ready=>{if(ready)return violations?.refresh()})
     .catch(error=>message($('absence-message'),error.message,'error'));
@@ -2902,8 +2904,9 @@ async function boot(){
   catch(error){console.error('Không khởi tạo được cấu hình ban:',error);message($('ranking-message'),error.message,'error')}
   try{violations=wireViolations({state,$,esc,message,subjectName,createStudentPicker})}
   catch(error){console.error('Không khởi tạo được vi phạm:',error);message($('violation-message'),error.message,'error')}
+  try{choiceReports=wireChoiceReports({state,$,esc,message,createPrintFrame})}catch(error){message($('choice-report-message'),error.message,'error')}
   try{classReport=wireClassReport({state,$,esc,message})}catch(error){message($('class-report-message'),error.message,'error')}
-  try{scoreControl=wireScoreControl({state,$,esc,message,subjectName,onScoresCleared:()=>{operations?.invalidateCombinedScores();classReport?.invalidate()}})}
+  try{scoreControl=wireScoreControl({state,$,esc,message,subjectName,onScoresCleared:()=>{operations?.invalidateCombinedScores();classReport?.invalidate();choiceReports?.invalidate()}})}
   catch(error){console.error('Không khởi tạo được kiểm soát điểm:',error);message($('score-control-message'),error.message,'error')}
   try{
     operations=wireOperations({state,$,esc,message,selectAllPages,subjects:SUBJECTS,subjectName,createStudentPicker,loadExamRounds:(client,examId)=>loadExamRounds(client,examId)});
