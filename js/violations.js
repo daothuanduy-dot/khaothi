@@ -12,7 +12,7 @@ export function wireViolations({state,$,esc,message,subjectName=code=>code,creat
   const discard=()=>!dirty||confirm('Có thông tin vi phạm chưa lưu. Bỏ thay đổi này?');
   async function rpc(name,args){
     if(state.role!=='admin'||!state.client)throw new Error('Chỉ Admin được cập nhật vi phạm.');
-    const {data,error}=await state.client.rpc(name,args);if(error){if(error.code==='PGRST202')throw new Error('Cần chạy migration 137 để dùng chức năng vi phạm quy chế.');throw new Error(error.message)}return data;
+    const {data,error}=await state.client.rpc(name,args);if(error){if(error.code==='PGRST202')throw new Error('Cần chạy migration 137 để dùng chức năng vi phạm quy chế.');throw new Error(error.message)}if(name==='exam_save_violation')state.statisticsRevision=(state.statisticsRevision||0)+1;return data;
   }
   const matches=c=>(!$('violation-class').value||c.class_code===$('violation-class').value)
     &&($('violation-round').value===''||String(c.round_no)===$('violation-round').value);

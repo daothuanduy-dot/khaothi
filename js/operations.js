@@ -793,6 +793,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     }
     const{data,error}=await state.client.rpc('exam_save_absences',{p_exam_id:examId,p_rows:rows});
     if(error)throw new Error(`Không lưu được báo vắng. ${error.message}`);
+    state.statisticsRevision=(state.statisticsRevision||0)+1;
     for(const candidate of cache.absences){
       candidate.outsideAbsences=candidate.outsideAbsences.filter(item=>rows.some(row=>row.candidate_id===candidate.id&&row.subject_code===item.subject_code));
       if(!candidate.outsideAbsences.length)edited.get(String(candidate.id))?.querySelector('[data-absence-outside-wrap]')?.remove();
@@ -1255,6 +1256,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     setAdminExam(examId);if(!subject||!mode)throw new Error('Chọn môn và hình thức tính điểm.');
     const{error}=await state.client.rpc('exam_set_subject_score_mode',{p_exam_id:examId,p_subject_code:subject,p_score_mode:mode});
     if(error)throw new Error(error.message);
+    state.statisticsRevision=(state.statisticsRevision||0)+1;
     if(key!==scoreKey())return;
     resetScores();$('scores-mode').value=mode;
     message($('scores-message'),'Đã lưu hình thức. Nhấn Tải điểm tổng hợp để xem kết quả.','success');
@@ -1331,6 +1333,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       p_rows:cache.scoreImportRows
     });
     if(error)throw new Error(`Không nhập được điểm trắc nghiệm: ${error.message}`);
+    state.statisticsRevision=(state.statisticsRevision||0)+1;
     if(key!==scoreKey()||revision!==scoreRevision)return;
     message($('scores-message'),`Đã nhập ${data.imported_count} điểm trắc nghiệm môn ${nameOf(subjectCode)}.`,'success');
     await loadCombinedScores();

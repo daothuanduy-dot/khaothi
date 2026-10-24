@@ -51,4 +51,18 @@
   <div id="scores-preview" class="table-wrap"></div>
   <div id="scores-results" class="table-wrap"></div>
   <div id="scores-class-results" class="table-wrap"></div>
+  <section class="panel" id="class-report-panel">
+    <h3>Thống kê các môn theo lớp và ban</h3>
+    <div class="form-grid">
+      <label>Hiển thị môn<select id="class-report-scope"><option value="counted">Môn tính điểm xếp hạng</option><option value="all">Tất cả môn thi</option></select></label>
+      <label>Khối<select id="class-report-grade"><option value="">Tất cả khối</option></select></label>
+      <label>Đồng hạng<select id="class-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
+      <label><input id="class-report-absent" type="checkbox"> Tính học sinh vắng</label>
+      <label><input id="class-report-violations" type="checkbox"> Tính học sinh vi phạm</label>
+    </div>
+    <p>Tổng và TB luôn dùng các môn tính điểm, dù hiển thị tất cả môn. Chỉ xếp hạng trong từng ban có cùng bộ môn và đủ điểm. Điểm hiển thị 3 số lẻ; thứ hạng dùng giá trị chưa làm tròn. Chưa so sánh tăng/giảm với kỳ khác.</p>
+    <div class="form-actions"><button type="button" class="btn btn-primary" id="class-report-load">Tải thống kê lớp</button><button type="button" class="btn btn-light" id="class-report-export" disabled>Xuất Excel thống kê lớp</button></div>
+    <div id="class-report-message" class="notice hidden" role="status"></div>
+    <div id="class-report-results"></div>
+  </section>
 </section>
