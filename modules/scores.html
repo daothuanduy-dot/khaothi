@@ -38,7 +38,7 @@
     <label>Cột SBD<input id="scores-sbd-column" type="text" value="B" maxlength="3" placeholder="B"></label>
     <label>Cột điểm trắc nghiệm<input id="scores-mcq-column" type="text" value="F" maxlength="3" placeholder="F"></label>
     <label>Dòng dữ liệu đầu tiên<input id="scores-first-row" type="number" min="1" step="1" value="2"></label>
-    <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-load" class="btn btn-light" type="button">Tải điểm tổng hợp</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
+    <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-check" class="btn btn-primary" type="button">Kiểm tra dữ liệu điểm</button><button id="scores-load" class="btn btn-light" type="button">Tải lại bảng điểm</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
   </div>
   <p class="help-text">Chọn môn và đọc hình thức đã lưu; chỉ bấm Lưu nếu cần thay đổi. Tự luận lấy điểm qua phách, trắc nghiệm đối chiếu SBD. Môn kết hợp cộng hai thành phần khi đủ điểm. Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F; dòng dữ liệu thường bắt đầu từ dòng 2.</p>
   <div class="form-grid">
@@ -49,7 +49,14 @@
   <div id="scores-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div id="scores-summary" class="metric-grid"></div>
   <div id="scores-preview" class="table-wrap"></div>
-  <div id="scores-results" class="table-wrap"></div>
+  <section id="scores-result-controls" class="scores-result-controls" hidden aria-label="Lọc danh sách điểm">
+    <label>Lớp<select id="scores-result-class"><option value="">Tất cả lớp</option></select></label>
+    <label>Trạng thái<select id="scores-result-status"><option value="all">Tất cả trạng thái</option><option value="complete">Đủ điểm</option><option value="missing">Thiếu điểm</option><option value="absent">Vắng</option><option value="no-paper">Không bài</option></select></label>
+    <label>Tìm SBD / học sinh<input id="scores-result-search" type="search" placeholder="SBD, họ tên hoặc mã học sinh"></label>
+    <button id="scores-result-clear" class="btn btn-light" type="button">Bỏ lọc</button>
+    <p id="scores-result-count" role="status"></p>
+  </section>
+  <div id="scores-results" class="table-wrap scores-results-scroll"></div>
   <div id="scores-class-results" class="table-wrap"></div>
   <section class="panel" id="choice-report-panel">
     <h3>Báo cáo kỳ thi lựa chọn / theo môn</h3>
