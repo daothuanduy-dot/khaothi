@@ -10,6 +10,7 @@ import {wireScoreControl} from './score-control.js?v=0.1.147';
 import {wireClassReport} from './class-report.js?v=0.1.147';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
+import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
 const APP_BUILD='2026-10-24-choice-reports-pdf';
 const $=id=>document.getElementById(id);
@@ -53,8 +54,9 @@ function hide(el){el.classList.add('hidden')}
 function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen','grader-screen'])$(id).classList.toggle('hidden',id!==name)}
 function setConnection(text,ok=false){$('connection-state').textContent=text;$('connection-state').style.background=ok?'#166534':'transparent';$('connection-state').style.color=ok?'white':'#dce8fb'}
 function saveConfig(url,key){localStorage.setItem('exam_supabase_url',url);localStorage.setItem('exam_supabase_key',key)}
-function readConfig(){return {url:localStorage.getItem('exam_supabase_url')||'',key:localStorage.getItem('exam_supabase_key')||''}}
+function readConfig(){return validatePublicConfig(publicConfig)}
 async function connect(url,key){
+  ({url,key}=validatePublicConfig({url,key}));
   state.client=null;state.session=null;
   if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase JS từ CDN. Kiểm tra kết nối Internet, tiện ích chặn quảng cáo hoặc mở CDN jsDelivr.');
   let parsed;
@@ -99,8 +101,9 @@ function showConnectionFailure(error){
     return;
   }
   setConnection('Kết nối lỗi');
-  showScreen('setup-screen');
-  message($('setup-message'),'Không kết nối được Supabase: '+detail,'error');
+  showScreen('login-screen');
+  $('login-submit').disabled=true;$('google-login').disabled=true;
+  message($('login-message'),'Chưa kết nối được hệ thống. Vui lòng tải lại trang hoặc liên hệ quản trị nhà trường.','error');
 }
 function updateVersionDisplay(){const label=`Phiên bản ${APP_VERSION} · build ${APP_BUILD}`;const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
@@ -2887,13 +2890,15 @@ function wireRoomingEditor(){
  });
 }
 async function boot(){
+  showScreen('login-screen');
+  $('login-submit').disabled=true;$('google-login').disabled=true;
   try{
     const moduleVersion=await loadTabModules();
     if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
     ensureCandidateClassDropdown();
   }catch(error){
-    showScreen('setup-screen');
-    message($('setup-message'),`Không khởi tạo được giao diện: ${error.message||String(error)}`,'error');
+    showScreen('login-screen');
+    message($('login-message'),'Không tải được giao diện. Vui lòng tải lại trang hoặc liên hệ quản trị.','error');
     return;
   }
   try{accounts=wireAccounts({state,$,esc,message})}
@@ -2966,14 +2971,12 @@ async function boot(){
       if(submit.disabled)message($('setup-message'),'Supabase chưa phản hồi sau 30 giây. Kiểm tra kết nối mạng hoặc tải lại trang rồi thử lại.','error');
     },30000);
   });
-  const config=readConfig();
-  if(!config.url||!config.key){
-    showScreen('setup-screen');
-    if(config.url||config.key)message($('setup-message'),'Cấu hình Supabase chưa đầy đủ trong trình duyệt này. Hãy nhập lại cả URL project và khóa publishable/anon.','error');
-    return;
+  try{
+    const config=readConfig();
+    await connect(config.url,config.key);
+    $('login-submit').disabled=false;$('google-login').disabled=false;
+    await openConnectedApp();
   }
-  $('supabase-url').value=config.url;$('supabase-key').value=config.key;
-  try{await connect(config.url,config.key);await openConnectedApp()}
   catch(e){showConnectionFailure(e)}
 }
 boot();
