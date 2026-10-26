@@ -1240,7 +1240,37 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     cache.scoreImportRows=[];cache.combinedScores=[];
     cache.subjectStatistics=null;
     for(const id of ['scores-preview','scores-results','scores-summary','scores-class-results'])$(id).innerHTML='';
+    $('scores-result-controls').hidden=true;
     $('scores-import').disabled=true;$('scores-export').disabled=true;
+  }
+
+  function combinedRowFilter(row){
+    const status=$('scores-result-status').value;
+    const text=$('scores-result-search').value.trim().toLocaleLowerCase('vi');
+    if($('scores-result-class').value&&row.class_code!==$('scores-result-class').value)return false;
+    if(status==='complete'&&row.total_score===null)return false;
+    if(status==='missing'&&(row.is_absent||(!row.essay_missing&&!row.mcq_missing)))return false;
+    if(status==='absent'&&!row.is_absent)return false;
+    if(status==='no-paper'&&!row.no_paper)return false;
+    return !text||[row.sbd,row.student_code,row.student_name,row.class_code].some(value=>String(value||'').toLocaleLowerCase('vi').includes(text));
+  }
+
+  function renderCombinedScores(){
+    const rows=cache.combinedScores.filter(combinedRowFilter);
+    $('scores-result-count').textContent=`Hiển thị ${rows.length}/${cache.combinedScores.length} thí sinh trong vùng cuộn bên dưới.`;
+    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${rows.map(row=>{
+      const completeScore=row.total_score!==null;
+      const status=subjectResultStatus(row);
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td><td>${esc(row.statistics_score??'')}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
+    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh phù hợp bộ lọc.</td></tr>'}</tbody></table>`;
+  }
+
+  function showCombinedScoreControls(){
+    const select=$('scores-result-class'),selected=select.value;
+    const classes=[...new Set(cache.combinedScores.map(row=>row.class_code).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'vi',{numeric:true}));
+    select.innerHTML='<option value="">Tất cả lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
+    select.value=classes.includes(selected)?selected:'';
+    $('scores-result-controls').hidden=false;
   }
   async function loadScoreMode(){
     const examId=state.selectedExam,subject=$('scores-subject').value,key=scoreKey();
@@ -1363,11 +1393,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ['Được tính thống kê',data?.summary?.included_count??0],['Loại khỏi thống kê',data?.summary?.excluded_count??0],
       ['Điểm TB thống kê',data?.summary?.average_score==null?'—':Number(data.summary.average_score).toFixed(3)]
     ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
-    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
-      const completeScore=row.total_score!==null;
-      const status=subjectResultStatus(row);
-      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td><td>${esc(row.statistics_score??'')}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
-    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
+    showCombinedScoreControls();
+    renderCombinedScores();
     $('scores-class-results').innerHTML=`<h3>Thống kê môn theo lớp</h3><table><thead><tr><th>Lớp</th><th>Dự thi</th><th>Được tính</th><th>Loại</th><th>Điểm TB</th></tr></thead><tbody>${(data?.classes||[]).map(row=>`<tr><td>${esc(row.class_code)}</td><td>${row.candidates}</td><td>${row.included_count}</td><td>${row.excluded_count}</td><td>${row.average_score==null?'—':Number(row.average_score).toFixed(3)}</td></tr>`).join('')}</tbody></table>`;
     $('scores-export').disabled=!cache.combinedScores.length;
   }
@@ -1754,6 +1781,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const id of ['scores-include-absent','scores-include-violations'])$(id).onchange=()=>{
       ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;
       for(const target of ['scores-results','scores-summary','scores-class-results'])$(target).innerHTML='';
+      $('scores-result-controls').hidden=true;
       $('scores-export').disabled=true;
     };
     $('scores-exam').onchange=refreshScores;
@@ -1768,7 +1796,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     refreshScores();
     safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
     safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
+    safeAction('scores-message',loadCombinedScores,$('scores-check'));
     safeAction('scores-message',loadCombinedScores,$('scores-load'));
+    for(const id of ['scores-result-class','scores-result-status'])$(id).onchange=renderCombinedScores;
+    $('scores-result-search').oninput=renderCombinedScores;
+    $('scores-result-clear').onclick=()=>{
+      $('scores-result-class').value='';$('scores-result-status').value='all';$('scores-result-search').value='';renderCombinedScores();
+    };
     $('scores-export').onclick=()=>{try{exportCombinedScores()}catch(error){message($('scores-message'),error.message,'error')}};
   }
   wireForms();
@@ -1782,7 +1816,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     refreshExamSelectors:()=>{setExamOptions();refreshScores();},
     refreshScores,
     invalidateCombinedScores:()=>{
-      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;$('scores-class-results').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
+      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;$('scores-class-results').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-result-controls').hidden=true;$('scores-export').disabled=true;
       message($('scores-message'),'Điểm tự luận đã thay đổi. Nhấn Tải điểm tổng hợp để tính lại.','info');
     },
     refreshAbsences:async examId=>{
