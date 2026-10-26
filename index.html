@@ -10,6 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <style>
+    #setup-screen,.login-config{display:none!important}
     #tab-scores [hidden]{display:none!important}
     .score-control-scroll{max-height:360px;overflow:auto;margin:12px 0}
     .score-control-scroll table{border-collapse:separate;border-spacing:0}
@@ -142,7 +143,7 @@
       <p class="hint">Cấu hình được lưu trong trình duyệt hiện tại. Nếu dùng máy dùng chung, hãy đăng xuất và xóa cấu hình khi cần.</p>
     </section>
 
-    <section id="login-screen" class="panel login-panel hidden">
+    <section id="login-screen" class="panel login-panel">
       <div class="eyebrow">CỔNG NHẬP ĐIỂM GIÁO VIÊN</div>
       <h1>Đăng nhập để nhập điểm</h1>
       <p class="login-intro">Sử dụng tài khoản cá nhân do nhà trường cấp. Môn thi và danh sách bài được hiển thị theo phân công của bạn.</p>
@@ -235,7 +236,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.147" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script type="module" src="./js/app.js?v=0.1.147&connection=148" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       // Runs independently of app.js, including when an old app/loader is served.
