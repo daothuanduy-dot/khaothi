@@ -1,3 +1,8 @@
+export function classReportSubjectOrder(codes){
+ const order={VAN:0,TOAN:1,N1:2,ANH:2,LY:3,LI:3,HOA:4,SINH:5,SU:6,DIA:7,KTPL:8,GDKTPL:8,N4:9,TRUNG:9,N5:10,DUC:10};
+ return [...new Set(codes)].sort((a,b)=>(order[a]??99)-(order[b]??99)||a.localeCompare(b,'vi',{numeric:true}));
+}
+export function defaultHiddenClassSubjects(codes){return new Set(codes.filter(code=>['N4','N5','TRUNG','DUC'].includes(code)))}
 export function rankClassReport(data,{allSubjects=false,grade='',dense=false}={}){
   const choice=['subject','choice'].includes(data.exam_mode);
   const blocks=(data.groups||[]).map(g=>({...g,classes:(data.classes||[]).filter(c=>c.ban_id===g.id)}));
@@ -63,7 +68,7 @@ export function choiceClassReportSheet(block){
  first.push('TB bài thi','XH TB');second.push('','');
  for(const col of [0,tail,tail+1])merges.push({s:{r:0,c:col},e:{r:1,c:col}});
  const rows=[first,second];
- for(const c of block.classes){const home=c.homeroom_teacher==='Chưa phân công'?'':c.homeroom_teacher;const top=[c.class_code+(home?'\n'+home:'')+(c.incomplete?'\nThiếu điểm':'')],bottom=[''],r=rows.length;
+ for(const c of block.classes){const home=c.homeroom_teacher==='Chưa phân công'?'':c.homeroom_teacher;const top=[c.class_code+(home?'\n'+home:'')],bottom=[''],r=rows.length;
   for(const code of block.codes){const s=c.subjects.find(s=>s.subject_code===code),col=top.length;top.push(s?.participated_count??'',s?.average_score??'',s?.rank??'');bottom.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','','');merges.push({s:{r:r+1,c:col},e:{r:r+1,c:col+2}})}
   top.push(c.average_score??'',c.rank??'');bottom.push('','');for(const col of [0,tail,tail+1])merges.push({s:{r,c:col},e:{r:r+1,c:col}});rows.push(top,bottom);
  }
@@ -146,7 +151,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       }
       payload=report;key=captured;loadHeader();
       if($('class-report-view')){$('class-report-view').disabled=data.exam_mode==='default';if(data.exam_mode==='default')$('class-report-view').value='classes'}
-      subjectOrder=[...new Set(data.classes.flatMap(c=>c.subjects.map(s=>s.subject_code)))].sort();hiddenSubjects=new Set();renderSubjects();
+      subjectOrder=classReportSubjectOrder(data.classes.flatMap(c=>c.subjects.map(s=>s.subject_code)));hiddenSubjects=['subject','choice'].includes(data.exam_mode)?defaultHiddenClassSubjects(subjectOrder):new Set();renderSubjects();
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
