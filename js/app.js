@@ -1,5 +1,5 @@
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=151';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -7,7 +7,7 @@ import {wireRanking} from './ranking.js?v=0.1.147';
 import {wireViolations} from './violations.js?v=0.1.147';
 import {createStudentPicker} from './student-picker.js?v=0.1.147';
 import {wireScoreControl} from './score-control.js?v=0.1.147';
-import {wireClassReport} from './class-report.js?v=0.1.147';
+import {wireClassReport} from './class-report.js?v=0.1.147&classreport=152';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
@@ -2915,7 +2915,7 @@ async function boot(){
   try{violations=wireViolations({state,$,esc,message,subjectName,createStudentPicker})}
   catch(error){console.error('Không khởi tạo được vi phạm:',error);message($('violation-message'),error.message,'error')}
   try{choiceReports=wireChoiceReports({state,$,esc,message,createPrintFrame})}catch(error){message($('choice-report-message'),error.message,'error')}
-  try{classReport=wireClassReport({state,$,esc,message})}catch(error){message($('class-report-message'),error.message,'error')}
+  try{classReport=wireClassReport({state,$,esc,message,createPrintFrame})}catch(error){message($('class-report-message'),error.message,'error')}
   try{scoreControl=wireScoreControl({state,$,esc,message,subjectName,onScoresCleared:()=>{operations?.invalidateCombinedScores();classReport?.invalidate();choiceReports?.invalidate()}})}
   catch(error){console.error('Không khởi tạo được kiểm soát điểm:',error);message($('score-control-message'),error.message,'error')}
   try{

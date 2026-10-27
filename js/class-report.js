@@ -47,17 +47,22 @@ export function classReportSheet(block){
   return {rows,merges,width};
 }
 
-export function wireClassReport({state,$,esc,message}){
-  let payload=null,key='',request=0;
+export function wireClassReport({state,$,esc,message,createPrintFrame}){
+  let payload=null,key='',request=0,subjectOrder=[],hiddenSubjects=new Set();
+  const visibleBlocks=()=>rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))}));
+  function renderSubjects(){
+    const el=$('class-report-subjects');if(!el)return;
+    el.innerHTML=subjectOrder.map((code,i)=>`<div style="display:flex;align-items:center;gap:8px;margin:6px"><label><input type="checkbox" data-code="${esc(code)}" ${hiddenSubjects.has(code)?'':'checked'}> ${esc(payload.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</label><button type="button" data-move="-1" data-code="${esc(code)}" ${i===0?'disabled':''} aria-label="Đưa ${esc(code)} lên">↑</button><button type="button" data-move="1" data-code="${esc(code)}" ${i===subjectOrder.length-1?'disabled':''} aria-label="Đưa ${esc(code)} xuống">↓</button></div>`).join('');
+  }
   const context=()=>JSON.stringify([state.selectedExam||'',!!$('class-report-absent').checked,!!$('class-report-violations').checked,state.statisticsRevision||0]);
   const options=()=>({allSubjects:$('class-report-scope').value==='all',grade:$('class-report-grade').value,dense:$('class-report-ties').value==='dense'});
   const number=value=>value==null?'—':Number(value).toFixed(3);
-  function clear(){++request;payload=null;key='';$('class-report-results').innerHTML='';$('class-report-export').disabled=true;}
+  function clear(){++request;payload=null;key='';$('class-report-results').innerHTML='';$('class-report-export').disabled=true;if($('class-report-pdf'))$('class-report-pdf').disabled=true;}
   function render(){
     if(!payload)return;
-    const blocks=rankClassReport(payload,options());
+    const blocks=visibleBlocks();
     $('class-report-results').innerHTML=blocks.map(b=>`<h3>${esc(b.grade_code||'')} · ${esc(b.name)}</h3><p>${b.ready?'Xếp hạng trong ban.':'Chưa xếp hạng: cần học kỳ liên kết, ban cùng bộ môn tính điểm và đủ điểm từng lớp.'}</p><div class="table-wrap"><table><thead><tr><th rowspan="2">Lớp / GVCN</th>${b.codes.map(code=>`<th colspan="2">${esc(b.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</th>`).join('')}<th rowspan="2">Tổng</th><th rowspan="2">TB</th><th rowspan="2">XT theo ban</th></tr><tr>${b.codes.map(()=>'<th>ĐTB</th><th>XT</th>').join('')}</tr></thead><tbody>${b.classes.map(c=>`<tr><td rowspan="2">${esc(c.class_code)}<br><small>${esc(c.homeroom_teacher)}</small>${c.incomplete?'<br>Thiếu điểm':''}</td>${b.codes.map(code=>{const s=c.subjects.find(s=>s.subject_code===code);return `<td title="${esc(s?.error||('Được tính: '+(s?.included_count??0)+'; thiếu điểm: '+(s?.missing_count??0)))}">${number(s?.average_score)}</td><td>${s?.rank??'—'}</td>`}).join('')}<td rowspan="2">${number(c.total_score)}</td><td rowspan="2">${number(c.average_score)}</td><td rowspan="2">${c.rank??'—'}</td></tr><tr>${b.codes.map(code=>`<td colspan="2"><em>${esc(c.subjects.find(s=>s.subject_code===code)?.teacher||'')}</em></td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr><th>ĐTB học sinh</th>${b.codes.map((code,i)=>`<td>${number(classReportSheet(b).rows.at(-1)[1+i*2]===''?null:classReportSheet(b).rows.at(-1)[1+i*2])}</td><td></td>`).join('')}<td colspan="3"></td></tr></tfoot></table></div>`).join('')||'<p>Không có lớp theo lựa chọn hiển thị.</p>';
-    $('class-report-export').disabled=!blocks.length;
+    $('class-report-export').disabled=!blocks.length;if($('class-report-pdf'))$('class-report-pdf').disabled=!blocks.length;
   }
   $('class-report-load').onclick=async()=>{
     const exam=state.selectedExam;if(!exam){message($('class-report-message'),'Chọn kỳ thi tại tab Kỳ thi.','error');return}
@@ -67,6 +72,7 @@ export function wireClassReport({state,$,esc,message}){
       if(error)throw new Error(error.message);
       if(token!==request||captured!==context())return;
       payload=data;key=captured;
+      subjectOrder=[...new Set(data.classes.flatMap(c=>c.subjects.map(s=>s.subject_code)))].sort();hiddenSubjects=new Set();renderSubjects();
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
@@ -76,11 +82,25 @@ export function wireClassReport({state,$,esc,message}){
   };
   for(const id of ['class-report-scope','class-report-grade','class-report-ties'])$(id).onchange=()=>{if(key===context())render();else clear()};
   for(const id of ['class-report-absent','class-report-violations'])$(id).onchange=clear;
+  const picker=$('class-report-subjects');
+  if(picker){
+    picker.onchange=e=>{const code=e.target.dataset.code;if(!code||!payload)return;e.target.checked?hiddenSubjects.delete(code):hiddenSubjects.add(code);render();};
+    picker.onclick=e=>{const button=e.target.closest('button[data-move]');if(!button||!payload)return;const i=subjectOrder.indexOf(button.dataset.code),j=i+Number(button.dataset.move);if(i<0||j<0||j>=subjectOrder.length)return;[subjectOrder[i],subjectOrder[j]]=[subjectOrder[j],subjectOrder[i]];renderSubjects();render();};
+  }
+  const pdf=$('class-report-pdf');
+  if(pdf)pdf.onclick=()=>{
+    if(!payload||key!==context()){clear();return}
+    render();
+    const exam=state.exams.find(e=>e.id===state.selectedExam),win=createPrintFrame();
+    win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
+      @page{size:A4 landscape;margin:5mm}body{font:9pt 'Times New Roman',serif;margin:0}h2,h3{text-align:center}table{border-collapse:collapse;width:100%;font-size:8pt}th,td{border:1px solid #000;padding:0.7mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
+      </style></head><body><h2>${esc(exam?.form_exam_title||exam?.name||'Thống kê lớp')}</h2><p style="text-align:center">Năm học ${esc(exam?.school_year||'')}</p>${$('class-report-results').innerHTML}<p>Tổng/TB và thứ hạng giữ nguyên bộ môn tính điểm; chọn môn chỉ thay đổi cột hiển thị. Đồng hạng ${options().dense?'1,1,2':'1,1,3'}.</p><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
+  };
   $('class-report-export').onclick=()=>{
     if(!payload||key!==context()){clear();return}
     const wb=window.XLSX.utils.book_new();let index=0;
     const exam=state.exams.find(e=>e.id===state.selectedExam);
-    for(const block of rankClassReport(payload,options())){
+    for(const block of visibleBlocks()){
       const table=classReportSheet(block),ws=window.XLSX.utils.aoa_to_sheet([
         [exam?.name||state.selectedExam],[(exam?.school_year||'')+' · '+(block.grade_code||'')+' · '+block.name],[],...table.rows
       ]);
