@@ -236,9 +236,14 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script type="module" src="./js/app.js?v=0.1.147&connection=149&choice=153&sbd=156" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.147&connection=160&choice=153&sbd=159" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
+      document.getElementById('app-entry').addEventListener('error', () => {
+        const notice=document.getElementById('login-message');
+        notice.textContent='Không tải được mã ứng dụng hoặc tệp phụ thuộc; chưa thể kết nối cơ sở dữ liệu. Hãy cập nhật đầy đủ thư mục js và modules cùng index.html lên GitHub Pages rồi tải lại bằng Ctrl+Shift+R. Kiểm tra Console/Network để xem tệp lỗi.';
+        notice.className='notice notice-error';
+      });
       // Runs independently of app.js, including when an old app/loader is served.
       document.addEventListener('click', event => {
         if (!event.target.closest('[data-tab="teaching"]')) return;

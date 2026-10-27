@@ -1,10 +1,9 @@
-import {redistributePrivateRooms} from './private-rooming.js?v=158';
 import {createSbdGroupEditor} from './sbd-group-editor.js?v=156';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=158';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=159';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -1451,7 +1450,7 @@ function clearRoomingPreview(){
  if(roomHead)roomHead.innerHTML=mandatory
   ?'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>'
   :'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>Ca 1 (các môn)</th><th>Ca 2 (các môn)</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>';
- $('private-room-controls').classList.add('hidden');
+ $('private-room-controls')?.classList.add('hidden');
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=mandatory
   ?'<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th></tr>'
@@ -1489,9 +1488,9 @@ function renderRooming(result,planType='elective'){
   return `<tr><td>${i+1}</td><td><b>${esc(r.room_code)}</b>${r.is_private?'<br><small>Phòng riêng</small>':''}${grouped&&r.group_index!=null?`<br><small>Nhóm ${r.group_index+1}</small>`:''}</td><td>${count}</td>${subjects}<td>${sbd}</td><td>${edit}${actions}</td></tr>`;
  }).join('');
  $('add-room-plan').disabled=!preview||preview.assignmentsCreated||preview.finalized||preview.saving||preview.finalizing;
- const privateEditable=Boolean(preview&&!preview.finalized&&!preview.saving&&!preview.finalizing&&!preview.options.fixedSeats);
- $('private-room-controls').classList.toggle('hidden',!privateEditable);
- $('private-room-target').innerHTML=result.rooms.filter(r=>r.is_private).map(r=>'<option value="'+esc(r.room_code)+'">'+esc(r.room_code)+'</option>').join('');
+ const privateEditable=Boolean($('private-room-controls')&&$('private-room-target')&&preview&&!preview.finalized&&!preview.saving&&!preview.finalizing&&!preview.options.fixedSeats);
+ $('private-room-controls')?.classList.toggle('hidden',!privateEditable);
+ if($('private-room-target'))$('private-room-target').innerHTML=result.rooms.filter(r=>r.is_private).map(r=>'<option value="'+esc(r.room_code)+'">'+esc(r.room_code)+'</option>').join('');
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=['mandatory','subject'].includes(planType)
   ?`<tr><th>SBD</th><th>Họ tên</th><th>Lớp</th><th>Phòng</th><th>Vị trí cố định</th>${preview?.adjustmentMode==='manual'&&!preview?.finalized?'<th>Điều chỉnh</th>':''}</tr>`
@@ -1621,7 +1620,7 @@ function updateRoomingActions(){
  $('print-rooming-pdf').disabled=!finalized;
  $('add-room-plan').disabled=!preview||assigned||finalized||preview?.saving||preview?.finalizing;
 }
-function changePrivateRoom(action){
+async function changePrivateRoom(action){
  const preview=state.preview;if(!preview||preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)return;
  try{
   const selectedIds=[...$('assignment-table-body').querySelectorAll('[data-private-candidate]:checked')].map(box=>box.dataset.privateCandidate);
@@ -1629,6 +1628,10 @@ function changePrivateRoom(action){
   if(action!=='redistribute'&&!selectedIds.length)throw new Error('Hãy chọn học sinh trong danh sách phân bổ.');
   const roomCode=action==='create'?$('private-room-name').value.trim():action==='add'?$('private-room-target').value:undefined;
   if((action==='create'||action==='add')&&!roomCode)throw new Error('Hãy nhập tên hoặc chọn phòng riêng.');
+  let redistributePrivateRooms;
+  try{({redistributePrivateRooms}=await import('./private-rooming.js?v=159'))}
+  catch(error){throw new Error('Không tải được chức năng phòng riêng. Hãy cập nhật js/private-rooming.js, js/group-rooming.js và js/rooming.js cùng bộ website, rồi tải lại bằng Ctrl+Shift+R. '+(error.message||String(error)))}
+  if(state.preview!==preview||preview.finalized||preview.saving||preview.finalizing)return;
   const result=redistributePrivateRooms(preview,roomGroupText(preview.examId),{selectedIds,roomCode,release:action==='release'});
   preview.options.regularCapacity??=preview.options.capacity;
   preview.result=result;preview.options.capacity=result.rooms[0]?.capacity||preview.options.capacity;
@@ -2949,7 +2952,7 @@ function wireRoomingEditor(){
   clearRoomingPreview();
  };
  $('add-room-plan').onclick=addRoomToPlan;
- for(const action of ['create','add','release','redistribute'])$('private-room-'+action).onclick=()=>changePrivateRoom(action);
+ for(const action of ['create','add','release','redistribute']){const button=$('private-room-'+action);if(button)button.onclick=()=>changePrivateRoom(action)}
  $('free-room-cancel').onclick=()=>$('free-room-dialog').close();
  $('free-room-form').onsubmit=event=>{event.preventDefault();if(applyFreeRoomChange({oldCode:$('free-room-old-code').value||undefined,code:$('free-room-name').value,count:$('free-room-count').value,groupIndex:Number($('free-room-group').value)}))$('free-room-dialog').close()};
  $('rooming-table-body').addEventListener('click',event=>{const button=event.target.closest('[data-edit-free-room]');if(button)openFreeRoom(button.dataset.editFreeRoom)});
@@ -3020,7 +3023,8 @@ async function boot(){
     ensureCandidateClassDropdown();
   }catch(error){
     showScreen('login-screen');
-    message($('login-message'),'Không tải được giao diện. Vui lòng tải lại trang hoặc liên hệ quản trị.','error');
+    console.error('Không tải được giao diện khi khởi động:',error);
+    message($('login-message'),'Không tải được giao diện, ứng dụng chưa đến bước kết nối cơ sở dữ liệu. '+(error.message||String(error)),'error');
     return;
   }
   try{accounts=wireAccounts({state,$,esc,message})}
