@@ -9,15 +9,15 @@
     <label>Tên đơn vị<input id="forms-institution" maxlength="200" placeholder="Ví dụ: TRƯỜNG THPT ..."></label>
     <label>Tên kỳ thi trên biểu mẫu<input id="forms-title" maxlength="240" placeholder="Tên hiển thị trên các biểu mẫu"></label>
     <fieldset id="forms-default-settings" class="hidden" style="grid-column:1 / -1;min-width:0"><legend>Mẫu kỳ thi mặc định — một phòng chung cho tất cả môn</legend>
-      <p>Danh sách giữ nguyên học sinh và SBD từ phương án chính thức được chọn. Phiếu thu bài để trống môn thi: in một bộ theo phòng rồi photocopy cho từng môn. Nếu các môn đang lưu khác phòng, hãy chọn đúng phương án phòng chung làm nguồn in; thao tác này không sửa phân phòng.</p>
+      <p>Mẫu theo phòng giữ nguyên học sinh và SBD từ phương án chính thức được chọn; phiếu thu bài để trống môn để photocopy dùng lại. Mẫu phiếu thu bài theo lớp lấy toàn bộ học sinh trong kỳ thi, không yêu cầu phân phòng. Các thao tác in không sửa phân phòng hoặc SBD.</p>
       <div class="form-grid">
-        <label>Mẫu cần in<select id="forms-default-type"><option value="receipt">Phiếu thu bài theo phòng — để trống môn</option><option value="listing">Danh sách thí sinh theo phòng</option><option value="classrooms">Danh sách phòng thi gửi về lớp</option></select></label>
+        <label>Mẫu cần in<select id="forms-default-type"><option value="receipt">Phiếu thu bài theo phòng — để trống môn</option><option value="receipt_classrooms">Phiếu thu bài theo lớp — để trống môn</option><option value="listing">Danh sách thí sinh theo phòng</option><option value="classrooms">Danh sách phòng thi gửi về lớp</option></select></label>
         <label>Phương án phòng chung dùng để in<select id="forms-default-source"></select></label>
         <label>Tên biểu mẫu<input id="forms-default-title" maxlength="240"></label>
         <label>Font chữ<select id="forms-default-font"><option>Times New Roman</option><option>Arial</option><option>Calibri</option><option>Tahoma</option></select></label>
         <label>Cỡ chữ bảng (pt)<input id="forms-default-size" type="number" min="8" max="24" step="0.5" value="10"></label>
       </div>
-      <p>Chọn nguồn dữ liệu và đổi tên từng cột. Thêm cột trống để ghi tay, hoặc đổi nguồn sang thông tin học sinh có sẵn. Độ rộng là tỷ lệ giữa các cột.</p>
+      <p>Phiếu thu bài theo lớp lấy toàn bộ học sinh của lớp trong kỳ thi, không phụ thuộc phân phòng hoặc danh sách đợt; xếp theo Tên → đệm → họ. Mẫu này không có phần tổng kết và cán bộ coi thi. Chọn nguồn dữ liệu và đổi tên từng cột; thêm cột trống để ghi tay. Độ rộng là tỷ lệ giữa các cột.</p>
       <div class="table-wrap"><table><thead><tr><th>Nguồn dữ liệu</th><th>Tên cột trên bản in</th><th>Độ rộng (1–100)</th><th>Thứ tự / bỏ cột</th></tr></thead><tbody id="forms-default-columns"></tbody></table></div>
       <div class="form-actions"><button id="forms-default-add" class="btn btn-light" type="button">+ Thêm cột</button><button id="forms-default-reset" class="btn btn-light" type="button">Khôi phục mẫu ban đầu</button><button id="forms-default-save-unit" class="btn btn-light" type="button">Lưu bộ mẫu cho đơn vị trên máy này</button><button id="forms-default-apply-unit" class="btn btn-light" type="button">Áp dụng bộ mẫu đơn vị</button></div>
       <p>Đổi tiêu đề cơ quan, đơn vị và kỳ thi ở phía trên. Bấm Lưu thiết lập biểu mẫu để lưu mẫu theo kỳ vào CSDL. Mẫu đơn vị được lưu trên trình duyệt này.</p>

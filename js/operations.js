@@ -208,7 +208,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function ensureDefaultForms(){
     if(!defaultForms){
       if(!$('forms-default-settings'))throw new Error('Thiếu giao diện mẫu kỳ mặc định. Hãy cập nhật modules/forms.html cùng bộ website.');
-      const {wireDefaultForms}=await import('./default-forms.js?v=162');
+      const {wireDefaultForms}=await import('./default-forms.js?v=163');
       defaultForms=wireDefaultForms({$,state,message,createPrintFrame});
     }
     return defaultForms;
@@ -297,7 +297,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const selected=$('forms-print-type').value;
     for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',common||key!==selected);
     $('forms-settings-receipt').classList.toggle('hidden',common||!selected.startsWith('receipt_'));
-    $('forms-class-filter-wrap').classList.toggle('hidden',common?$('forms-default-type')?.value!=='classrooms':!['receipt_classrooms','classrooms'].includes(selected));
+    $('forms-class-filter-wrap').classList.toggle('hidden',common?!['classrooms','receipt_classrooms'].includes($('forms-default-type')?.value):!['receipt_classrooms','classrooms'].includes(selected));
     $('forms-receipt-order-wrap').classList.toggle('hidden',common||selected!=='receipt_elective');
   }
   function classRoomGroups(forms){
@@ -427,9 +427,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
       const classRoomRows=buildClassRoomRows(candidates,expanded,nameOf);
       const classSelect=$('forms-class-filter'),previousClass=classSelect.value;
-      classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set(classRoomRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
+      classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set((exam.exam_mode==='default'?allCandidates:classRoomRows).map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
       classSelect.value=[...classSelect.options].some(option=>option.value===previousClass)?previousClass:'';
-      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
+      cache.forms={exam,examId,roundNo,candidates,allCandidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
       if(exam.exam_mode==='default'){
         const renderer=await ensureDefaultForms();
         if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
