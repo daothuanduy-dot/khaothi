@@ -120,7 +120,7 @@ export function statisticsExportSheet(block,header,{extra=false}={}){
 }
 export function statisticsTableHtml(table,esc,scoreColumns=[]){
  const covered=new Set(),starts=new Map();for(const m of table.merges){starts.set(`${m.s.r}:${m.s.c}`,m);for(let r=m.s.r;r<=m.e.r;r++)for(let c=m.s.c;c<=m.e.c;c++)if(r!==m.s.r||c!==m.s.c)covered.add(`${r}:${c}`)}
- const rowHtml=(row,r)=>`<tr>${row.map((value,c)=>{
+ const rowHtml=(row,r)=>`<tr${r===table.rows.length-1&&row[0]==='TB các lớp'?' class="report-footer"':''}>${row.map((value,c)=>{
   if(covered.has(`${r}:${c}`))return '';const m=starts.get(`${r}:${c}`),tag=r<2?'th':'td';
   const text=value==null?'':typeof value==='number'&&scoreColumns.includes(c)?value.toFixed(3):value;
   return `<${tag}${m?` rowspan="${m.e.r-m.s.r+1}" colspan="${m.e.c-m.s.c+1}"`:''}>${esc(text).replace(/\n/g,'<br>')}</${tag}>`;
@@ -142,7 +142,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   const extraMax=()=>!!$('class-report-extra-max')?.checked;
   const scoreColumns=b=>[...b.codes.map((_,i)=>2+i*3),1+b.codes.length*3];
   const currentSheet=classReportSheet;
-  const choiceBlocksHtml=(blocks,forPrint=false)=>blocks.map(b=>`${!forPrint||blocks.length>1?`<h3>Khối ${esc(b.grade_code||'')}</h3>`:''}${extraMax()?`<div class="extra-statistics" style="background:#ddd;margin-bottom:4mm">${maxScoreSections(b).map(s=>`<div class="table-wrap" style="width:${s.count/Math.min(b.codes.length,6)*100}%;margin-left:auto">${statisticsTableHtml(s,esc,Array.from({length:s.count},(_,i)=>i*2+1))}</div>`).join('')}</div>`:''}<div class="table-wrap">${statisticsTableHtml(currentSheet(b),esc,scoreColumns(b))}</div>`).join('');
+  const choiceBlocksHtml=(blocks,forPrint=false)=>blocks.map(b=>`${!forPrint||blocks.length>1?`<h3>Khối ${esc(b.grade_code||'')}</h3>`:''}${extraMax()?`<div class="extra-statistics" style="background:#ddd;margin-bottom:4mm">${maxScoreSections(b).map(s=>`<div class="table-wrap" style="width:${s.count/Math.min(b.codes.length,6)*100}%;margin-left:auto">${statisticsTableHtml(s,esc,Array.from({length:s.count},(_,i)=>i*2+1))}</div>`).join('')}</div>`:''}<div class="table-wrap class-statistics">${statisticsTableHtml(currentSheet(b),esc,scoreColumns(b))}</div>`).join('');
   const visibleBlocks=()=>rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))})).filter(b=>b.codes.length);
   function renderSubjects(){
     const el=$('class-report-subjects');if(!el)return;
@@ -199,11 +199,10 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     render();
     const exam=state.exams.find(e=>e.id===state.selectedExam),win=createPrintFrame();
     const choice=['subject','choice'].includes(payload.exam_mode);
-    const note=(choice?'SL: số học sinh dự thi, không tính vắng. ĐTB theo lựa chọn vắng, vi phạm khi tải báo cáo. TB bài thi = trung bình các ĐTB môn hợp lệ của lớp, không tính trọng số sĩ số. TB các lớp là trung bình các ĐTB lớp. XH so trong cùng khối.':'Tổng = tổng ĐTB môn tính điểm; TB = Tổng / số môn tính điểm. XH trong ban.')+` Đồng hạng ${options().dense?'1,1,2':'1,1,3'}.`+(choice&&extraMax()?' Max: điểm thống kê cao nhất của học sinh dự thi theo lựa chọn xử lý vi phạm.':'');
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
-      @page{size:A4 landscape;margin:5mm}body{font:9pt 'Times New Roman',serif;margin:0}h2,h3{text-align:center}table{border-collapse:collapse;width:100%;font-size:8pt}th,td{border:1px solid #000;padding:0.7mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
-      .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:5mm;font-size:11pt}.school-year{text-align:center}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.extra-statistics{background:#ddd;margin-bottom:4mm;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}
-      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):$('class-report-results').innerHTML}<p>${esc(note)}</p><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
+      @page{size:A4 landscape;margin:5mm}body{font:8pt 'Times New Roman',serif;margin:0;line-height:1.05}h2,h3{text-align:center;margin:1mm 0;font-size:11pt;line-height:1.05}table{border-collapse:collapse;width:100%;font-size:8pt;line-height:1.05}th,td{border:1px solid #000;padding:0.35mm 0.3mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.report-footer{break-before:avoid;page-break-before:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
+      .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:1mm;font-size:10pt;line-height:1.05}.school-year{text-align:center;font-size:8pt;margin:0 0 1mm}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.class-statistics thead tr:first-child th:first-child{width:18mm}.extra-statistics{background:#ddd;margin-bottom:1.5mm!important;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}
+      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):$('class-report-results').innerHTML}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   };
   $('class-report-export').onclick=()=>{
     if(!payload||key!==context()){clear();return}
