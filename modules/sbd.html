@@ -11,6 +11,10 @@
             <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
             <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button><button id="reset-sbd-old" class="btn btn-light" type="button">Xoá SBD cũ / lập lại</button></div>
           </div>
+          <div id="sbd-group-options">
+            <label>Nhóm lớp theo thứ tự cấp SBD<textarea id="sbd-groups" rows="5" placeholder="10A1, 10A2&#10;10A3, 10A4"></textarea></label>
+            <p class="muted">Mỗi dòng là một nhóm; ngăn các lớp bằng dấu phẩy. Khai báo đủ các lớp trong kỳ thi, mỗi lớp một lần. Sắp tên → đệm → họ hoặc tổng điểm giảm dần trong từng nhóm. Số thứ tự từ 1, nối tiếp qua các nhóm; dùng tiền tố và độ dài SBD ở trên. Cấu hình nhóm được giữ trên trình duyệt theo kỳ thi.</p>
+          </div>
           <div id="sbd-room-options" class="hidden">
             <p>1. Vào Xếp phòng thi → Môn lựa chọn → Kiểm tra và lưu phân bổ. 2. Chọn đợt thi dưới đây để tải phòng đã lưu. 3. Xem trước và cấp SBD liên tục từ phòng đầu đến phòng cuối, giữ nguyên phòng và vị trí. Sau đó tải lại phương án trong Xếp phòng thi để phân phòng chính thức.</p>
             <div class="form-grid">
