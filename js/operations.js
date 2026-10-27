@@ -1,3 +1,4 @@
+export function displayExamScore(value){return value==null||value===''?'':Number(value).toFixed(2)}
 export function subjectResultStatus(row){
   if(row.is_absent)return 'Vắng';
   if(row.essay_missing&&row.mcq_missing)return 'Thiếu cả hai phần';
@@ -1291,7 +1292,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${rows.map(row=>{
       const completeScore=row.total_score!==null;
       const status=subjectResultStatus(row);
-      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td><td>${esc(row.statistics_score??'')}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${displayExamScore(row.essay_score)}</td><td>${displayExamScore(row.mcq_score)}</td><td>${completeScore?displayExamScore(row.total_score):''}</td><td>${status}</td><td>${displayExamScore(row.statistics_score)}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
     }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh phù hợp bộ lọc.</td></tr>'}</tbody></table>`;
   }
 
@@ -1440,9 +1441,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ])
     ];
     const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
+    for(let r=1;r<rows.length;r++)for(const c of [4,5,6,8]){const address=window.XLSX.utils.encode_cell({r,c});if(ws[address]?.t==='n')ws[address].z='0.00'}
     window.XLSX.utils.book_append_sheet(wb,ws,'Tong hop diem');
     const classRows=[['Lớp','Dự thi','Được tính','Loại','Điểm TB'],...(cache.subjectStatistics?.classes||[]).map(r=>[r.class_code,r.candidates,r.included_count,r.excluded_count,r.average_score??''])];
-    window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet(classRows),'Thong ke lop');
+    const classSheet=window.XLSX.utils.aoa_to_sheet(classRows);for(let r=1;r<classRows.length;r++){const cell=classSheet[window.XLSX.utils.encode_cell({r,c:4})];if(cell?.t==='n')cell.z='0.000'}
+    window.XLSX.utils.book_append_sheet(wb,classSheet,'Thong ke lop');
     window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet([
       ['Tính học sinh vắng',!!$('scores-include-absent').checked],['Tính học sinh vi phạm',!!$('scores-include-violations').checked]
     ]),'Lua chon thong ke');

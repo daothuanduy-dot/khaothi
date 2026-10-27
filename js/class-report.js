@@ -89,7 +89,7 @@ export function maxScoreSheet(block){
   const counts=cells.filter(s=>s.participated_count!=null),max=cells.filter(s=>s.maximum_score!=null).map(s=>Number(s.maximum_score));
   first.push(name,'');second.push('Số dự thi','Max điểm');values.push(counts.length?counts.reduce((n,s)=>n+Number(s.participated_count),0):'',max.length?Math.max(...max):'');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}});
  }
- return {rows:[first,second,values],merges,width:first.length};
+ return {rows:[first,second,values],merges,width:first.length,scoreDecimals:2};
 }
 export function statisticsHeaderHtml(header,esc){return `<header class="statistics-header"><div><b>${esc(header.authority||'')}</b><br><b>${esc(header.institution||'')}</b></div><div><b>${esc(header.exam_title||'')}</b><br><b>${esc(header.grade_label||'')}</b></div></header><h2>${esc(header.report_title||'')}</h2><p class="school-year">Năm học ${esc(header.school_year||'')}</p>`}
 export function maxScoreSections(block){
@@ -107,7 +107,7 @@ export function statisticsExportSheet(block,header,{extra=false}={}){
   const part=Array.from({length:3},()=>Array(width).fill(''));
   for(let j=0;j<n;j++){
    const start=boundary(j*2),end=boundary(j*2+2)-1;part[0][start]=section.rows[0][j*2];merges.push({s:{r:offset,c:start},e:{r:offset,c:end}});
-   for(let k=0;k<2;k++){const col=boundary(j*2+k),last=boundary(j*2+k+1)-1;part[1][col]=section.rows[1][j*2+k];part[2][col]=section.rows[2][j*2+k];for(const r of [offset+1,offset+2])if(last>col)merges.push({s:{r,c:col},e:{r,c:last}});if(k===1)scoreCells.push({r:offset+2,c:col})}
+   for(let k=0;k<2;k++){const col=boundary(j*2+k),last=boundary(j*2+k+1)-1;part[1][col]=section.rows[1][j*2+k];part[2][col]=section.rows[2][j*2+k];for(const r of [offset+1,offset+2])if(last>col)merges.push({s:{r,c:col},e:{r,c:last}});if(k===1)scoreCells.push({r:offset+2,c:col,decimals:2})}
   }
   rows.push(...part,[]);
  }
@@ -122,7 +122,7 @@ export function statisticsTableHtml(table,esc,scoreColumns=[]){
  const covered=new Set(),starts=new Map();for(const m of table.merges){starts.set(`${m.s.r}:${m.s.c}`,m);for(let r=m.s.r;r<=m.e.r;r++)for(let c=m.s.c;c<=m.e.c;c++)if(r!==m.s.r||c!==m.s.c)covered.add(`${r}:${c}`)}
  const rowHtml=(row,r)=>`<tr${r===table.rows.length-1&&row[0]==='TB các lớp'?' class="report-footer"':''}>${row.map((value,c)=>{
   if(covered.has(`${r}:${c}`))return '';const m=starts.get(`${r}:${c}`),tag=r<2?'th':'td';
-  const text=value==null?'':typeof value==='number'&&scoreColumns.includes(c)?value.toFixed(3):value;
+  const text=value==null?'':typeof value==='number'&&scoreColumns.includes(c)?value.toFixed(table.scoreDecimals??3):value;
   return `<${tag}${m?` rowspan="${m.e.r-m.s.r+1}" colspan="${m.e.c-m.s.c+1}"`:''}>${esc(text).replace(/\n/g,'<br>')}</${tag}>`;
  }).join('')}</tr>`;
  return `<table><thead>${table.rows.slice(0,2).map(rowHtml).join('')}</thead><tbody>${table.rows.slice(2).map((r,i)=>rowHtml(r,i+2)).join('')}</tbody></table>`;
@@ -211,10 +211,10 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     for(const block of visibleBlocks()){
       const table=statisticsExportSheet(block,{...header(),grade_label:'Khối '+(block.grade_code||'')},{extra:extraMax()});
       const ws=window.XLSX.utils.aoa_to_sheet(table.rows);ws['!merges']=table.merges;
-      const scoreCells=new Set(table.scoreCells.map(p=>`${p.r}:${p.c}`));
+      const scoreCells=new Map(table.scoreCells.map(p=>[`${p.r}:${p.c}`,p.decimals??3]));
       for(const [address,cell] of Object.entries(ws))if(cell&&cell.t==='n'){
         const position=window.XLSX.utils.decode_cell(address);
-        cell.z=scoreCells.has(`${position.r}:${position.c}`)?'0.000':'0';
+        const decimals=scoreCells.get(`${position.r}:${position.c}`);cell.z=decimals==null?'0':'0.'+'0'.repeat(decimals);
       }
       ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?23:14}));
       window.XLSX.utils.book_append_sheet(wb,ws,`${++index} ${block.name}`.replace(/[\\/?*\[\]:]/g,' ').slice(0,31));

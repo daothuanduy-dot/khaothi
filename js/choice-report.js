@@ -35,13 +35,14 @@ export function rosterColumns(students){
   return {fixed:['VAN','TOAN',...extra],electives:count};
 }
 const scoreText=s=>!s?'':s.statistics_score!=null?Number(s.statistics_score):s.is_absent?'Vắng':s.violation_id?'VP (loại)':'Chưa nhập';
+const electiveScoreText=s=>{const score=scoreText(s);return typeof score==='number'?score.toFixed(2):score};
 const shortSubject=s=>({N1:'Anh',N4:'Trung',N5:'Đức',LY:'Lí',HOA:'Hóa',SINH:'Sinh',SU:'Sử',DIA:'Địa',KTPL:'KTPL',TIN:'Tin'})[s.subject_code]||s.subject_name||s.subject_code;
 export function choiceRosterSheet(students){
   const columns=rosterColumns(students),labels={VAN:'Văn',TOAN:'Toán'};
   const rows=[['STT','SBD','Họ tên','Lớp',...columns.fixed.map(c=>labels[c]||c),...Array.from({length:columns.electives},(_,i)=>'Môn '+(i+1)),'Tổng','TB']];
   students.forEach((c,i)=>rows.push([i+1,c.sbd||'',c.student_name,c.class_code,
     ...columns.fixed.map(code=>scoreText(c.subjects.find(s=>s.subject_code===code))),
-    ...Array.from({length:columns.electives},(_,n)=>{const s=c.elective[n];return s?shortSubject(s)+' '+scoreText(s):''}),c.total??'',c.average??'']));
+    ...Array.from({length:columns.electives},(_,n)=>{const s=c.elective[n];return s?shortSubject(s)+' '+electiveScoreText(s):''}),c.total??'',c.average??'']));
   return rows;
 }
 export function choiceSummarySheet(data,selectedClasses=data.classes,tieMode='competition',selectedSubjects=choiceSubjects(data)){
@@ -64,7 +65,7 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
   const exportIds=['choice-report-excel','choice-report-summary-pdf','choice-report-roster-pdf'];
   const clear=()=>{++request;payload=null;key='';$('choice-report-results').innerHTML='';for(const id of exportIds)$(id).disabled=true;};
   const ready=()=>{if(payload&&key===context())return true;clear();message($('choice-report-message'),'Hãy tải lại báo cáo theo kỳ thi/lựa chọn hiện tại.','info');return false;};
-  const tableHtml=(rows,roster=false)=>`<table class="${roster?'roster':'summary'}"><thead><tr>${rows[0].map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map(row=>`<tr>${row.map((v,i)=>`<td>${esc(typeof v==='number'&&(!roster?i>0&&(i-1)%3===0:i>=4)?v.toFixed(3):v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const tableHtml=(rows,roster=false)=>`<table class="${roster?'roster':'summary'}"><thead><tr>${rows[0].map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map(row=>`<tr>${row.map((v,i)=>`<td>${esc(typeof v==='number'&&(!roster?i>0&&(i-1)%3===0:i>=4)?v.toFixed(roster&&i!==row.length-1?2:3):v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   function render(){
     if(!ready())return;
     const rows=choiceSummarySheet(payload,selectedClasses(),tieMode(),subjects);
@@ -100,7 +101,7 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
       ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:rows[0].length-1}},{s:{r:1,c:0},e:{r:1,c:rows[0].length-1}}];
       for(const [address,cell] of Object.entries(ws))if(cell&&cell.t==='n'){
         const col=window.XLSX.utils.decode_cell(address).c;
-        cell.z=(kind==='summary'?col>0&&(col-1)%3===0:col>=4)?'0.000':'0';
+        cell.z=kind==='summary'?(col>0&&(col-1)%3===0?'0.000':'0'):col>=4?(col===rows[0].length-1?'0.000':'0.00'):'0';
       }
       window.XLSX.utils.book_append_sheet(wb,ws,name.replace(/[\\/?*\[\]:]/g,' ').slice(0,31));
     };
