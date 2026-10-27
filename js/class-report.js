@@ -1,19 +1,28 @@
 export function rankClassReport(data,{allSubjects=false,grade='',dense=false}={}){
+  const choice=['subject','choice'].includes(data.exam_mode);
   const blocks=(data.groups||[]).map(g=>({...g,classes:(data.classes||[]).filter(c=>c.ban_id===g.id)}));
   const unassigned=(data.classes||[]).filter(c=>!c.ban_id);
   for(const grade of [...new Set(unassigned.map(c=>c.grade_code))])blocks.push({id:'unassigned-'+grade,name:'Chưa phân ban',grade_code:grade,compatible:false,classes:unassigned.filter(c=>c.grade_code===grade)});
+  if(choice){blocks.length=0;for(const g of new Set((data.classes||[]).map(c=>c.grade_code)))blocks.push({id:'grade-'+g,name:'',grade_code:g,choice:true,classes:data.classes.filter(c=>c.grade_code===g)});}
   const ranks=items=>{
     const sorted=[...items].sort((a,b)=>b.value-a.value),result=new Map();let position=0,last;
     sorted.forEach((x,i)=>{if(i===0||x.value!==last)position=dense?position+1:i+1;result.set(x.key,position);last=x.value});return result;
   };
   return blocks.map(block=>{
     const classes=block.classes.filter(c=>!grade||c.grade_code===grade).map(c=>({...c,subjects:c.subjects.map(s=>({...s}))})).sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}));
-    const codes=[...new Set(classes.flatMap(c=>c.subjects.filter(s=>allSubjects||s.is_counted).map(s=>s.subject_code)))].sort();
-    const ready=!!data.period_id&&block.compatible&&classes.length===block.classes.length&&classes.length>0&&classes.every(c=>c.total_score!=null&&!c.incomplete);
+    const codes=[...new Set(classes.flatMap(c=>c.subjects.filter(s=>choice||allSubjects||s.is_counted).map(s=>s.subject_code)))].sort();
+    if(choice)for(const c of classes){
+      c.incomplete=c.subjects.some(s=>s.missing_count>0||s.error);
+      const valid=c.subjects.filter(s=>s.average_score!=null&&Number(s.included_count)>0);
+      c.total_score=!c.incomplete&&valid.length?valid.reduce((sum,s)=>sum+Number(s.average_score),0):null;
+      c.average_score=c.total_score==null?null:c.total_score/valid.length;
+    }
+    const ready=!choice&&!!data.period_id&&block.compatible&&classes.length===block.classes.length&&classes.length>0&&classes.every(c=>c.total_score!=null&&!c.incomplete);
     const totalRanks=ready?ranks(classes.map(c=>({key:c.class_code,value:Number(c.total_score)}))):new Map();
     for(const code of codes){
       const comparable=!!data.period_id&&block.compatible&&classes.every(c=>c.subjects.some(s=>s.subject_code===code&&s.average_score!=null&&!s.error&&!s.missing_count));
-      const order=comparable?ranks(classes.map(c=>({key:c.class_code,value:Number(c.subjects.find(s=>s.subject_code===code).average_score)}))):new Map();
+      const eligible=classes.filter(c=>{const s=c.subjects.find(s=>s.subject_code===code);return s&&s.average_score!=null&&Number(s.included_count)>0&&!s.error&&!s.missing_count});
+      const order=choice?ranks(eligible.map(c=>({key:c.class_code,value:Number(c.subjects.find(s=>s.subject_code===code).average_score)}))):comparable?ranks(classes.map(c=>({key:c.class_code,value:Number(c.subjects.find(s=>s.subject_code===code).average_score)}))):new Map();
       for(const c of classes){const s=c.subjects.find(s=>s.subject_code===code);if(s)s.rank=order.get(c.class_code)??null;}
     }
     for(const c of classes)c.rank=totalRanks.get(c.class_code)??null;
@@ -24,8 +33,8 @@ export function rankClassReport(data,{allSubjects=false,grade='',dense=false}={}
 export function classReportSheet(block){
   const width=1+block.codes.length*2+3,tail=width-3;
   const first=['Lớp'],second=[''],merges=[];
-  for(const code of block.codes){const name=block.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code;const col=first.length;first.push(name,'');second.push('ĐTB','XT');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}})}
-  first.push('Tổng môn tính điểm','TB môn tính điểm','XT theo ban');second.push('','','');
+  for(const code of block.codes){const name=code==='KTPL'?'KTPL':block.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code;const col=first.length;first.push(name,'');second.push('ĐTB','XT');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}})}
+  first.push(block.choice?'Tổng ĐTB môn thi':'Tổng môn tính điểm',block.choice?'TB môn thi':'TB môn tính điểm',block.choice?'':'XT theo ban');second.push('','','');
   for(const col of [0,tail,tail+1,tail+2])merges.push({s:{r:0,c:col},e:{r:1,c:col}});
   const rows=[first,second];
   for(const c of block.classes){
@@ -61,7 +70,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   function render(){
     if(!payload)return;
     const blocks=visibleBlocks();
-    $('class-report-results').innerHTML=blocks.map(b=>`<h3>${esc(b.grade_code||'')} · ${esc(b.name)}</h3><p>${b.ready?'Xếp hạng trong ban.':'Chưa xếp hạng: cần học kỳ liên kết, ban cùng bộ môn tính điểm và đủ điểm từng lớp.'}</p><div class="table-wrap"><table><thead><tr><th rowspan="2">Lớp / GVCN</th>${b.codes.map(code=>`<th colspan="2">${esc(b.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</th>`).join('')}<th rowspan="2">Tổng</th><th rowspan="2">TB</th><th rowspan="2">XT theo ban</th></tr><tr>${b.codes.map(()=>'<th>ĐTB</th><th>XT</th>').join('')}</tr></thead><tbody>${b.classes.map(c=>`<tr><td rowspan="2">${esc(c.class_code)}<br><small>${esc(c.homeroom_teacher)}</small>${c.incomplete?'<br>Thiếu điểm':''}</td>${b.codes.map(code=>{const s=c.subjects.find(s=>s.subject_code===code);return `<td title="${esc(s?.error||('Được tính: '+(s?.included_count??0)+'; thiếu điểm: '+(s?.missing_count??0)))}">${number(s?.average_score)}</td><td>${s?.rank??'—'}</td>`}).join('')}<td rowspan="2">${number(c.total_score)}</td><td rowspan="2">${number(c.average_score)}</td><td rowspan="2">${c.rank??'—'}</td></tr><tr>${b.codes.map(code=>`<td colspan="2"><em>${esc(c.subjects.find(s=>s.subject_code===code)?.teacher||'')}</em></td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr><th>ĐTB học sinh</th>${b.codes.map((code,i)=>`<td>${number(classReportSheet(b).rows.at(-1)[1+i*2]===''?null:classReportSheet(b).rows.at(-1)[1+i*2])}</td><td></td>`).join('')}<td colspan="3"></td></tr></tfoot></table></div>`).join('')||'<p>Không có lớp theo lựa chọn hiển thị.</p>';
+    $('class-report-results').innerHTML=blocks.map(b=>`${b.choice?'':`<h3>${esc(b.grade_code||'')} · ${esc(b.name)}</h3>`}<p>${b.choice?'Xếp hạng từng môn theo ĐTB giảm dần giữa các lớp có điểm hợp lệ trong cùng khối. Lớp còn thiếu điểm môn nào chưa xếp hạng môn đó; Tổng/TB để trống nếu còn thiếu điểm.':b.ready?'Xếp hạng trong ban.':'Chưa xếp hạng: cần học kỳ liên kết, ban cùng bộ môn tính điểm và đủ điểm từng lớp.'}</p><div class="table-wrap"><table><thead><tr><th rowspan="2">Lớp / GVCN</th>${b.codes.map(code=>`<th colspan="2">${esc(code==='KTPL'?'KTPL':b.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</th>`).join('')}<th rowspan="2">Tổng</th><th rowspan="2">TB</th><th rowspan="2">${b.choice?'—':'XT theo ban'}</th></tr><tr>${b.codes.map(()=>'<th>ĐTB</th><th>XT</th>').join('')}</tr></thead><tbody>${b.classes.map(c=>`<tr><td rowspan="2">${esc(c.class_code)}<br><small>${esc(c.homeroom_teacher)}</small>${c.incomplete?'<br>Thiếu điểm':''}</td>${b.codes.map(code=>{const s=c.subjects.find(s=>s.subject_code===code);return `<td title="${esc(s?.error||('Được tính: '+(s?.included_count??0)+'; thiếu điểm: '+(s?.missing_count??0)))}">${number(s?.average_score)}</td><td>${s?.rank??'—'}</td>`}).join('')}<td rowspan="2">${number(c.total_score)}</td><td rowspan="2">${number(c.average_score)}</td><td rowspan="2">${c.rank??'—'}</td></tr><tr>${b.codes.map(code=>`<td colspan="2"><em>${esc(c.subjects.find(s=>s.subject_code===code)?.teacher||'')}</em></td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr><th>ĐTB học sinh</th>${b.codes.map((code,i)=>`<td>${number(classReportSheet(b).rows.at(-1)[1+i*2]===''?null:classReportSheet(b).rows.at(-1)[1+i*2])}</td><td></td>`).join('')}<td colspan="3"></td></tr></tfoot></table></div>`).join('')||'<p>Không có lớp theo lựa chọn hiển thị.</p>';
     $('class-report-export').disabled=!blocks.length;if($('class-report-pdf'))$('class-report-pdf').disabled=!blocks.length;
   }
   $('class-report-load').onclick=async()=>{
@@ -76,7 +85,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
-      message($('class-report-message'),!data.period_id?'Chưa liên kết học kỳ phân công. Thiết lập tại Cấu hình kỳ thi.':data.exam_mode!=='default'?'Kỳ theo môn: hiển thị điểm và giáo viên; chưa có bộ môn tính điểm theo lớp để xếp hạng.':'Đã tải báo cáo. Thứ hạng chỉ so sánh trong từng ban.','info');render();
+      message($('class-report-message'),!data.period_id?'Chưa liên kết học kỳ phân công. Thiết lập tại Cấu hình kỳ thi.':data.exam_mode!=='default'?'Kỳ theo môn: xếp hạng từng môn trong khối, không cần phân ban. Tổng là tổng ĐTB các môn có điểm được tính; TB chia cho số môn đó.':'Đã tải báo cáo. Thứ hạng chỉ so sánh trong từng ban.','info');render();
     }catch(e){if(token===request)message($('class-report-message'),e.message,'error')}
     finally{$('class-report-load').disabled=false}
   };
@@ -94,7 +103,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     const exam=state.exams.find(e=>e.id===state.selectedExam),win=createPrintFrame();
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
       @page{size:A4 landscape;margin:5mm}body{font:9pt 'Times New Roman',serif;margin:0}h2,h3{text-align:center}table{border-collapse:collapse;width:100%;font-size:8pt}th,td{border:1px solid #000;padding:0.7mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
-      </style></head><body><h2>${esc(exam?.form_exam_title||exam?.name||'Thống kê lớp')}</h2><p style="text-align:center">Năm học ${esc(exam?.school_year||'')}</p>${$('class-report-results').innerHTML}<p>Tổng/TB và thứ hạng giữ nguyên bộ môn tính điểm; chọn môn chỉ thay đổi cột hiển thị. Đồng hạng ${options().dense?'1,1,2':'1,1,3'}.</p><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
+      </style></head><body><h2>${esc(exam?.form_exam_title||exam?.name||'Thống kê lớp')}</h2><p style="text-align:center">Năm học ${esc(exam?.school_year||'')}</p>${$('class-report-results').innerHTML}<p>Tổng = tổng ĐTB môn của lớp; TB = Tổng / số môn được tính. Kỳ lựa chọn tính các môn có điểm hợp lệ, kỳ mặc định dùng môn tính điểm. Chọn môn chỉ đổi cột hiển thị. Đồng hạng ${options().dense?'1,1,2':'1,1,3'}.</p><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   };
   $('class-report-export').onclick=()=>{
     if(!payload||key!==context()){clear();return}

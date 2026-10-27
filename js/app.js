@@ -7,7 +7,7 @@ import {wireRanking} from './ranking.js?v=0.1.147';
 import {wireViolations} from './violations.js?v=0.1.147';
 import {createStudentPicker} from './student-picker.js?v=0.1.147';
 import {wireScoreControl} from './score-control.js?v=0.1.147';
-import {wireClassReport} from './class-report.js?v=0.1.147&classreport=152';
+import {wireClassReport} from './class-report.js?v=0.1.147&classreport=153';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
