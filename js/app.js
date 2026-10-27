@@ -1,6 +1,9 @@
+import {createSbdGroupEditor} from './sbd-group-editor.js?v=156';
+let sbdGroupEditor;
+import {optimizeByGroups,allocateByGroups,validateRoomGroups} from './group-rooming.js?v=155';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=154';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=156';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -1086,14 +1089,14 @@ async function loadPreviousScores(previousExamId){
  const configs=await selectAllPages(()=>state.client.from(isDefault?'exam_subject_class_configs':'exam_candidate_subjects')
    .select(isDefault?'subject_code,class_code,is_counted':'subject_code,candidate_id').eq('exam_id',previousExamId));
  const eligible=isDefault?configs.filter(c=>c.is_counted):configs;
- if(!eligible.length)throw new Error('K? thi tr??c ch?a c? m?n thu?c ph?m vi t?nh ?i?m.');
+ if(!eligible.length)throw new Error('Kỳ thi trước chưa có môn thuộc phạm vi tính điểm.');
  const rows=[];
  for(const subject of [...new Set(eligible.map(c=>c.subject_code))]){
    const data=await selectAllPages(()=>state.client.rpc('exam_get_subject_results',{p_exam_id:previousExamId,p_subject_code:subject}));
    rows.push(...data.filter(row=>eligible.some(c=>c.subject_code===subject&&(isDefault?c.class_code===row.class_code:c.candidate_id===row.candidate_id))));
  }
  const map=sumPreviousResults(rows);
- if(!map.size)throw new Error('K? thi tr??c ch?a c? k?t qu? h?p l? ?? t?nh t?ng ?i?m.');
+ if(!map.size)throw new Error('Kỳ thi trước chưa có kết quả hợp lệ để tính tổng điểm.');
  return {map};
 }
 function selectedRoomingRound(){return Number($('rooming-round')?.value||0)}
@@ -1548,6 +1551,25 @@ function renumberRoomingAssignments(preview){
  }
  preview.result.assignments.sort((a,b)=>(roomOrder.get(a.room_code)??9999)-(roomOrder.get(b.room_code)??9999)||Number(a.seat_number)-Number(b.seat_number));
 }
+
+function roomGroupText(examId){
+ if(isSubjectExam(examId))return null;
+ if($('sbd-groups')?.dataset.examId===examId)return $('sbd-groups').value;
+ try{return localStorage.getItem('sbd-groups:'+examId)||''}catch{return ''}
+}
+function optimizeMandatoryRooms(candidates,options){
+ const text=roomGroupText($('rooming-exam-select').value);
+ return text===null?baseMandatoryRooms(candidates,options):optimizeByGroups(candidates,options,text,baseMandatoryRooms);
+}
+function optimizeElectiveRooms(candidates,options){
+ const text=roomGroupText($('rooming-exam-select').value);
+ return text===null?baseElectiveRooms(candidates,options):optimizeByGroups(candidates,options,text,baseElectiveRooms);
+}
+function allocateCandidatesToRoomPlan(candidates,rooms,options){
+ const text=roomGroupText(state.preview?.examId||$('rooming-exam-select').value);
+ return text===null?baseAllocateRooms(candidates,rooms,options):allocateByGroups(candidates,rooms,options,text,baseAllocateRooms);
+}
+
 function validateRoomingPlan(preview){
  if(!preview)return {ok:false,errors:['Chưa có phương án xếp phòng.']};
  const errors=[],rooms=preview.result.rooms||[],assignments=preview.result.assignments||[],poolIds=new Set((preview.pool||[]).map(poolCandidateId)),roomMap=new Map();
@@ -1586,8 +1608,8 @@ function invalidateRoomAssignments(preview){
  preview.suggestionValid=false;
 }
 function refreshSuggestedRoomAssignments(preview){
- const plan=preview.result.rooms.map(({room_code,room_number,student_count,capacity})=>
-  ({room_code,room_number,student_count,capacity}));
+ const plan=preview.result.rooms.map(({room_code,room_number,student_count,capacity,group_index})=>
+  ({room_code,room_number,student_count,capacity,group_index}));
  const allocation=allocateCandidatesToRoomPlan(preview.pool,plan,{
   capacity:preview.options.capacity,planType:preview.planType,subjectCode:preview.subjectCode,
   suggestedAssignments:preview.suggestedAssignments
@@ -1658,8 +1680,8 @@ function removeRoomFromPlan(roomCode){
 function assignRoomingCandidates(){
  const preview=state.preview;if(!preview)return false;
  if(preview.assignmentsCreated)return true;
- const plan=preview.result.rooms.map(({room_code,room_number,student_count,capacity})=>
-  ({room_code,room_number,student_count,capacity}));
+ const plan=preview.result.rooms.map(({room_code,room_number,student_count,capacity,group_index})=>
+  ({room_code,room_number,student_count,capacity,group_index}));
  const result=allocateCandidatesToRoomPlan(preview.pool,plan,{
   capacity:preview.options.capacity,planType:preview.planType,subjectCode:preview.subjectCode,
   suggestedAssignments:preview.suggestedAssignments
@@ -1961,12 +1983,14 @@ async function refreshSbdRoomControls(){
  const examId=$('sbd-exam-select').value;
  const subjectExam=await refreshSubjectSbdControls();
  const groupInput=$('sbd-groups');
- $('sbd-group-options').classList.toggle('hidden',subjectExam||$('room-sort-mode').value==='elective_rooms');
+ $('sbd-group-options').classList.toggle('hidden',subjectExam);
  if(groupInput.dataset.examId!==examId){
    groupInput.dataset.examId=examId;
    try{groupInput.value=localStorage.getItem('sbd-groups:'+examId)||''}catch{groupInput.value=''}
  }
  if(subjectExam){$('sbd-room-options').classList.add('hidden');return}
+ await sbdGroupEditor?.load(examId);
+ if($('sbd-exam-select').value!==examId)return;
  const active=$('room-sort-mode').value==='elective_rooms';
  $('sbd-room-options').classList.toggle('hidden',!active);
  if(!active)return;
@@ -1993,11 +2017,13 @@ async function previewSbdRooms(){
  if(!plan)throw new Error('Chưa có phòng tổ hợp đã lưu. Vào Xếp phòng thi → Môn lựa chọn → Kiểm tra và lưu phân bổ trước.');
  const candidateMap=new Map(candidates.map(row=>[String(row.id),row]));
  if(plan.assignments.some(row=>!candidateMap.has(String(row.candidate_id))||String(candidateMap.get(String(row.candidate_id)).sbd||'').trim()))throw new Error('Danh sách đã thay đổi hoặc thí sinh đã có SBD. Hãy kiểm tra lại phòng đã lưu.');
+ const groupText=roomGroupText(examId);
+ if(groupText!==null)validateRoomGroups(plan.assignments,candidates,groupText);
  const existing=await selectAllPages(()=>state.client.from('exam_candidates').select('sbd').eq('exam_id',examId).order('id'));
  const startNumber=1+existing.reduce((max,row)=>{const s=String(row.sbd||'');return s.length===inputs.totalLength&&s.startsWith(inputs.prefix)?Math.max(max,Number(s.slice(inputs.prefix.length))||0):max},0);
  const result=numberSavedElectiveRooms(plan,{...inputs,startNumber});
  if(JSON.stringify(inputs)!==JSON.stringify(sbdRoomInputs()))throw new Error('Thiết lập đã thay đổi trong khi tải. Hãy xem trước lại.');
- sbdRoomPreview={inputs,result,plan,startNumber};
+ sbdRoomPreview={inputs,result,plan,startNumber,groupText};
  $('sbd-room-preview-result').innerHTML=`<p>${result.assignments.length} học sinh · ${result.rooms.length} phòng đã lưu. Giữ nguyên phòng và vị trí. Kiểm tra rồi bấm “Đánh số SBD và lưu CSDL”.</p><div class="table-wrap"><table><thead><tr><th>Phòng</th><th>SBD dự kiến</th><th>Họ tên</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th></tr></thead><tbody>${result.assignments.map(row=>`<tr><td>${esc(row.room_code)}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${esc(subjectName(row.ca1_subject_code))}</td><td>${esc(subjectName(row.ca2_subject_code))}</td></tr>`).join('')}</tbody></table></div>`;
  message($('sbd-message'),'Đã tải phòng đã lưu và xem trước SBD; chưa thay đổi dữ liệu.','info');
 }
@@ -2005,6 +2031,7 @@ async function saveSbdRoomPreview(){
  const preview=sbdRoomPreview;
  if(!preview||JSON.stringify(preview.inputs)!==JSON.stringify(sbdRoomInputs()))throw new Error('Hãy tải phòng đã lưu và xem trước SBD theo thiết lập hiện tại trước khi lưu.');
  const {inputs,result}=preview;
+ if(preview.groupText!==roomGroupText(inputs.examId))throw new Error('Nhóm lớp đã thay đổi. Hãy xem trước lại.');
  const {error}=await state.client.rpc('exam_number_saved_elective_plan',{p_plan_id:preview.plan.id,p_expected_rooms:preview.plan.rooms,p_expected_assignments:preview.plan.assignments,p_sbd_prefix:inputs.prefix,p_sbd_length:inputs.totalLength,p_start_number:preview.startNumber});
  if(error)throw new Error(`Không cấp được SBD theo phòng đã lưu. Cần migration v0.1.114. ${error.message}`);
  invalidateSbdRoomPreview();
@@ -2012,7 +2039,13 @@ async function saveSbdRoomPreview(){
  message($('sbd-message'),`Đã lưu ${result.assignments.length} SBD theo thứ tự ${result.rooms.length} phòng của đợt ${inputs.roundNo}. Vào Xếp phòng thi, chọn cùng kỳ thi/đợt và Môn lựa chọn để tải phương án đã lưu, kiểm tra và phân phòng chính thức.`,'success');
 }
 function wireSbdRoomMode(){
- $('sbd-groups').addEventListener('input',()=>{try{localStorage.setItem('sbd-groups:'+ $('sbd-groups').dataset.examId,$('sbd-groups').value)}catch{}});
+ sbdGroupEditor=createSbdGroupEditor({root:$('sbd-group-editor'),input:$('sbd-groups'),escape:esc,
+  loadCandidates:examId=>selectAllPages(()=>state.client.from('exam_candidates').select('id,class_code').eq('exam_id',examId).order('id')),
+  onChange:()=>{
+   invalidateSbdRoomPreview();
+   try{localStorage.setItem('sbd-groups:'+$('sbd-groups').dataset.examId,$('sbd-groups').value)}catch{message($('sbd-message'),'Không lưu được nhóm trên trình duyệt. Giữ trang hiện tại để tiếp tục.','error')}
+  }
+ });
  const refresh=()=>refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
  for(const id of ['sbd-exam-select','sbd-subject','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length']){
   const control=$(id);if(control)control.addEventListener('change',()=>{invalidateSbdRoomPreview();refresh()});
@@ -2097,7 +2130,7 @@ async function assignSbdByRoom(){
      ordered.sort((a,b)=>compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),undefined,{numeric:true}));
    }
    ordered=orderSbdGroups(ordered,$('sbd-groups').value,compareVietnameseName,sortMode);
-   if($('sbd-exam-select').value!==examId)throw new Error('K? thi ?? thay ??i. H?y th?c hi?n l?i.');
+   if($('sbd-exam-select').value!==examId)throw new Error('Kỳ thi đã thay đổi. Hãy thực hiện lại.');
    const assignments=ordered.map((c,i)=>({candidate_id:c.id,sbd:prefix+String(i+1).padStart(suffixLength,'0')}));
    const {data,error:rpcError}=await state.client.rpc('exam_assign_candidate_sbd',{p_exam_id:examId,p_assignments:assignments});
    if(rpcError)throw new Error(`Không lưu được SBD. Hãy chạy migration v0.1.41 trên đúng project Supabase. ${rpcError.message}`);
