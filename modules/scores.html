@@ -79,7 +79,7 @@
       <label>Hiển thị môn<select id="class-report-scope"><option value="counted">Môn tính điểm xếp hạng</option><option value="all">Tất cả môn thi</option></select></label>
       <label>Khối<select id="class-report-grade"><option value="">Tất cả khối</option></select></label>
       <label>Đồng hạng<select id="class-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
-      <label>Mẫu thống kê kỳ lựa chọn<select id="class-report-view"><option value="classes">Theo lớp: SL · ĐTB · XH · TB bài thi · XH TB</option><option value="max">Theo khối: SL dự thi · Max điểm</option></select></label>
+      <label><input id="class-report-extra-max" type="checkbox"> Bổ sung bảng theo môn: số dự thi · điểm cao nhất</label>
       <label><input id="class-report-absent" type="checkbox"> Tính học sinh vắng</label>
       <label><input id="class-report-violations" type="checkbox"> Tính học sinh vi phạm</label>
     </div>
@@ -87,8 +87,7 @@
     <details><summary>Tiêu đề báo cáo — tùy chỉnh theo kỳ thi và đơn vị</summary><p>Tải báo cáo để lấy tiêu đề đã lưu. Các trường sau dùng cho PDF và Excel; có thể để trống dòng không cần. Lưu tiêu đề không thay đổi tên kỳ thi hoặc điểm.</p><div class="form-grid">
       <label>Cơ quan chủ quản<input id="statistics-header-authority" maxlength="300"></label>
       <label>Tên đơn vị<input id="statistics-header-institution" maxlength="300"></label>
-      <label>Quốc hiệu<input id="statistics-header-nation" maxlength="300"></label>
-      <label>Tiêu ngữ<input id="statistics-header-motto" maxlength="300"></label>
+      <p>Góc phải hiển thị tên kỳ thi và khối đang lọc. Bỏ quốc hiệu và tiêu ngữ. Tích bổ sung thống kê để in thêm bảng số dự thi/điểm cao nhất phía trên bảng lớp; bỏ tích thì không in phần bổ sung.</p>
       <label>Tên báo cáo<input id="statistics-header-report_title" maxlength="300"></label>
       <label>Tên kỳ thi trên báo cáo<input id="statistics-header-exam_title" maxlength="300"></label>
       <label>Năm học<input id="statistics-header-school_year" maxlength="300"></label>
