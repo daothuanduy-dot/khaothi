@@ -74,15 +74,25 @@
     <div id="choice-report-results"></div>
   </section>
   <section class="panel" id="class-report-panel">
-    <h3>Thống kê các môn theo lớp và ban</h3>
+    <h3>Thống kê các môn theo lớp / tổng hợp khối</h3>
     <div class="form-grid">
       <label>Hiển thị môn<select id="class-report-scope"><option value="counted">Môn tính điểm xếp hạng</option><option value="all">Tất cả môn thi</option></select></label>
       <label>Khối<select id="class-report-grade"><option value="">Tất cả khối</option></select></label>
       <label>Đồng hạng<select id="class-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
+      <label>Mẫu thống kê kỳ lựa chọn<select id="class-report-view"><option value="classes">Theo lớp: SL · ĐTB · XH · TB bài thi · XH TB</option><option value="max">Theo khối: SL dự thi · Max điểm</option></select></label>
       <label><input id="class-report-absent" type="checkbox"> Tính học sinh vắng</label>
       <label><input id="class-report-violations" type="checkbox"> Tính học sinh vi phạm</label>
     </div>
-    <p>Tổng và TB luôn dùng các môn tính điểm, dù hiển thị tất cả môn. Chỉ xếp hạng trong từng ban có cùng bộ môn và đủ điểm. Điểm hiển thị 3 số lẻ; thứ hạng dùng giá trị chưa làm tròn. Chưa so sánh tăng/giảm với kỳ khác.</p>
+    <p>Kỳ lựa chọn: SL là số học sinh dự thi từng môn, không tính vắng. ĐTB mỗi môn là ĐTB học sinh được tính của lớp. Dòng TB các lớp lấy trung bình các ĐTB lớp, không tính trọng số sĩ số. TB bài thi của lớp là trung bình các ĐTB môn có điểm hợp lệ; thiếu điểm thì TB và XH TB trống. XH môn và XH TB so trong cùng khối, không phân ban, theo điểm chưa làm tròn. Kỳ mặc định giữ cách tính và xếp trong ban. Điểm hiển thị 3 số lẻ, ô không dữ liệu để trống.</p>
+    <details><summary>Tiêu đề báo cáo — tùy chỉnh theo kỳ thi và đơn vị</summary><p>Tải báo cáo để lấy tiêu đề đã lưu. Các trường sau dùng cho PDF và Excel; có thể để trống dòng không cần. Lưu tiêu đề không thay đổi tên kỳ thi hoặc điểm.</p><div class="form-grid">
+      <label>Cơ quan chủ quản<input id="statistics-header-authority" maxlength="300"></label>
+      <label>Tên đơn vị<input id="statistics-header-institution" maxlength="300"></label>
+      <label>Quốc hiệu<input id="statistics-header-nation" maxlength="300"></label>
+      <label>Tiêu ngữ<input id="statistics-header-motto" maxlength="300"></label>
+      <label>Tên báo cáo<input id="statistics-header-report_title" maxlength="300"></label>
+      <label>Tên kỳ thi trên báo cáo<input id="statistics-header-exam_title" maxlength="300"></label>
+      <label>Năm học<input id="statistics-header-school_year" maxlength="300"></label>
+    </div><button type="button" class="btn btn-light" id="statistics-header-save">Lưu tiêu đề thống kê theo kỳ</button></details>
     <div class="form-actions"><button type="button" class="btn btn-primary" id="class-report-load">Tải thống kê lớp</button><button type="button" class="btn btn-light" id="class-report-export" disabled>Xuất Excel thống kê lớp</button></div>
     <div id="class-report-message" class="notice hidden" role="status"></div>
     <button type="button" class="btn btn-light" id="class-report-pdf" disabled>In / lưu PDF thống kê lớp</button>
