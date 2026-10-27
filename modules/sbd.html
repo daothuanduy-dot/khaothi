@@ -12,8 +12,10 @@
             <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button><button id="reset-sbd-old" class="btn btn-light" type="button">Xoá SBD cũ / lập lại</button></div>
           </div>
           <div id="sbd-group-options">
-            <label>Nhóm lớp theo thứ tự cấp SBD<textarea id="sbd-groups" rows="5" placeholder="10A1, 10A2&#10;10A3, 10A4"></textarea></label>
-            <p class="muted">Mỗi dòng là một nhóm; ngăn các lớp bằng dấu phẩy. Khai báo đủ các lớp trong kỳ thi, mỗi lớp một lần. Sắp tên → đệm → họ hoặc tổng điểm giảm dần trong từng nhóm. Số thứ tự từ 1, nối tiếp qua các nhóm; dùng tiền tố và độ dài SBD ở trên. Cấu hình nhóm được giữ trên trình duyệt theo kỳ thi.</p>
+            <h3>Nhóm lớp theo thứ tự cấp SBD và xếp phòng</h3>
+            <input id="sbd-groups" type="hidden">
+            <div id="sbd-group-editor"></div>
+            <p class="muted">Bấm Tạo nhóm rồi tích chọn lớp. Lớp đã chọn ở nhóm khác sẽ bị khóa. Dùng ↑ ↓ để đổi thứ tự nhóm. Bỏ chọn lớp ở nhóm cũ trước khi chuyển sang nhóm mới. Cần đưa đủ các lớp vào nhóm. SBD nối tiếp qua các nhóm, phòng thi tách riêng từng nhóm. Cấu hình được giữ trên trình duyệt theo kỳ thi.</p>
           </div>
           <div id="sbd-room-options" class="hidden">
             <p>1. Vào Xếp phòng thi → Môn lựa chọn → Kiểm tra và lưu phân bổ. 2. Chọn đợt thi dưới đây để tải phòng đã lưu. 3. Xem trước và cấp SBD liên tục từ phòng đầu đến phòng cuối, giữ nguyên phòng và vị trí. Sau đó tải lại phương án trong Xếp phòng thi để phân phòng chính thức.</p>
