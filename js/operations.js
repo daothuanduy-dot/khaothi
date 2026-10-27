@@ -203,6 +203,16 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   };
 
   let formRoundRequest=0,formDataRequest=0,formSettingsExamId=null;
+  let defaultForms=null;
+  const isDefaultForms=()=>state.exams.find(e=>e.id===currentExam('forms-exam'))?.exam_mode==='default';
+  async function ensureDefaultForms(){
+    if(!defaultForms){
+      if(!$('forms-default-settings'))throw new Error('Thiếu giao diện mẫu kỳ mặc định. Hãy cập nhật modules/forms.html cùng bộ website.');
+      const {wireDefaultForms}=await import('./default-forms.js?v=162');
+      defaultForms=wireDefaultForms({$,state,message,createPrintFrame});
+    }
+    return defaultForms;
+  }
   async function loadFormRounds(examId){
     const request=++formRoundRequest,roundSelect=$('forms-round');
     cache.forms=null;
@@ -280,11 +290,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   };
 
   function showFormSettings(){
+    const common=isDefaultForms();
+    $('forms-choice-note')?.classList.toggle('hidden',common);
+    $('forms-default-settings')?.classList.toggle('hidden',!common);
+    $('forms-print-type').closest('label').classList.toggle('hidden',common);
     const selected=$('forms-print-type').value;
-    for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',key!==selected);
-    $('forms-settings-receipt').classList.toggle('hidden',!selected.startsWith('receipt_'));
-    $('forms-class-filter-wrap').classList.toggle('hidden',!['receipt_classrooms','classrooms'].includes(selected));
-    $('forms-receipt-order-wrap').classList.toggle('hidden',selected!=='receipt_elective');
+    for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',common||key!==selected);
+    $('forms-settings-receipt').classList.toggle('hidden',common||!selected.startsWith('receipt_'));
+    $('forms-class-filter-wrap').classList.toggle('hidden',common?$('forms-default-type')?.value!=='classrooms':!['receipt_classrooms','classrooms'].includes(selected));
+    $('forms-receipt-order-wrap').classList.toggle('hidden',common||selected!=='receipt_elective');
   }
   function classRoomGroups(forms){
     const selected=$('forms-class-filter').value||'';
@@ -310,6 +324,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function loadForms(){
+    showFormSettings();
+    for(const id of ['forms-default-preview-button','forms-default-print'])if($(id))$(id).disabled=true;
+    if($('forms-default-preview'))$('forms-default-preview').innerHTML='';
     const request=++formDataRequest;
     cache.forms=null;
     $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
@@ -413,10 +430,18 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set(classRoomRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
       classSelect.value=[...classSelect.options].some(option=>option.value===previousClass)?previousClass:'';
       cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
-      $('forms-summary').innerHTML=[
+      if(exam.exam_mode==='default'){
+        const renderer=await ensureDefaultForms();
+        if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
+        renderer.load(cache.forms);
+        for(const id of ['forms-default-preview-button','forms-default-print'])$(id).disabled=false;
+      }
+      $('forms-summary').innerHTML=(exam.exam_mode==='default'?[
+        ['Thí sinh',candidates.length],['Phương án chính thức để chọn nguồn phòng chung',finalizations.length]
+      ]:[
         ['Thí sinh',candidates.length],['Danh sách có phòng',listingRows.length],
         ['Lượt thu bài',receiptRows.length],['Môn lựa chọn đã rà soát',rosterRows.length]
-      ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+      ]).map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
       $('forms-export-xlsx').disabled=false;$('forms-export-pdf').disabled=false;
       message($('forms-message'),`Đã tải ${candidates.length} thí sinh${roundNo?` của đợt ${roundNo}`:''}, ${finalizations?.length||0} phương án phòng chính thức.`,'success');
     }finally{if(request===formDataRequest)$('forms-load-data').disabled=false}
@@ -424,6 +449,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function saveFormHeader(){
     const examId=currentExam('forms-exam');setAdminExam(examId);
     const printSettings=currentFormPrintSettings();
+    if(isDefaultForms()){
+      if(!defaultForms||cache.forms?.examId!==examId)throw new Error('Tải dữ liệu biểu mẫu trước khi lưu mẫu kỳ mặc định.');
+      printSettings.default_templates=defaultForms.getSettings();
+      printSettings.default_room_sources={...(cache.forms.exam.form_print_settings?.default_room_sources||{}),[String(cache.forms.roundNo)]:$('forms-default-source').value};
+    }
     const payload={managing_authority:$('forms-authority').value.trim(),
       institution_name:$('forms-institution').value.trim(),form_exam_title:$('forms-title').value.trim(),
       form_print_settings:printSettings};
@@ -1653,8 +1683,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('forms-round').onchange=()=>loadForms().catch(error=>message($('forms-message'),error.message,'error'));
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
     safeAction('forms-message',loadForms,$('forms-load-data'));
-    $('forms-export-xlsx').onclick=()=>{try{exportFormsExcel()}catch(error){message($('forms-message'),error.message,'error')}};
-    $('forms-export-pdf').onclick=()=>{try{exportFormsPdf()}catch(error){message($('forms-message'),error.message,'error')}};
+    const exportCurrent=async format=>{
+      try{
+        if(!cache.forms||cache.forms.examId!==currentExam('forms-exam')||Number($('forms-round').value)!==cache.forms.roundNo)throw new Error('Hãy tải dữ liệu biểu mẫu của đúng kỳ/đợt trước khi in.');
+        if(isDefaultForms()){const renderer=await ensureDefaultForms();if(format==='excel')renderer.excel();else renderer.print()}
+        else if(format==='excel')exportFormsExcel();else exportFormsPdf();
+      }catch(error){message($('forms-message'),error.message,'error')}
+    };
+    $('forms-export-xlsx').onclick=()=>exportCurrent('excel');
+    $('forms-export-pdf').onclick=()=>exportCurrent('pdf');
   }
   function wireAbsences(){
     if(createStudentPicker&&$('absence-student-picker'))absencePicker=createStudentPicker({root:$('absence-student-picker'),input:$('absence-student-input'),list:$('absence-student-options'),toggle:$('absence-student-toggle'),esc,onSelect:id=>{absenceStudentId=id;$('absence-search').value='';applyAbsenceFilters()}});
