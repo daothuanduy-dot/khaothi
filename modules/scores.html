@@ -67,9 +67,10 @@
       <label><input id="choice-report-absent" type="checkbox"> Tính học sinh vắng (0 điểm)</label>
       <label><input id="choice-report-violations" type="checkbox"> Tính học sinh vi phạm (sau xử lý)</label>
     </div>
-    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn giảm dần trong cùng khối, không phân biệt ban; chọn đồng hạng 1, 1, 3 hoặc 1, 1, 2. TB lớp là trung bình ĐTB các lớp có điểm; TB HS tính theo số học sinh được tính. Môn còn thiếu điểm trong khối chưa xếp hạng. Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
+    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn giảm dần trong cùng khối, không phân biệt ban; chọn đồng hạng 1, 1, 3 hoặc 1, 1, 2. TB lớp là trung bình ĐTB các lớp có điểm. Hiển thị 3 số lẻ; xếp hạng theo điểm chưa làm tròn. Môn còn thiếu điểm trong khối chưa xếp hạng. Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
     <div class="form-actions"><button id="choice-report-load" type="button" class="btn btn-primary">Tải báo cáo lựa chọn</button><button id="choice-report-excel" type="button" class="btn btn-light" disabled>Xuất Excel</button><button id="choice-report-summary-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF thống kê</button><button id="choice-report-roster-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF danh sách lớp</button></div>
     <div id="choice-report-message" class="notice hidden" role="status"></div>
+    <fieldset><legend>Môn đưa vào thống kê</legend><p>Bỏ tích môn không cần hiển thị. Áp dụng cho bảng thống kê, Excel và bản in; không thay đổi đăng ký hoặc điểm.</p><div id="choice-report-subjects"></div></fieldset>
     <div id="choice-report-results"></div>
   </section>
   <section class="panel" id="class-report-panel">
