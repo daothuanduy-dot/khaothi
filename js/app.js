@@ -1,5 +1,5 @@
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=150';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=151';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -8,7 +8,7 @@ import {wireViolations} from './violations.js?v=0.1.147';
 import {createStudentPicker} from './student-picker.js?v=0.1.147';
 import {wireScoreControl} from './score-control.js?v=0.1.147';
 import {wireClassReport} from './class-report.js?v=0.1.147';
-import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=150';
+import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
