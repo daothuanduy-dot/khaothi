@@ -2,16 +2,16 @@ const subjectOrder=code=>({VAN:0,TOAN:1,N1:2,N4:3,N5:4,LY:5,HOA:6,SINH:7,SU:8,DI
 export function choiceSubjects(data){
   return [...new Set(data.cells.map(c=>c.subject_code))].sort((a,b)=>subjectOrder(a)-subjectOrder(b)||a.localeCompare(b));
 }
-export function choiceSummary(data){
+export function choiceSummary(data,tieMode='competition'){
   const cells=data.cells.map(c=>({...c,rank:null}));
-  // Compare the same subject only within an explicitly configured ban.
-  for(const group of data.groups||[]){
-    const classes=new Set(data.classes.filter(c=>c.ban_id===group.id&&c.grade_code===group.grade_code).map(c=>c.class_code));
+  // Choice exams compare each subject across participating classes in the same grade.
+  for(const grade of new Set(data.classes.map(c=>c.grade_code).filter(Boolean))){
+    const classes=new Set(data.classes.filter(c=>c.grade_code===grade).map(c=>c.class_code));
     for(const subject of choiceSubjects(data)){
       const same=cells.filter(c=>classes.has(c.class_code)&&c.subject_code===subject);
       if(same.some(c=>c.missing_count>0))continue;
       const eligible=same.filter(c=>c.average_score!=null&&c.included_count>0).sort((a,b)=>Number(b.average_score)-Number(a.average_score));
-      let rank=0,last;eligible.forEach((c,i)=>{if(i===0||Number(c.average_score)!==last)rank=i+1;c.rank=rank;last=Number(c.average_score)});
+      let rank=0,last;eligible.forEach((c,i)=>{if(i===0||Number(c.average_score)!==last)rank=tieMode==='dense'?rank+1:i+1;c.rank=rank;last=Number(c.average_score)});
     }
   }
   return {codes:choiceSubjects(data),cells};
@@ -44,10 +44,14 @@ export function choiceRosterSheet(students){
     ...Array.from({length:columns.electives},(_,n)=>{const s=c.elective[n];return s?shortSubject(s)+' '+scoreText(s):''}),c.total??'',c.average??'']));
   return rows;
 }
-export function choiceSummarySheet(data,selectedClasses=data.classes){
-  const report=choiceSummary(data),rows=[['Lớp',...report.codes.flatMap(code=>[data.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
+export function choiceSummarySheet(data,selectedClasses=data.classes,tieMode='competition'){
+  const report=choiceSummary(data,tieMode),rows=[['Lớp',...report.codes.flatMap(code=>[code==='KTPL'?'KTPL':data.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
   for(const cls of [...selectedClasses].sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}))){rows.push([cls.class_code,...report.codes.flatMap(code=>{const c=report.cells.find(c=>c.class_code===cls.class_code&&c.subject_code===code);return c?[c.average_score??'',c.included_count,c.rank??'']:['','','']})]);}
-  rows.push(['TB',...report.codes.flatMap(code=>{
+  rows.push(['TB lớp',...report.codes.flatMap(code=>{
+    const cells=report.cells.filter(c=>c.subject_code===code&&selectedClasses.some(x=>x.class_code===c.class_code)&&c.average_score!=null&&c.included_count>0);
+    return [cells.length?cells.reduce((sum,c)=>sum+Number(c.average_score),0)/cells.length:'','',''];
+  })]);
+  rows.push(['TB HS',...report.codes.flatMap(code=>{
     const cells=report.cells.filter(c=>c.subject_code===code&&selectedClasses.some(x=>x.class_code===c.class_code)&&c.average_score!=null);
     const n=cells.reduce((n,c)=>n+Number(c.included_count),0);return [n?cells.reduce((n,c)=>n+Number(c.average_score)*Number(c.included_count),0)/n:'','',''];
   })]);return rows;
@@ -56,6 +60,8 @@ export function choiceSummarySheet(data,selectedClasses=data.classes){
 export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
   let payload=null,key='',request=0;
   const context=()=>JSON.stringify([state.selectedExam||'',!!$('choice-report-absent').checked,!!$('choice-report-violations').checked,state.statisticsRevision||0]);
+  const tieMode=()=>$('choice-report-ties').value==='dense'?'dense':'competition';
+  const rankNote=()=>`XH từng môn giảm dần trong cùng khối, không phân biệt ban; đồng hạng ${tieMode()==='dense'?'1,1,2':'1,1,3'}. Khi môn còn thiếu điểm trong khối, chưa xếp hạng. TB lớp: trung bình ĐTB các lớp có điểm; TB HS: trung bình theo số học sinh được tính, trong phạm vi đang lọc.`;
   const selectedClasses=()=>payload.classes.filter(c=>(!$('choice-report-grade').value||c.grade_code===$('choice-report-grade').value)&&(!$('choice-report-class').value||c.class_code===$('choice-report-class').value));
   const selectedStudents=()=>choiceRoster(payload).filter(s=>selectedClasses().some(c=>c.class_code===s.class_code));
   const exportIds=['choice-report-excel','choice-report-summary-pdf','choice-report-roster-pdf'];
@@ -64,8 +70,8 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
   const tableHtml=(rows,roster=false)=>`<table class="${roster?'roster':'summary'}"><thead><tr>${rows[0].map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map(row=>`<tr>${row.map((v,i)=>`<td>${esc(typeof v==='number'&&(!roster?i>0&&(i-1)%3===0:i>=4)?Number(v.toFixed(2)):v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   function render(){
     if(!ready())return;
-    const rows=choiceSummarySheet(payload,selectedClasses());
-    $('choice-report-results').innerHTML='<h4>ĐTB · số học sinh được tính · XH từng môn trong ban</h4><div class="table-wrap">'+tableHtml(rows)+'</div>';
+    const rows=choiceSummarySheet(payload,selectedClasses(),tieMode());
+    $('choice-report-results').innerHTML='<h4>ĐTB · số học sinh được tính · XH từng môn trong khối</h4><div class="table-wrap">'+tableHtml(rows)+'</div><p>'+esc(rankNote())+'</p>';
     for(const id of exportIds)$(id).disabled=!selectedClasses().length;
   }
   $('choice-report-load').onclick=async()=>{
@@ -78,11 +84,11 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
       $('choice-report-grade').innerHTML='<option value="">Tất cả khối</option>'+[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
       $('choice-report-class').innerHTML='<option value="">Tất cả lớp</option>'+data.classes.map(c=>`<option value="${esc(c.class_code)}">${esc(c.class_code)}</option>`).join('');
       $('choice-report-grade').value='';$('choice-report-class').value='';render();
-      message($('choice-report-message'),'Đã tải. SL là số học sinh được tính vào ĐTB môn. Môn không đăng ký để trống; XH chỉ trong ban đã thiết lập, không xếp chung toàn khối.','info');
+      message($('choice-report-message'),'Đã tải. SL là số học sinh được tính vào ĐTB môn. Môn không đăng ký để trống; XH từng môn trong cùng khối, không phân biệt ban. Môn còn thiếu điểm chưa xếp hạng.','info');
     }catch(e){if(token===request)message($('choice-report-message'),e.message,'error')}
     finally{$('choice-report-load').disabled=false}
   };
-  for(const id of ['choice-report-grade','choice-report-class'])$(id).onchange=render;
+  for(const id of ['choice-report-grade','choice-report-class','choice-report-ties'])$(id).onchange=render;
   for(const id of ['choice-report-absent','choice-report-violations'])$(id).onchange=clear;
   $('choice-report-excel').onclick=()=>{
     if(!ready())return;const wb=window.XLSX.utils.book_new();
@@ -96,10 +102,9 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
       }
       window.XLSX.utils.book_append_sheet(wb,ws,name.replace(/[\\/?*\[\]:]/g,' ').slice(0,31));
     };
-    add('Thong ke',choiceSummarySheet(payload,selectedClasses()),'summary');
+    add('Thong ke',choiceSummarySheet(payload,selectedClasses(),tieMode()),'summary');
     const students=selectedStudents();for(const cls of selectedClasses())add(cls.class_code,choiceRosterSheet(students.filter(c=>c.class_code===cls.class_code)));
-    add('Phan ban',[['Lớp','Ban xếp hạng'],...selectedClasses().map(c=>[c.class_code,payload.groups.find(g=>g.id===c.ban_id)?.name||'Chưa phân ban'])]);
-    add('Lua chon',[['Tính vắng',payload.include_absent],['Tính vi phạm',payload.include_violations],['SL','Số học sinh thực sự được tính vào ĐTB'],['XH','Trong cùng ban; 1,1,3'],['Tổng/TB','Chỉ tính khi đủ điểm của mọi môn đã đăng ký']]);
+    add('Lua chon',[['Tính vắng',payload.include_absent],['Tính vi phạm',payload.include_violations],['SL','Số học sinh thực sự được tính vào ĐTB'],['XH',rankNote()],['Tổng/TB','Chỉ tính khi đủ điểm của mọi môn đã đăng ký']]);
     window.XLSX.writeFile(wb,`bao-cao-lua-chon-${state.selectedExam}.xlsx`);
   };
   function print(roster){
@@ -109,10 +114,10 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
     const pages=roster?selectedClasses().map(cls=>{
       const list=students.filter(c=>c.class_code===cls.class_code);
       return `<section class="page">${header}<h3>KẾT QUẢ CHẤM THI — ${esc(cls.class_code)}</h3>${policy}${tableHtml(choiceRosterSheet(list),true)}</section>`;
-    }).join(''):`<section>${header}<h3>THỐNG KÊ ĐIỂM THEO LỚP</h3>${policy}${tableHtml(choiceSummarySheet(payload,selectedClasses()))}<p>XH từng môn chỉ trong cùng ban; SL là số được tính vào ĐTB. Ô trống: không đăng ký hoặc chưa có điểm; xem bảng chi tiết để đối chiếu.</p></section>`;
+    }).join(''):`<section>${header}<h3>THỐNG KÊ ĐIỂM THEO LỚP</h3>${policy}${tableHtml(choiceSummarySheet(payload,selectedClasses(),tieMode()))}<p>${esc(rankNote())} SL là số được tính vào ĐTB. Ô trống: không đăng ký hoặc chưa có điểm; xem bảng chi tiết để đối chiếu.</p></section>`;
     const win=createPrintFrame();
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(payload.name)}</title><style>
-      @page{size:A4 ${roster?'portrait':'landscape'};margin:10mm}body{font:10pt 'Times New Roman',serif;margin:0}header{display:flex;justify-content:space-between;text-align:center;font-weight:bold}h3{text-align:center;margin:2mm 0}.policy{font-size:8pt;margin:1mm 0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:1mm;text-align:center}thead{display:table-header-group}tr{break-inside:avoid}.roster{font-size:9pt;line-height:1.1}.roster th,.roster td{padding:0.5mm}.roster td:nth-child(3){text-align:left;min-width:35mm}.page{break-after:page}.page:last-child{break-after:auto}.summary{font-size:9pt}
+      @page{size:A4 ${roster?'portrait':'landscape'};margin:${roster?'10':'5'}mm}body{font:10pt 'Times New Roman',serif;margin:0}header{display:flex;justify-content:space-between;text-align:center;font-weight:bold}h3{text-align:center;margin:2mm 0}.policy{font-size:8pt;margin:1mm 0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:1mm;text-align:center}thead{display:table-header-group}tr{break-inside:avoid}.roster{font-size:9pt;line-height:1.1}.roster th,.roster td{padding:0.5mm}.roster td:nth-child(3){text-align:left;min-width:35mm}.page{break-after:page}.page:last-child{break-after:auto}.summary{font-size:8pt;table-layout:fixed}.summary th,.summary td{padding:0.6mm 0.2mm;overflow-wrap:anywhere}.summary th:first-child{width:12mm}.summary tbody tr:nth-last-child(-n+2){font-weight:bold;background:#eee}
       </style></head><body>${pages}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   }
   $('choice-report-summary-pdf').onclick=()=>print(false);$('choice-report-roster-pdf').onclick=()=>print(true);
