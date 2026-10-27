@@ -61,12 +61,13 @@
   <section class="panel" id="choice-report-panel">
     <h3>Báo cáo kỳ thi lựa chọn / theo môn</h3>
     <div class="form-grid">
+      <label>Đồng hạng<select id="choice-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
       <label>Khối<select id="choice-report-grade"><option value="">Tất cả khối</option></select></label>
       <label>Lớp<select id="choice-report-class"><option value="">Tất cả lớp</option></select></label>
       <label><input id="choice-report-absent" type="checkbox"> Tính học sinh vắng (0 điểm)</label>
       <label><input id="choice-report-violations" type="checkbox"> Tính học sinh vi phạm (sau xử lý)</label>
     </div>
-    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn chỉ trong cùng ban (1, 1, 3). Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
+    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn giảm dần trong cùng khối, không phân biệt ban; chọn đồng hạng 1, 1, 3 hoặc 1, 1, 2. TB lớp là trung bình ĐTB các lớp có điểm; TB HS tính theo số học sinh được tính. Môn còn thiếu điểm trong khối chưa xếp hạng. Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
     <div class="form-actions"><button id="choice-report-load" type="button" class="btn btn-primary">Tải báo cáo lựa chọn</button><button id="choice-report-excel" type="button" class="btn btn-light" disabled>Xuất Excel</button><button id="choice-report-summary-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF thống kê</button><button id="choice-report-roster-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF danh sách lớp</button></div>
     <div id="choice-report-message" class="notice hidden" role="status"></div>
     <div id="choice-report-results"></div>
