@@ -28,4 +28,15 @@
           <div id="sbd-message" class="notice hidden"></div>
           <p class="muted">Ví dụ: SBD 6 chữ số, tiền tố 31 sẽ tạo 310001, 310002…; SBD 8 chữ số, tiền tố 31 sẽ tạo 31000001, 31000002…</p>
         </div>
+        <div class="panel">
+          <h3>Tra cứu học sinh và SBD đã lưu</h3>
+          <p>Danh sách đọc từ CSDL của kỳ thi đang chọn; kỳ theo môn dùng môn đang chọn. Dùng mã học sinh và ngày sinh để phân biệt học sinh trùng tên.</p>
+          <div class="form-grid">
+            <label>Tìm SBD, mã học sinh hoặc họ tên<input id="sbd-roster-search" type="search"></label>
+            <label>Lớp<select id="sbd-roster-class"><option value="">Tất cả lớp</option></select></label>
+            <button id="sbd-roster-load" class="btn btn-light" type="button">Tải / cập nhật danh sách SBD</button>
+          </div>
+          <div id="sbd-roster-status" class="notice notice-info">Bấm tải để xem SBD đã lưu.</div>
+          <div class="table-wrap"><table><thead><tr><th>STT</th><th>SBD</th><th>Mã học sinh</th><th>Họ tên</th><th>Ngày sinh</th><th>Lớp</th></tr></thead><tbody id="sbd-roster-body"><tr><td colspan="6" class="empty">Chưa tải danh sách.</td></tr></tbody></table></div>
+        </div>
       </section>
