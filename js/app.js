@@ -3,7 +3,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=160';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -1479,7 +1479,7 @@ function renderRooming(result,planType='elective'){
   ?'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>'
   :'<tr><th>STT</th><th>Phòng</th><th>Sĩ số dự kiến / thực tế</th><th>Ca 1 (các môn)</th><th>Ca 2 (các môn)</th><th>SBD đầu–cuối</th><th>Thao tác</th></tr>';
  $('rooming-table-body').innerHTML=result.rooms.map((r,i)=>{
-  const count=preview?.assignmentsCreated?`${r.student_count}/${r.capacity}`:`<input class="room-count-input" type="number" min="1" ${grouped?'':`max="${r.capacity}"`} value="${r.student_count}" data-room-count="${esc(r.room_code)}" aria-label="Sĩ số dự kiến phòng ${esc(r.room_code)}" ${preview?.finalized||preview?.saving||preview?.finalizing||preview?.options.fixedSeats?'disabled':''}>${grouped?'':` / ${r.capacity}`}`;
+  const count=`<input class="room-count-input" type="number" min="1" step="1" value="${r.student_count}" data-room-count="${esc(r.room_code)}" aria-label="Sĩ số phòng ${esc(r.room_code)}" ${r.is_private||preview?.finalized||preview?.saving||preview?.finalizing||preview?.options.fixedSeats?'disabled':''}> / ${r.capacity}`;
  const subjects=['mandatory','subject'].includes(planType)?'':`<td>${esc(r.ca1_subject_name||'Chưa gán')}</td><td>${esc(r.ca2_subject_name||'Chưa gán')}</td>`;
   const sbd=preview?.assignmentsCreated?`${esc(r.sbd_first)} – ${esc(r.sbd_last)}`
    :preview?.suggestionValid===false?'Chưa khớp sĩ số — cần điều chỉnh':preview?`Dự kiến: ${esc(r.sbd_first)} – ${esc(r.sbd_last)}`:'Chưa gán';
@@ -1687,9 +1687,31 @@ function applyFreeRoomChange(change){
   return true;
  }catch(e){message($('free-room-error'),e.message,'error');message($('rooming-message'),e.message,'error');renderRooming(preview.result,preview.planType);return false}
 }
-function updateRoomPlanCount(event){
+async function updateRoomPlanCount(event){
  const input=event.target.closest('[data-room-count]'),preview=state.preview;
- if(!input||!preview||preview.assignmentsCreated||preview.options.fixedSeats)return;
+ if(!input||!preview||preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)return;
+ if(preview.result.assignments.length&&preview.suggestionValid!==false){
+  const code=input.dataset.roomCount,count=Number(input.value),target=preview.result.rooms.find(r=>r.room_code===code);
+  if(!target||count===Number(target.student_count))return;
+  preview.saving=true;updateRoomingActions();input.disabled=true;
+  try{
+   const {cascadeRoomCount}=await import('./rooming.js?v=161');
+   if(state.preview!==preview)return;
+   const text=roomGroupText(preview.examId);
+   const normal=preview.result.assignments.filter(a=>!preview.result.rooms.some(r=>r.room_code===a.room_code&&r.is_private));
+   const groups=text===null?null:validateRoomGroups(normal,preview.pool,text);
+   const current={...preview.result,rooms:preview.result.rooms.map(r=>({...r,group_index:r.is_private?r.group_index:groups?.get(r.room_code)??r.group_index??0}))};
+   const result=cascadeRoomCount(current,code,count);
+   preview.result=result;preview.options.capacity=result.rooms[0]?.capacity||preview.options.capacity;
+   preview.assignmentsCreated=true;preview.adjustmentMode='manual';$('rooming-adjustment-mode').value='manual';
+   preview.saved=null;preview.sourcePlanId=null;preview.restoredFromDatabase=false;preview.suggestionValid=true;
+   syncRoomingResult(result,preview.planType);
+   preview.suggestedAssignments=result.assignments.map(a=>({...a}));
+   message($('rooming-message'),'Đã điều chỉnh lũy tiến đến cuối nhóm, giữ nguyên SBD và phòng riêng. Kiểm tra danh sách rồi lưu phân bổ trước khi chốt.','success');
+  }catch(error){message($('rooming-message'),error.message||String(error),'error')}
+  finally{preview.saving=false;if(state.preview===preview)renderRooming(preview.result,preview.planType)}
+  return;
+ }
  if(roomGroupText(preview.examId)!==null){
   const room=preview.result.rooms.find(r=>r.room_code===input.dataset.roomCount);
   applyFreeRoomChange({oldCode:room.room_code,code:room.room_code,count:input.value,groupIndex:room.group_index});return;

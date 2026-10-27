@@ -107,6 +107,45 @@ function packRankedCandidates(candidates, roomPlan, dynamic=false) {
   if(!dynamic&&rooms.some(room=>room.students.length!==Number(room.student_count)))return null;
   return rooms;
 }
+// Preserve the existing order of students; move only the boundaries after the edited room.
+export function cascadeRoomCount(result,roomCode,requestedCount){
+ const count=Number(requestedCount),rooms=result.rooms.map(r=>({...r})),assignments=result.assignments.map(a=>({...a}));
+ const target=rooms.find(r=>r.room_code===roomCode);
+ if(!target||target.is_private)throw new Error('Hãy chọn phòng thường để điều chỉnh sĩ số lũy tiến.');
+ if(!Number.isSafeInteger(count)||count<1)throw new Error('Sĩ số phải là số nguyên dương.');
+ const codes=new Set(rooms.map(r=>r.room_code)),seen=new Set();
+ for(const a of assignments){if(!codes.has(a.room_code)||seen.has(String(a.candidate_id)))throw new Error('Phân bổ hiện tại thiếu phòng hoặc có thí sinh trùng.');seen.add(String(a.candidate_id))}
+ const members=room=>assignments.filter(a=>a.room_code===room.room_code).sort((a,b)=>Number(a.seat_number||0)-Number(b.seat_number||0));
+ if(rooms.some(r=>members(r).length!==Number(r.student_count)))throw new Error('Sĩ số bản nháp chưa khớp danh sách. Hãy lập phân bổ hợp lệ trước khi điều chỉnh lũy tiến.');
+ const groupRooms=rooms.filter(r=>!r.is_private&&r.group_index===target.group_index),index=groupRooms.indexOf(target);
+ if(count===Number(target.student_count))return {...result,rooms,assignments};
+ if(index===groupRooms.length-1)throw new Error('Đây là phòng cuối nhóm, không còn phòng phía sau để chuyển học sinh. Hãy điều chỉnh phòng trước đó.');
+ const tail=groupRooms.slice(index),students=tail.flatMap(members);
+ if(count>students.length)throw new Error(`Chỉ còn ${students.length} học sinh từ phòng này đến cuối nhóm.`);
+ let offset=0;const removed=new Set();
+ tail.forEach((room,i)=>{
+  const size=i===0?count:i===tail.length-1?students.length-offset:Math.min(Number(room.student_count),students.length-offset);
+  const rows=students.slice(offset,offset+size);offset+=size;
+  if(!rows.length){removed.add(room.room_code);return}
+  room.student_count=rows.length;
+  rows.forEach((a,seat)=>{a.room_code=room.room_code;a.seat_number=seat+1});
+ });
+ const nextRooms=rooms.filter(r=>!removed.has(r.room_code));
+ const capacity=Math.max(...nextRooms.map(r=>Math.max(Number(r.capacity)||0,r.student_count)));
+ for(const room of nextRooms){
+  room.capacity=capacity;const rows=members(room);
+  if(rows.some(a=>a.ca1_subject_code||a.ca2_subject_code)&&!validateElectiveRoomSessions(rows).ok)throw new Error(`Điều chỉnh gây trùng môn giữa hai ca tại phòng ${room.room_code}. Phương án cũ được giữ nguyên.`);
+  room.candidate_ids=rows.map(a=>a.candidate_id);
+  const sbds=rows.map(a=>String(a.sbd||'')).filter(Boolean).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+  room.sbd_first=sbds[0]||'';room.sbd_last=sbds.at(-1)||'';
+  if(rows.some(a=>a.ca1_subject_code||a.ca2_subject_code)){
+   room.ca1_subject_codes=[...new Set(rows.map(a=>a.ca1_subject_code).filter(Boolean))].sort();
+   room.ca2_subject_codes=[...new Set(rows.map(a=>a.ca2_subject_code).filter(Boolean))].sort();
+   room.ca1_subject_name=room.ca1_subject_codes.map(nameOf).join(', ');room.ca2_subject_name=room.ca2_subject_codes.map(nameOf).join(', ')||'—';
+  }
+ }
+ return {...result,rooms:nextRooms,assignments};
+}
 export function adjustRoomPlanCount(roomPlan, roomCode, requestedCount) {
   if(!Array.isArray(roomPlan)||roomPlan.length<2)
     return {ok:false,errors:['Cần ít nhất hai phòng để điều chỉnh sĩ số mà vẫn giữ nguyên tổng số thí sinh.']};
