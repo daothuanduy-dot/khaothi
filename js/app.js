@@ -1,5 +1,6 @@
+import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=154';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -1080,23 +1081,20 @@ async function deleteSelectedCandidates(){
   }
 }
 async function loadPreviousScores(previousExamId){
- const attempts=['exam_candidate_results','exam_results','exam_candidate_scores','exam_scores'];
- let lastError='Không tìm thấy bảng kết quả của kỳ thi trước.';
- for(const table of attempts){
-  let data;
-  try{data=await selectAllPages(()=>state.client.from(table).select('*').eq('exam_id',previousExamId))}
-  catch(error){lastError=`${table}: ${error.message}`;continue}
-  if(!data.length){lastError=`Bảng ${table} không có kết quả cho kỳ thi đã chọn.`;continue}
-  const scoreKeys=Object.keys(data[0]).filter(k=>/(score|diem|điểm|total|tong|average|tb)/i.test(k)&&typeof data[0][k]==='number');
-  const idKeys=['student_code','ma_hs','candidate_code','sbd','student_id','candidate_id'];
-  const idKey=idKeys.find(k=>k in data[0]);
-  if(!idKey||!scoreKeys.length){lastError=`Bảng ${table} không có cột mã học sinh/SBD và cột điểm số nhận diện được.`;continue}
-  const scoreKey=scoreKeys.find(k=>/(total|tong|diem_tb|average|score|diem|điểm)/i.test(k))||scoreKeys[0];
-  const map=new Map();
-  for(const row of data){const id=String(row[idKey]??'').trim();const score=Number(row[scoreKey]);if(id&&Number.isFinite(score))map.set(id,score)}
-  if(map.size)return {map,table,scoreKey,idKey};
+ const exam=state.exams.find(e=>e.id===previousExamId);
+ const isDefault=exam?.exam_mode==='default';
+ const configs=await selectAllPages(()=>state.client.from(isDefault?'exam_subject_class_configs':'exam_candidate_subjects')
+   .select(isDefault?'subject_code,class_code,is_counted':'subject_code,candidate_id').eq('exam_id',previousExamId));
+ const eligible=isDefault?configs.filter(c=>c.is_counted):configs;
+ if(!eligible.length)throw new Error('K? thi tr??c ch?a c? m?n thu?c ph?m vi t?nh ?i?m.');
+ const rows=[];
+ for(const subject of [...new Set(eligible.map(c=>c.subject_code))]){
+   const data=await selectAllPages(()=>state.client.rpc('exam_get_subject_results',{p_exam_id:previousExamId,p_subject_code:subject}));
+   rows.push(...data.filter(row=>eligible.some(c=>c.subject_code===subject&&(isDefault?c.class_code===row.class_code:c.candidate_id===row.candidate_id))));
  }
- throw new Error('Không thể sắp xếp theo kết quả kỳ thi trước. '+lastError+' Hãy xác nhận tên bảng kết quả và các cột mã học sinh, điểm trong Supabase.');
+ const map=sumPreviousResults(rows);
+ if(!map.size)throw new Error('K? thi tr??c ch?a c? k?t qu? h?p l? ?? t?nh t?ng ?i?m.');
+ return {map};
 }
 function selectedRoomingRound(){return Number($('rooming-round')?.value||0)}
 function selectedRoomingMode(){return $('rooming-adjustment-mode')?.value||'automatic'}
@@ -1962,6 +1960,12 @@ async function assignSubjectSbd(examId){
 async function refreshSbdRoomControls(){
  const examId=$('sbd-exam-select').value;
  const subjectExam=await refreshSubjectSbdControls();
+ const groupInput=$('sbd-groups');
+ $('sbd-group-options').classList.toggle('hidden',subjectExam||$('room-sort-mode').value==='elective_rooms');
+ if(groupInput.dataset.examId!==examId){
+   groupInput.dataset.examId=examId;
+   try{groupInput.value=localStorage.getItem('sbd-groups:'+examId)||''}catch{groupInput.value=''}
+ }
  if(subjectExam){$('sbd-room-options').classList.add('hidden');return}
  const active=$('room-sort-mode').value==='elective_rooms';
  $('sbd-room-options').classList.toggle('hidden',!active);
@@ -2008,6 +2012,7 @@ async function saveSbdRoomPreview(){
  message($('sbd-message'),`Đã lưu ${result.assignments.length} SBD theo thứ tự ${result.rooms.length} phòng của đợt ${inputs.roundNo}. Vào Xếp phòng thi, chọn cùng kỳ thi/đợt và Môn lựa chọn để tải phương án đã lưu, kiểm tra và phân phòng chính thức.`,'success');
 }
 function wireSbdRoomMode(){
+ $('sbd-groups').addEventListener('input',()=>{try{localStorage.setItem('sbd-groups:'+ $('sbd-groups').dataset.examId,$('sbd-groups').value)}catch{}});
  const refresh=()=>refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
  for(const id of ['sbd-exam-select','sbd-subject','room-sort-mode','sbd-room-round','sbd-room-capacity','sbd-room-prefix','sbd-room-first','sbd-prefix','sbd-length','sbd-prefix-length']){
   const control=$(id);if(control)control.addEventListener('change',()=>{invalidateSbdRoomPreview();refresh()});
@@ -2075,14 +2080,14 @@ async function assignSbdByRoom(){
    if(alreadyAssigned.length)throw new Error(`Kỳ thi này đã có ${alreadyAssigned.length} thí sinh được cấp SBD. Để bảo đảm mỗi thí sinh chỉ có một SBD trong kỳ thi, hệ thống không cấp lại/ghi đè. Nếu bạn mới thêm thí sinh, cần dùng chức năng cấp bổ sung SBD riêng.`);
    if(candidates.length>maxNumber)throw new Error(`Tiền tố ${prefix} với SBD ${totalLength} chữ số chỉ cấp được ${maxNumber.toLocaleString('vi-VN')} số; danh sách có ${candidates.length} thí sinh.`);
    const sortMode=$('room-sort-mode')?.value||'abc';
-   const ordered=[...candidates];
+   let ordered=[...candidates];
    if(sortMode==='previous'){
      const previousExamId=$('room-previous-exam')?.value;
      if(!previousExamId)throw new Error('Hãy chọn kỳ thi trước để cấp SBD theo kết quả.');
      if(previousExamId===examId)throw new Error('Kỳ thi lấy kết quả phải khác kỳ thi đang cấp SBD.');
      const previous=await loadPreviousScores(previousExamId);
      for(const c of ordered){
-       const keys=[String(c.student_code||'').trim(),String(c.sbd||'').trim(),String(c.id||'').trim()];
+       const keys=[String(c.student_code||'').trim()];
        c.previous_score=keys.map(k=>previous.map.get(k)).find(v=>v!==undefined)??null;
      }
      const missing=ordered.filter(c=>c.previous_score===null).length;
@@ -2091,6 +2096,8 @@ async function assignSbdByRoom(){
    }else{
      ordered.sort((a,b)=>compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),undefined,{numeric:true}));
    }
+   ordered=orderSbdGroups(ordered,$('sbd-groups').value,compareVietnameseName,sortMode);
+   if($('sbd-exam-select').value!==examId)throw new Error('K? thi ?? thay ??i. H?y th?c hi?n l?i.');
    const assignments=ordered.map((c,i)=>({candidate_id:c.id,sbd:prefix+String(i+1).padStart(suffixLength,'0')}));
    const {data,error:rpcError}=await state.client.rpc('exam_assign_candidate_sbd',{p_exam_id:examId,p_assignments:assignments});
    if(rpcError)throw new Error(`Không lưu được SBD. Hãy chạy migration v0.1.41 trên đúng project Supabase. ${rpcError.message}`);
