@@ -3,7 +3,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=178';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -1637,7 +1637,7 @@ async function changePrivateRoom(action){
   const roomCode=action==='create'?$('private-room-name').value.trim():action==='add'?$('private-room-target').value:undefined;
   if((action==='create'||action==='add')&&!roomCode)throw new Error('Hãy nhập tên hoặc chọn phòng riêng.');
   let redistributePrivateRooms;
-  try{({redistributePrivateRooms}=await import('./private-rooming.js?v=159'))}
+  try{({redistributePrivateRooms}=await import('./private-rooming.js?v=181'))}
   catch(error){throw new Error('Không tải được chức năng phòng riêng. Hãy cập nhật js/private-rooming.js, js/group-rooming.js và js/rooming.js cùng bộ website, rồi tải lại bằng Ctrl+Shift+R. '+(error.message||String(error)))}
   if(state.preview!==preview||preview.finalized||preview.saving||preview.finalizing)return;
   const result=redistributePrivateRooms(preview,roomGroupText(preview.examId),{selectedIds,roomCode,release:action==='release'});
@@ -1648,6 +1648,39 @@ async function changePrivateRoom(action){
   rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=result.assignments.map(a=>({...a}));
   renderRooming(result,preview.planType);
   message($('rooming-message'),'Đã cập nhật phòng riêng và phân bổ lại các học sinh còn lại. SBD được giữ nguyên. Hãy kiểm tra và lưu.','success');
+ }catch(error){message($('rooming-message'),error.message,'error')}
+}
+function downloadPrivateRoomTemplate(){
+ try{
+  const preview=state.preview;if(!preview)throw new Error('Hãy tải phương án phòng trước.');
+  if(!window.XLSX)throw new Error('Chưa tải được thư viện Excel.');
+  const privateCodes=new Set(preview.result.rooms.filter(r=>r.is_private).map(r=>r.room_code));
+  const names=new Map(preview.result.assignments.filter(a=>privateCodes.has(a.room_code)).map(a=>[String(a.candidate_id),a.room_code]));
+  const rows=[['student_code','ho_ten','lop','sbd','phong_rieng'],...preview.pool.map(c=>[String(c.student_code??''),c.student_name||'',c.class_code||'',String(c.sbd||''),names.get(poolCandidateId(c))||''])];
+  const wb=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet(rows),'Phong rieng');window.XLSX.writeFile(wb,'mau-danh-sach-phong-rieng.xlsx');
+ }catch(error){message($('rooming-message'),error.message,'error')}
+}
+async function importPrivateRoomFile(){
+ const preview=state.preview;
+ try{
+  if(!preview||preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)throw new Error('Hãy mở phương án chưa chốt, không kế thừa vị trí cố định.');
+  if(preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Chưa thể nhập phòng riêng: lưu phòng tổ hợp, cấp SBD theo phòng tổ hợp tại Quản lý SBD, rồi tải lại phương án. Có thể tải mẫu và điền tên phòng trước.');
+  const file=$('private-room-file').files[0];if(!file)throw new Error('Hãy chọn tệp Excel phòng riêng.');
+  if(!window.XLSX)throw new Error('Chưa tải được thư viện Excel.');
+  const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'}),sheet=wb.Sheets[wb.SheetNames[0]];
+  if(!sheet)throw new Error('Tệp Excel không có trang tính.');
+  const headers=window.XLSX.utils.sheet_to_json(sheet,{header:1,defval:''})[0]||[];
+  if(!['student_code','phong_rieng'].every(h=>headers.includes(h)))throw new Error('Thiếu cột student_code hoặc phong_rieng. Hãy dùng mẫu Excel phòng riêng.');
+  const rows=window.XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+  const {importPrivateRoomRows}=await import('./private-rooming.js?v=181');
+  if(state.preview!==preview||preview.finalized||preview.saving||preview.finalizing)throw new Error('Phương án đã thay đổi khi đọc tệp, hãy nhập lại.');
+  const result=importPrivateRoomRows(preview,roomGroupText(preview.examId),rows);
+  preview.options.regularCapacity??=preview.options.capacity;
+  preview.result=result;preview.options.capacity=result.rooms[0]?.capacity||preview.options.capacity;
+  preview.adjustmentMode='manual';$('rooming-adjustment-mode').value='manual';
+  preview.assignmentsCreated=true;preview.saved=null;preview.sourcePlanId=null;preview.suggestionValid=true;
+  rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=result.assignments.map(a=>({...a}));renderRooming(result,preview.planType);
+  message($('rooming-message'),'Đã nhập phòng riêng theo tên trong Excel, giữ nguyên SBD. Kiểm tra danh sách rồi lưu lại phân bổ.','success');
  }catch(error){message($('rooming-message'),error.message,'error')}
 }
 function poolCandidateId(candidate){return String(candidate?.id??candidate?.candidate_id??'')}
@@ -3041,6 +3074,8 @@ function wireRoomingEditor(){
  };
  $('add-room-plan').onclick=addRoomToPlan;
  for(const action of ['create','add','release','redistribute']){const button=$('private-room-'+action);if(button)button.onclick=()=>changePrivateRoom(action)}
+ if($('private-room-template'))$('private-room-template').onclick=downloadPrivateRoomTemplate;
+ if($('private-room-import'))$('private-room-import').onclick=importPrivateRoomFile;
  $('free-room-cancel').onclick=()=>$('free-room-dialog').close();
  $('free-room-form').onsubmit=event=>{event.preventDefault();if(applyFreeRoomChange({oldCode:$('free-room-old-code').value||undefined,code:$('free-room-name').value,count:$('free-room-count').value,groupIndex:Number($('free-room-group').value)}))$('free-room-dialog').close()};
  $('rooming-table-body').addEventListener('click',event=>{const button=event.target.closest('[data-edit-free-room]');if(button)openFreeRoom(button.dataset.editFreeRoom)});

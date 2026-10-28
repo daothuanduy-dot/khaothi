@@ -1,12 +1,17 @@
 import {optimizeByGroups,validateGroupSbdSequence} from './group-rooming.js?v=158';
-import {optimizeMandatoryRooms,optimizeElectiveRooms,assignElectiveCandidateToRoom} from './rooming.js?v=158';
+import {optimizeMandatoryRooms,optimizeElectiveRooms,assignElectiveCandidateToRoom,isValidSbd} from './rooming.js?v=158';
 
 // Build a complete replacement before changing the preview, so a failed move is atomic.
-export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomCode,release=false}={}){
+export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomCode,release=false,placements}={}){
  const ids=new Set(selectedIds.map(String)),pool=preview.pool;
  if(groupText!==null)validateGroupSbdSequence(pool,groupText);
  if([...ids].some(id=>!pool.some(c=>String(c.id??c.candidate_id)===id)))throw new Error('Học sinh không thuộc phương án này.');
  const privateRooms=preview.result.rooms.filter(r=>r.is_private).map(r=>({...r}));
+ if(placements)for(const [id,code] of placements){
+  if(!pool.some(c=>String(c.id??c.candidate_id)===String(id)))throw new Error('Học sinh không thuộc phương án này.');
+  if(!code||code.length>100||preview.result.rooms.some(r=>r.room_code===code&&!r.is_private))throw new Error('Tên phòng riêng trống, quá 100 ký tự hoặc trùng phòng thường.');
+  if(!privateRooms.some(r=>r.room_code===code))privateRooms.push({room_code:code,is_private:true});
+ }
  if(roomCode){
   roomCode=String(roomCode).trim();
   if(!roomCode||preview.result.rooms.some(r=>r.room_code===roomCode&&!r.is_private))throw new Error('Tên phòng riêng trống hoặc trùng phòng thường.');
@@ -15,6 +20,7 @@ export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomC
  const privateCodes=new Set(privateRooms.map(r=>r.room_code));
  const locked=new Map(preview.result.assignments.filter(a=>privateCodes.has(a.room_code)).map(a=>[String(a.candidate_id),a.room_code]));
  for(const id of ids){if(release)locked.delete(id);else if(roomCode)locked.set(id,roomCode)}
+ if(placements)for(const [id,code] of placements)locked.set(String(id),code);
  const assignments=[],occupied=[];
  for(const room of privateRooms){
   const members=pool.filter(c=>locked.get(String(c.id??c.candidate_id))===room.room_code),rows=[];
@@ -40,4 +46,21 @@ export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomC
  }
  const capacity=Math.max(preview.options.capacity,...occupied.map(r=>r.student_count));
  return {ok:true,rooms:[...regular.rooms,...occupied].map((r,i)=>({...r,room_number:i+1,capacity,regular_capacity:options.capacity})),assignments:[...regular.assignments,...assignments],summary:{}};
+}
+
+export function importPrivateRoomRows(preview,groupText,rows){
+ if(preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)throw new Error('Phương án đang khóa hoặc kế thừa vị trí cố định, không thể nhập phòng riêng.');
+ if(preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Hãy lưu phòng tổ hợp, cấp SBD rồi tải lại phương án trước khi nhập phòng riêng.');
+ const byCode=new Map();
+ for(const c of preview.pool){const code=String(c.student_code??'').trim();if(!code||byCode.has(code))throw new Error('Mã học sinh trong phương án bị thiếu hoặc trùng.');byCode.set(code,c)}
+ const seen=new Set(),placements=new Map();
+ for(const [i,row] of rows.entries()){
+  const code=String(row.student_code??'').trim(),room=String(row.phong_rieng??'').trim();
+  if(!code&&!room)continue;
+  const c=byCode.get(code);
+  if(!c||seen.has(code))throw new Error(`Dòng ${i+2}: mã học sinh không thuộc phương án hoặc bị lặp.`);
+  seen.add(code);if(room)placements.set(String(c.id??c.candidate_id),room);
+ }
+ if(!placements.size)throw new Error('Chưa điền tên phòng trong cột phong_rieng.');
+ return redistributePrivateRooms(preview,groupText,{placements});
 }
