@@ -1,4 +1,4 @@
-import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualChoiceSlots} from './manual-exam-engine.js?v=178';
+import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualChoiceSlots} from './manual-exam-engine.js?v=179';
 const id=c=>String(c.id??c.candidate_id);
 const roomNumber=r=>r.is_private?(r.code==='Hội trường 2'?24:23):Number(r.code);
 function splitHalls(students,choices,session,tasks,config){
@@ -96,7 +96,7 @@ export function buildCoreRooms(payload){
 }
 export function buildRemainingRooms(payload,candidates){
  const copy=buildCoreRooms(payload),{config}=copy;copy.rooms=copy.rooms.filter(r=>r.kind!=='remaining');copy.entries=copy.entries.filter(e=>e.kind!=='remaining');
- if(!Number.isInteger(config.large_capacity)||config.large_capacity<44||config.large_capacity>48)throw new Error('Sức chứa phòng lớn từ 44 đến 48.');
+ if(!Number.isSafeInteger(config.large_capacity)||config.large_capacity<48)throw new Error('Sức chứa phòng lớn tối thiểu 48.');
  const used=new Map();let n=0;
  for(const g of config.groups)for(const subject of g.subjects.filter(s=>!['TOAN','VAN'].includes(s))){
   const students=candidates.filter(c=>g.classes.includes(c.class_code)&&!copy.choices[id(c)].includes(subject)).sort((a,b)=>copy.sbds[id(a)].localeCompare(copy.sbds[id(b)]));if(!students.length)continue;

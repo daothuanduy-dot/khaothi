@@ -42,7 +42,7 @@ export function validateManualPlan(payload,candidates){
  const {config,choices,sbds,rooms,entries}=payload;
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
  validateManualChoiceSlots(payload);
- if(!Number.isInteger(config.small_capacity)||config.small_capacity<1||config.small_capacity>26||!Number.isInteger(config.large_capacity)||config.large_capacity<44||config.large_capacity>48)throw new Error('Phòng nhỏ tối đa 26; sức chứa phòng lớn từ 44 đến 48.');
+ if(!Number.isInteger(config.small_capacity)||config.small_capacity<1||config.small_capacity>26||!Number.isSafeInteger(config.large_capacity)||config.large_capacity<48)throw new Error('Phòng nhỏ tối đa 26; sức chứa phòng lớn tối thiểu 48.');
  let expectedSbds;
  if(config.room_first===true){
   if(!/^\d{2,3}$/.test(config.prefix)||![6,8].includes(Number(config.digits)))throw new Error('Dải SBD không hợp lệ.');
@@ -89,8 +89,8 @@ export function validateManualPlan(payload,candidates){
  }
  for(const c of candidates)for(const code of manualGroupFor(c,config).subjects)if(!seen.has(idOf(c)+'|'+code))throw new Error(`${c.student_name} chưa được xếp môn ${code}.`);
  for(const room of rooms){
-  const rows=entries.filter(e=>e.room_id===room.id),ids=new Set(rows.map(e=>String(e.candidate_id))),capacity=Number(room.capacity),limit=room.kind==='remaining'?48:26;
-  if(!String(room.code||'').trim()||!rows.length||!Number.isSafeInteger(capacity)||capacity<1||(!room.is_private&&(capacity>limit||(room.kind==='remaining'&&capacity<44)||ids.size>capacity)))throw new Error(`Phòng ${room.code} vượt sức chứa hoặc chưa hợp lệ.`);
+  const rows=entries.filter(e=>e.room_id===room.id),ids=new Set(rows.map(e=>String(e.candidate_id))),capacity=Number(room.capacity),limit=room.kind==='remaining'?Number.MAX_SAFE_INTEGER:26;
+  if(!String(room.code||'').trim()||!rows.length||!Number.isSafeInteger(capacity)||capacity<1||(!room.is_private&&(capacity>limit||(room.kind==='remaining'&&capacity<48)||ids.size>capacity)))throw new Error(`Phòng ${room.code} vượt sức chứa hoặc chưa hợp lệ.`);
   if(!config.groups.some(g=>g.id===room.group)&&!(config.room_first===true&&room.is_private&&room.group==='*'))throw new Error('Phòng chưa thuộc nhóm.');
   const perSlot=new Map();for(const e of rows){const key=e.session+'|'+e.slot;if(!perSlot.has(key))perSlot.set(key,[]);perSlot.get(key).push(e)}
   for(const same of perSlot.values()){
@@ -102,7 +102,7 @@ export function validateManualPlan(payload,candidates){
  return true;
 }
 export function generateManualPlan(config,candidates,choices,privateNames={}){
- for(const [key,max,min] of [['small_capacity',26,1],['large_capacity',48,44]])if(!Number.isInteger(config[key])||config[key]<min||config[key]>max)throw new Error('Kiểm tra sức chứa: phòng nhỏ 1–26, phòng lớn 44–48.');
+ for(const [key,max,min] of [['small_capacity',26,1],['large_capacity',Number.MAX_SAFE_INTEGER,48]])if(!Number.isSafeInteger(config[key])||config[key]<min||config[key]>max)throw new Error('Kiểm tra sức chứa: phòng nhỏ 1–26, phòng lớn ≥48.');
  if(!Number.isSafeInteger(config.private_capacity)||config.private_capacity<1)throw new Error('Số chỗ gợi ý phòng riêng phải là số nguyên dương, không giới hạn 26.');
  const sbds=numberManualCandidates(candidates,config),rooms=[],entries=[],pools=new Map();
  const ordered=[...candidates].sort((a,b)=>compare(sbds[idOf(a)],sbds[idOf(b)]));
