@@ -1,6 +1,20 @@
-import {manualNameCompare,manualGroupFor,validateManualPlan} from './manual-exam-engine.js?v=175';
+import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualHallSlots} from './manual-exam-engine.js?v=176';
 const id=c=>String(c.id??c.candidate_id);
 const roomNumber=r=>r.is_private?23:Number(r.code);
+function arrangeHallSubjects(students,choices,session,tasks,config){
+ const graph=new Map(),colors=new Map(),last=new Set(['N1',...(session.last||[])]);
+ const label=code=>config.subjects.find(s=>s.code===code)?.name||code;
+ const conflict=()=>new Error('Hội trường: không thể chia các cặp môn thành hai ca mà mỗi môn chỉ thi một ca và Tiếng Anh ở ca 2. Kiểm tra các cặp môn và danh sách Hội trường.');
+ for(const c of students){const [a,b]=choices[id(c)];for(const [x,y] of [[a,b],[b,a]]){if(!graph.has(x))graph.set(x,new Set());graph.get(x).add(y)}}
+ for(const start of [...graph.keys()].sort()){
+  if(colors.has(start))continue;
+  const component=[start];colors.set(start,0);
+  for(let at=0;at<component.length;at++){const x=component[at];for(const y of graph.get(x)){if(!colors.has(y)){colors.set(y,1-colors.get(x));component.push(y)}else if(colors.get(y)===colors.get(x))throw conflict()}}
+  const forced=component.filter(s=>last.has(s)),sides=new Set(forced.map(s=>colors.get(s)));if(sides.size>1)throw conflict();
+  if(forced.length&&colors.get(forced[0])!==1)for(const subject of component)colors.set(subject,1-colors.get(subject));
+ }
+ for(const c of students){const pair=choices[id(c)],first=pair.find(s=>colors.get(s)===0),second=pair.find(s=>colors.get(s)===1);if(!first||!second)throw new Error('Không thể xếp ca Hội trường: '+pair.map(label).join(' / '));tasks.set(id(c),[first,second])}
+}
 export function buildChoiceRooms(config,candidates,choices,privateNames={}){
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
  config=structuredClone(config);config.room_first=true;
@@ -13,6 +27,7 @@ export function buildChoiceRooms(config,candidates,choices,privateNames={}){
   const sorted=[...pair].sort(),second=last[0]||sorted[1];tasks.set(id(c),[sorted.find(s=>s!==second),second]);
   (String(privateNames[id(c)]||'').trim()?hall:pools.find(p=>p.group===group.id).students).push(c);
  }
+ arrangeHallSubjects(hall,choices,session,tasks,config);
  const rooms=[],entries=[];let index=0;
  function add(students,group,isPrivate){
   const code=isPrivate?'Hội trường':String(++index);if(index>22)throw new Error('Vượt 22 phòng thường. Điều chỉnh sĩ số hoặc danh sách Hội trường trước khi tiếp tục.');
@@ -24,6 +39,7 @@ export function buildChoiceRooms(config,candidates,choices,privateNames={}){
  return {config,choices:structuredClone(choices),privateNames:Object.fromEntries(hall.map(c=>[id(c),'Hội trường'])),rooms,entries,sbds:{},workflow_stage:'chosen'};
 }
 export function numberChoiceRooms(payload,candidates){
+ validateManualHallSlots(payload);
  const copy=structuredClone(payload),{prefix,digits}=copy.config;
  if(!/^\d{2,3}$/.test(prefix)||![6,8].includes(Number(digits)))throw new Error('SBD dùng tiền tố 2–3 chữ số và tổng 6 hoặc 8 chữ số.');
  const ordered=copy.rooms.filter(r=>r.kind==='chosen').sort((a,b)=>roomNumber(a)-roomNumber(b)).flatMap(r=>copy.entries.filter(e=>e.room_id===r.id&&Number(e.slot)===1).sort((a,b)=>a.seat-b.seat).map(e=>e.candidate_id));
@@ -32,6 +48,7 @@ export function numberChoiceRooms(payload,candidates){
  copy.sbds=Object.fromEntries(ordered.map((key,i)=>[key,prefix+String(i+1).padStart(width,'0')]));copy.workflow_stage='numbered';return copy;
 }
 export function buildCoreRooms(payload){
+ validateManualHallSlots(payload);
  const copy=structuredClone(payload);if(copy.entries.some(e=>!copy.sbds[e.candidate_id]))throw new Error('Đánh SBD theo phòng lựa chọn trước.');
  copy.rooms=copy.rooms.filter(r=>r.kind!=='core');copy.entries=copy.entries.filter(e=>e.kind!=='core');
  for(const r of copy.rooms.filter(r=>r.kind==='chosen')){

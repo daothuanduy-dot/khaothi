@@ -33,9 +33,15 @@ export function manualPaperSchedule(payload){
  }
  return result;
 }
+export function validateManualHallSlots(payload){
+ const slots=new Map(),halls=new Set(payload.rooms.filter(r=>r.is_private&&r.kind==='chosen').map(r=>r.id));
+ for(const e of payload.entries){if(!halls.has(e.room_id)||e.kind!=='chosen')continue;const key=JSON.stringify([e.room_id,e.session,e.subject]),slot=Number(e.slot);if(slots.has(key)&&slots.get(key)!==slot)throw new Error(`Hội trường: môn ${payload.config.subjects.find(s=>s.code===e.subject)?.name||e.subject} đã thi ca 1 thì không được thi lại ca 2 trong cùng buổi.`);slots.set(key,slot)}
+ return true;
+}
 export function validateManualPlan(payload,candidates){
  const {config,choices,sbds,rooms,entries}=payload;
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
+ validateManualHallSlots(payload);
  if(!Number.isInteger(config.small_capacity)||config.small_capacity<1||config.small_capacity>26||!Number.isInteger(config.large_capacity)||config.large_capacity<44||config.large_capacity>48)throw new Error('Phòng nhỏ tối đa 26; sức chứa phòng lớn từ 44 đến 48.');
  let expectedSbds;
  if(config.room_first===true){

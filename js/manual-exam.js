@@ -1,5 +1,5 @@
-import {manualPaperSchedule,manualExamDefaults,manualSubjects,numberManualCandidates,generateManualPlan,validateManualPlan,adjustManualRoom,addManualRoom,importManualChoices,renameManualPrivateRoom,resizeManualPrivateRoom,setManualPrivateMembers} from './manual-exam-engine.js?v=175';
-import {buildChoiceRooms,numberChoiceRooms,buildCoreRooms,buildRemainingRooms,adjustChoiceRoom} from './manual-room-workflow.js?v=175';
+import {manualPaperSchedule,manualExamDefaults,manualSubjects,numberManualCandidates,generateManualPlan,validateManualPlan,adjustManualRoom,addManualRoom,importManualChoices,renameManualPrivateRoom,resizeManualPrivateRoom,setManualPrivateMembers} from './manual-exam-engine.js?v=176';
+import {buildChoiceRooms,numberChoiceRooms,buildCoreRooms,buildRemainingRooms,adjustChoiceRoom} from './manual-room-workflow.js?v=176';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dob=v=>/^\d{4}-\d{2}-\d{2}/.test(String(v||''))?String(v).slice(0,10).split('-').reverse().join('/'):String(v||'');
 const uid=c=>String(c.id??c.candidate_id);
