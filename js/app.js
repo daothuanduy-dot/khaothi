@@ -1,3 +1,4 @@
+import {inheritElectiveRooms} from './inherit-elective-rooms.js?v=187';
 import {applyFixedSubjectSlots,assertElectiveLayoutEditable,privateRoomEditState} from './elective-layout.js?v=185';
 import {createSbdGroupEditor} from './sbd-group-editor.js?v=156';
 import {numberSubjectCandidates} from './subject-sbd.js?v=182';
@@ -5,7 +6,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -18,7 +19,7 @@ import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precisi
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-29-private-room-excel-fix-186';
+const APP_BUILD='2026-10-29-mandatory-inherit-elective-187';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1317,7 +1318,7 @@ async function previewRooming(){
     if(!candidates.length)throw new Error(`Chưa có học sinh đăng ký môn ${subjectName(subjectCode)} trong kỳ thi/đợt đang chọn.`);
   }
   const groupText=roomGroupText(examId);
-  if(groupText!==null&&planType!=='elective')validateGroupSbdSequence(candidates,groupText);
+  if(groupText!==null&&planType!=='elective'&&state.exams.find(e=>e.id===examId)?.exam_mode!=='choice')validateGroupSbdSequence(candidates,groupText);
   const withoutSbd=candidates.filter(c=>!String(c.sbd||'').trim());
   const sbdValues=candidates.map(c=>String(c.sbd||'').trim()).filter(Boolean);
   if(withoutSbd.length&&planType!=='elective')throw new Error(`Còn ${withoutSbd.length} thí sinh chưa có SBD. Hãy xếp phòng tổ hợp và cấp SBD trước khi xếp phòng môn này.`);
@@ -1353,9 +1354,11 @@ async function previewRooming(){
       state.preview={examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value||'M',firstRoomNumber:Number($('first-room-number').value),sortMode,previousExamId:null},result};
     } else {
     const otherMandatorySubject=subjectCode==='TOAN'?'VAN':'TOAN';
-    const fixedSeatPlan=await findCurrentRoomingFinalization(examId,'mandatory',otherMandatorySubject,roundNo);
+    const inheritChoice=state.exams.find(e=>e.id===examId)?.exam_mode==='choice';
+    const fixedSeatPlan=await findCurrentRoomingFinalization(examId,inheritChoice?'elective':'mandatory',inheritChoice?null:otherMandatorySubject,roundNo);
+    if(inheritChoice&&!fixedSeatPlan)throw new Error('Hãy phân phòng chính thức môn lựa chọn trước. Toán/Văn sẽ kế thừa đúng phòng, Hội trường và vị trí từ đó.');
     if(fixedSeatPlan){
-      const restored=restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
+      const restored=inheritChoice?{ok:true,result:inheritElectiveRooms({rooms:fixedSeatPlan.record.rooms,assignments:fixedSeatPlan.assignments},sortedCandidates,subjectCode)}:restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
         planType,subjectCode,capacity:fixedSeatPlan.record.capacity
       });
       if(!restored.ok)throw new Error(`Không thể kế thừa vị trí cố định từ môn ${subjectName(otherMandatorySubject)}: ${restored.errors.join(' ')}`);
@@ -1379,7 +1382,7 @@ async function previewRooming(){
         result,assignmentsCreated:true,suggestionValid:true
       };
       renderRooming(result,planType);
-      message($('rooming-message'),`Đã kế thừa nguyên vị trí phòng và chỗ ngồi theo SBD từ môn ${subjectName(otherMandatorySubject)}. Không thể thay đổi sĩ số hoặc thứ tự chỗ của riêng môn này.`,'success');
+      message($('rooming-message'),`Đã kế thừa nguyên vị trí phòng và chỗ ngồi theo SBD từ ${inheritChoice?'phương án môn lựa chọn':'môn '+subjectName(otherMandatorySubject)}. Không thể thay đổi sĩ số hoặc thứ tự chỗ của riêng môn này.`,'success');
       return;
     }
     if(!creatingNewPlan){
