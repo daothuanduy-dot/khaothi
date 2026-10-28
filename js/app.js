@@ -1,11 +1,11 @@
-import {applyFixedSubjectSlots,assertElectiveLayoutEditable} from './elective-layout.js?v=184';
+import {applyFixedSubjectSlots,assertElectiveLayoutEditable,privateRoomEditState} from './elective-layout.js?v=185';
 import {createSbdGroupEditor} from './sbd-group-editor.js?v=156';
 import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -18,7 +18,7 @@ import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precisi
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-29-room-first-fixed-slots-184';
+const APP_BUILD='2026-10-29-private-room-excel-fix-186';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1497,8 +1497,10 @@ function renderRooming(result,planType='elective'){
  }).join('');
  $('add-room-plan').disabled=!preview||preview.assignmentsCreated||preview.finalized||preview.saving||preview.finalizing;
  if($('fixed-subject-controls')){$('fixed-subject-controls').classList.toggle('hidden',planType!=='elective');const fixed=result.rooms[0]?.fixed_subject_slots||{};$('fixed-subject-options').innerHTML=SUBJECTS.map(s=>'<label>'+esc(s.name)+'<select data-fixed-subject="'+esc(s.code)+'"><option value="">Tự động</option><option value="1" '+(fixed[s.code]===1?'selected':'')+'>Ca 1</option><option value="2" '+(fixed[s.code]===2?'selected':'')+'>Ca 2</option></select></label>').join('')}
- const privateEditable=!(planType==='elective'&&preview?.pool.some(c=>String(c.sbd||'').trim()))&&Boolean($('private-room-controls')&&$('private-room-target')&&preview&&!preview.finalized&&!preview.saving&&!preview.finalizing&&!preview.options.fixedSeats);
- $('private-room-controls')?.classList.toggle('hidden',!privateEditable);
+ const privateState=privateRoomEditState(preview),privateEditable=privateState.enabled;
+ $('private-room-controls')?.classList.toggle('hidden',!preview);
+ if($('private-room-status'))$('private-room-status').textContent=privateState.reason;
+ for(const control of $('private-room-controls')?.querySelectorAll('button,input,select')||[])control.disabled=!privateEditable;
  if($('private-room-target'))$('private-room-target').innerHTML=result.rooms.filter(r=>r.is_private).map(r=>'<option value="'+esc(r.room_code)+'">'+esc(r.room_code)+'</option>').join('');
  const assignmentHead=$('assignment-table-body')?.closest('table')?.querySelector('thead');
  if(assignmentHead)assignmentHead.innerHTML=['mandatory','subject'].includes(planType)
@@ -1633,8 +1635,9 @@ function updateRoomingActions(){
  $('add-room-plan').disabled=!preview||assigned||finalized||preview?.saving||preview?.finalizing;
 }
 async function changePrivateRoom(action){
- const preview=state.preview;if(!preview||preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)return;
+ const preview=state.preview;
  try{
+  const status=privateRoomEditState(preview);if(!status.enabled)throw new Error(status.reason);
   const selectedIds=[...$('assignment-table-body').querySelectorAll('[data-private-candidate]:checked')].map(box=>box.dataset.privateCandidate);
   assertElectiveLayoutEditable(preview);
   if(preview.planType!=='elective'&&preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Hãy cấp SBD theo nhóm trước khi tách phòng riêng. Với môn lựa chọn: lưu phòng tổ hợp, cấp SBD, rồi tải lại phương án để tách phòng.');
@@ -1642,7 +1645,7 @@ async function changePrivateRoom(action){
   const roomCode=action==='create'?$('private-room-name').value.trim():action==='add'?$('private-room-target').value:undefined;
   if((action==='create'||action==='add')&&!roomCode)throw new Error('Hãy nhập tên hoặc chọn phòng riêng.');
   let redistributePrivateRooms;
-  try{({redistributePrivateRooms}=await import('./private-rooming.js?v=184'))}
+  try{({redistributePrivateRooms}=await import('./private-rooming.js?v=185'))}
   catch(error){throw new Error('Không tải được chức năng phòng riêng. Hãy cập nhật js/private-rooming.js, js/group-rooming.js và js/rooming.js cùng bộ website, rồi tải lại bằng Ctrl+Shift+R. '+(error.message||String(error)))}
   if(state.preview!==preview||preview.finalized||preview.saving||preview.finalizing)return;
   const result=redistributePrivateRooms(preview,roomGroupText(preview.examId),{selectedIds,roomCode,release:action==='release'});
@@ -1668,8 +1671,9 @@ function downloadPrivateRoomTemplate(){
 async function importPrivateRoomFile(){
  const preview=state.preview;
  try{
+  const status=privateRoomEditState(preview);if(!status.enabled)throw new Error(status.reason);
   if(!preview||preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)throw new Error('Hãy mở phương án chưa chốt, không kế thừa vị trí cố định.');
-  if(preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Chưa thể nhập phòng riêng: lưu phòng tổ hợp, cấp SBD theo phòng tổ hợp tại Quản lý SBD, rồi tải lại phương án. Có thể tải mẫu và điền tên phòng trước.');
+  if(preview.planType!=='elective'&&preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Môn bắt buộc cần có SBD trước khi nhập phòng riêng. Với môn lựa chọn, hãy bố trí Hội trường trước khi cấp SBD.');
   const file=$('private-room-file').files[0];if(!file)throw new Error('Hãy chọn tệp Excel phòng riêng.');
   if(!window.XLSX)throw new Error('Chưa tải được thư viện Excel.');
   const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'}),sheet=wb.Sheets[wb.SheetNames[0]];
@@ -1677,7 +1681,7 @@ async function importPrivateRoomFile(){
   const headers=window.XLSX.utils.sheet_to_json(sheet,{header:1,defval:''})[0]||[];
   if(!['student_code','phong_rieng'].every(h=>headers.includes(h)))throw new Error('Thiếu cột student_code hoặc phong_rieng. Hãy dùng mẫu Excel phòng riêng.');
   const rows=window.XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
-  const {importPrivateRoomRows}=await import('./private-rooming.js?v=184');
+  const {importPrivateRoomRows}=await import('./private-rooming.js?v=185');
   if(state.preview!==preview||preview.finalized||preview.saving||preview.finalizing)throw new Error('Phương án đã thay đổi khi đọc tệp, hãy nhập lại.');
   const result=importPrivateRoomRows(preview,roomGroupText(preview.examId),rows);
   preview.options.regularCapacity??=preview.options.capacity;

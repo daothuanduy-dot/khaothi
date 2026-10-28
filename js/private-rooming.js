@@ -1,9 +1,10 @@
 import {optimizeByGroups,validateGroupSbdSequence} from './group-rooming.js?v=158';
-import {applyFixedSubjectSlots,assertElectiveLayoutEditable,normalizeDraftRoomNames} from './elective-layout.js?v=184';
+import {applyFixedSubjectSlots,assertElectiveLayoutEditable,normalizeDraftRoomNames,privateRoomEditState} from './elective-layout.js?v=185';
 import {optimizeMandatoryRooms,optimizeElectiveRooms,isValidSbd} from './rooming.js?v=158';
 
 // Build a complete replacement before changing the preview, so a failed move is atomic.
 export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomCode,release=false,placements}={}){
+ const editable=privateRoomEditState(preview);if(!editable.enabled)throw new Error(editable.reason);
  const ids=new Set(selectedIds.map(String)),pool=preview.pool;
  assertElectiveLayoutEditable(preview);
  if(groupText!==null)validateGroupSbdSequence(pool,groupText);

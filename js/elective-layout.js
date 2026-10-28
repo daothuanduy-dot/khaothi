@@ -24,6 +24,16 @@ export function assertElectiveLayoutEditable(preview){
  if(preview.planType==='elective'&&(preview.pool.some(c=>String(c.sbd||'').trim())||preview.result.assignments.some(a=>String(a.sbd||'').trim())))throw new Error('Phương án đã có SBD. Muốn đổi phòng/ca, hãy xóa SBD và lập lại phòng trước, sau đó cấp SBD theo phòng đã lưu.');
 }
 
+export function privateRoomEditState(preview){
+ if(!preview)return {enabled:false,reason:'Hãy tải hoặc lập phương án phòng trước.'};
+ if(preview.finalized)return {enabled:false,reason:'Phương án đã phân phòng chính thức. Không thể đổi Hội trường trong hồ sơ đã chốt.'};
+ if(preview.saving||preview.finalizing)return {enabled:false,reason:'Đang lưu/chốt phương án. Chờ thao tác hoàn tất.'};
+ if(preview.options.fixedSeats)return {enabled:false,reason:'Môn này kế thừa vị trí cố định. Hãy bố trí Hội trường tại phương án môn làm mốc.'};
+ if(preview.assignmentRosterMatches===false)return {enabled:false,reason:'Danh sách học sinh đã thay đổi. Hãy lập phương án mới trước khi bố trí Hội trường.'};
+ try{assertElectiveLayoutEditable(preview)}catch(e){return {enabled:false,reason:e.message}}
+ return {enabled:true,reason:'Có thể bố trí Hội trường ngay trên phương án đã phân bổ hoặc đã lưu nhưng chưa cấp SBD. Chọn học sinh bên dưới hoặc nhập Excel, điền tên Hội trường rồi áp dụng.'};
+}
+
 export function normalizeDraftRoomNames(result,{roomPrefix='P',firstRoomNumber=1}={}){
  const copy=structuredClone(result),privateRooms=copy.rooms.filter(r=>r.is_private).sort((a,b)=>a.room_code.localeCompare(b.room_code,'vi',{numeric:true})),used=new Set(privateRooms.map(r=>r.room_code));let n=Number(firstRoomNumber)||1;
  const replacements=new Map();
