@@ -46,17 +46,19 @@ export function validateManualPlan(payload,candidates){
  let expectedSbds;
  if(config.room_first===true){
   if(!/^\d{2,3}$/.test(config.prefix)||![6,8].includes(Number(config.digits)))throw new Error('Dải SBD không hợp lệ.');
-  const chosenRooms=rooms.filter(r=>r.kind==='chosen').sort((a,b)=>(a.is_private?23:Number(a.code))-(b.is_private?23:Number(b.code)));
+  const rank=r=>r.is_private?(r.code==='Hội trường 2'?24:23):Number(r.code);
+  const chosenRooms=rooms.filter(r=>r.kind==='chosen').sort((a,b)=>rank(a)-rank(b));
   const ordered=chosenRooms.flatMap(r=>entries.filter(e=>e.room_id===r.id&&Number(e.slot)===1).sort((a,b)=>a.seat-b.seat).map(e=>String(e.candidate_id)));
   if(ordered.length!==candidates.length||new Set(ordered).size!==candidates.length)throw new Error('Phân phòng lựa chọn chưa đủ học sinh.');
   expectedSbds=Object.fromEntries(ordered.map((key,i)=>[key,config.prefix+String(i+1).padStart(Number(config.digits)-config.prefix.length,'0')]));
-  for(const r of rooms)if(r.is_private?r.code!=='Hội trường':!/^([1-9]|1[0-9]|2[0-2])$/.test(r.code))throw new Error('Chỉ dùng phòng 1–22 và Hội trường.');
+  for(const r of rooms)if(r.is_private?!(config.two_halls===true?['Hội trường 1','Hội trường 2']:['Hội trường']).includes(r.code):!/^([1-9]|1[0-9]|2[0-2])$/.test(r.code))throw new Error('Chỉ dùng phòng 1–22 và Hội trường 1, Hội trường 2.');
   const physicalSlots=new Map();for(const e of entries){const r=rooms.find(r=>r.id===e.room_id);if(!r)continue;const key=JSON.stringify([r.code,e.session,Number(e.slot)]),previous=physicalSlots.get(key);if(previous&&previous!==r.id)throw new Error(`Phòng ${r.code} bị phân bổ nhiều danh sách cùng buổi/ca.`);physicalSlots.set(key,r.id)}
   for(const kind of ['core','chosen']){
    const codes=rooms.filter(r=>r.kind===kind).map(r=>r.code);if(new Set(codes).size!==codes.length)throw new Error('Trùng phòng vật lý trong phương án '+kind);
   }
   const hall=kind=>new Set(entries.filter(e=>e.kind===kind&&rooms.some(r=>r.id===e.room_id&&r.is_private)).map(e=>String(e.candidate_id)));
   const a=hall('core'),b=hall('chosen');if(a.size!==b.size||[...a].some(key=>!b.has(key)))throw new Error('Hội trường phải giữ nguyên danh sách Toán/Văn và hai môn lựa chọn.');
+  for(const code of new Set(rooms.filter(r=>r.is_private).map(r=>r.code))){const members=kind=>new Set(entries.filter(e=>e.kind===kind&&rooms.some(r=>r.id===e.room_id&&r.is_private&&r.code===code)).map(e=>String(e.candidate_id))),x=members('core'),y=members('chosen');if(x.size!==y.size||[...x].some(key=>!y.has(key)))throw new Error(`${code} phải giữ nguyên danh sách Toán/Văn và hai môn lựa chọn.`)}
  }else expectedSbds=numberManualCandidates(candidates,config);
  for(const c of candidates)if(sbds[idOf(c)]!==expectedSbds[idOf(c)])throw new Error(config.room_first===true?'SBD phải liên tục theo phòng môn lựa chọn.':'SBD phải liên tục theo thứ tự nhóm và tên học sinh.');
  const sessionMap=new Map(config.sessions.map(s=>[s.id,s]));if(sessionMap.size!==config.sessions.length)throw new Error('Mã buổi bị trùng.');

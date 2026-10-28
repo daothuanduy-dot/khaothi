@@ -1,6 +1,26 @@
-import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualHallSlots} from './manual-exam-engine.js?v=176';
+import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualHallSlots} from './manual-exam-engine.js?v=177';
 const id=c=>String(c.id??c.candidate_id);
-const roomNumber=r=>r.is_private?23:Number(r.code);
+const roomNumber=r=>r.is_private?(r.code==='Hội trường 2'?24:23):Number(r.code);
+function splitHalls(students,choices,session,tasks,config){
+ try{arrangeHallSubjects(students,choices,session,tasks,config);return [students,[]]}catch{}
+ const graph=new Map(),colors=new Map(),last=new Set(['N1',...(session.last||[])]);
+ for(const c of students){const [a,b]=choices[id(c)];for(const [x,y] of [[a,b],[b,a]]){if(!graph.has(x))graph.set(x,new Set());graph.get(x).add(y)}}
+ for(const code of graph.keys())if(last.has(code))colors.set(code,3);
+ function search(){
+  const free=[...graph.keys()].filter(s=>!colors.has(s));if(!free.length)return true;
+  free.sort((a,b)=>new Set([...graph.get(b)].filter(s=>colors.has(s)).map(s=>colors.get(s))).size-new Set([...graph.get(a)].filter(s=>colors.has(s)).map(s=>colors.get(s))).size||graph.get(b).size-graph.get(a).size||a.localeCompare(b));
+  const subject=free[0],used=new Set([...graph.get(subject)].map(s=>colors.get(s)));
+  for(const color of [0,1,2,3])if(!used.has(color)){colors.set(subject,color);if(search())return true;colors.delete(subject)}return false;
+ }
+ if([...colors].some(([s,color])=>[...graph.get(s)].some(t=>colors.get(t)===color))||!search())throw new Error('Không thể chia danh sách vào hai Hội trường để mỗi môn chỉ thi một ca và Anh ở ca 2. Kiểm tra các cặp môn/danh sách Hội trường.');
+ const halls=[[],[]],pairs=new Map();
+ for(const c of [...students].sort(manualNameCompare)){const pair=[...choices[id(c)]].sort(),key=pair.join('|');if(!pairs.has(key))pairs.set(key,{pair,students:[]});pairs.get(key).students.push(c)}
+ for(const {pair,students:members} of pairs.values()){
+  const options=[0,1].filter(bit=>((colors.get(pair[0])>>bit)&1)!==((colors.get(pair[1])>>bit)&1));
+  const target=options.length===2?(halls[0].length<=halls[1].length?0:1):options[0];halls[target].push(...members);
+ }
+ halls.forEach(hall=>arrangeHallSubjects(hall,choices,session,tasks,config));return halls;
+}
 function arrangeHallSubjects(students,choices,session,tasks,config){
  const graph=new Map(),colors=new Map(),last=new Set(['N1',...(session.last||[])]);
  const label=code=>config.subjects.find(s=>s.code===code)?.name||code;
@@ -17,7 +37,7 @@ function arrangeHallSubjects(students,choices,session,tasks,config){
 }
 export function buildChoiceRooms(config,candidates,choices,privateNames={}){
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
- config=structuredClone(config);config.room_first=true;
+ config=structuredClone(config);config.room_first=true;config.two_halls=true;
  if(!Number.isInteger(config.small_capacity)||config.small_capacity<1||config.small_capacity>26)throw new Error('Sức chứa phòng thường từ 1 đến 26.');
  const session=config.sessions.find(s=>s.id===config.chosen_session);if(!session)throw new Error('Chọn buổi hai môn lựa chọn.');
  const hall=[],pools=config.groups.map(g=>({group:g.id,students:[]})),tasks=new Map();
@@ -27,16 +47,16 @@ export function buildChoiceRooms(config,candidates,choices,privateNames={}){
   const sorted=[...pair].sort(),second=last[0]||sorted[1];tasks.set(id(c),[sorted.find(s=>s!==second),second]);
   (String(privateNames[id(c)]||'').trim()?hall:pools.find(p=>p.group===group.id).students).push(c);
  }
- arrangeHallSubjects(hall,choices,session,tasks,config);
+ const halls=splitHalls(hall,choices,session,tasks,config);
  const rooms=[],entries=[];let index=0;
- function add(students,group,isPrivate){
-  const code=isPrivate?'Hội trường':String(++index);if(index>22)throw new Error('Vượt 22 phòng thường. Điều chỉnh sĩ số hoặc danh sách Hội trường trước khi tiếp tục.');
+ function add(students,group,isPrivate,hallIndex=0){
+  const code=isPrivate?'Hội trường '+(hallIndex+1):String(++index);if(index>22)throw new Error('Vượt 22 phòng thường. Điều chỉnh sĩ số hoặc danh sách Hội trường trước khi tiếp tục.');
   const room={id:'CH'+code,code,group,kind:'chosen',is_private:isPrivate,capacity:isPrivate?Math.max(1,students.length):config.small_capacity,pool:'chosen|'+group};rooms.push(room);
   students.forEach((c,i)=>tasks.get(id(c)).forEach((subject,j)=>entries.push({candidate_id:id(c),subject,session:session.id,slot:j+1,room_id:room.id,kind:'chosen',seat:i+1})));
  }
  for(const pool of pools){pool.students.sort((a,b)=>tasks.get(id(a)).join('|').localeCompare(tasks.get(id(b)).join('|'))||manualNameCompare(a,b));for(let i=0;i<pool.students.length;i+=config.small_capacity)add(pool.students.slice(i,i+config.small_capacity),pool.group,false)}
- if(hall.length)add(hall.sort(manualNameCompare),'*',true);
- return {config,choices:structuredClone(choices),privateNames:Object.fromEntries(hall.map(c=>[id(c),'Hội trường'])),rooms,entries,sbds:{},workflow_stage:'chosen'};
+ halls.forEach((members,i)=>{if(members.length)add(members.sort(manualNameCompare),'*',true,i)});
+ return {config,choices:structuredClone(choices),privateNames:Object.fromEntries(halls.flatMap((members,i)=>members.map(c=>[id(c),'Hội trường '+(i+1)]))),rooms,entries,sbds:{},workflow_stage:'chosen'};
 }
 export function numberChoiceRooms(payload,candidates){
  validateManualHallSlots(payload);
