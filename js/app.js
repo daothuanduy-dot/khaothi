@@ -3,7 +3,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=169';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -16,7 +16,7 @@ import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precisi
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-24-choice-reports-pdf';
+const APP_BUILD='2026-10-28-manual-exams-169';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -215,8 +215,9 @@ async function loadExams(){
   body.innerHTML='';
   if(!state.exams.length)body.innerHTML='<tr><td colspan="6" class="empty">Chưa có kỳ thi. Hãy tạo kỳ thi đầu tiên.</td></tr>';
   for(const exam of state.exams){
-    const tr=document.createElement('tr'),mode=exam.exam_mode==='subject'||exam.exam_mode==='choice'?'Kỳ thi theo môn':'Kỳ thi mặc định';
+    const tr=document.createElement('tr'),mode=exam.exam_mode==='manual'?'Kỳ thi tổ chức thủ công':exam.exam_mode==='subject'||exam.exam_mode==='choice'?'Kỳ thi theo môn':'Kỳ thi mặc định';
     tr.innerHTML=`<td><b>${esc(exam.name)}</b><br><small>${esc(exam.id)}</small></td><td>${esc(exam.school_year)}</td><td><span class="tag">${mode}</span></td><td><span class="tag">${esc(exam.status)}</span></td><td>${exam.created_at?new Date(exam.created_at).toLocaleDateString('vi-VN'):'—'}</td><td><button class="small-btn" data-select-exam="${esc(exam.id)}">Chọn kỳ thi</button> <button class="small-btn" data-edit-exam="${esc(exam.id)}">Sửa</button> <button class="small-btn" data-delete-exam="${esc(exam.id)}">Xóa</button></td>`;
+    if(exam.exam_mode==='manual')tr.lastElementChild.insertAdjacentHTML('afterbegin',`<button class="small-btn" data-manual-exam="${esc(exam.id)}">Tổ chức riêng</button> `);
     body.append(tr);
   }
   for(const id of ['rooming-exam-select','subject-exam-select','settings-exam-select','sbd-exam-select','forms-exam','absence-exam','script-exam','school-student-exam']){
@@ -249,12 +250,13 @@ async function createExam(event){
   state.selectedExam=data.id;
   syncSubjectExamMode();
   updateSelectedExamTitle();
-  message($('global-message'),`Đã tạo ${exam_mode==='subject'?'kỳ thi theo môn':'kỳ thi mặc định'}.`,'success');
+  message($('global-message'),`Đã tạo ${exam_mode==='manual'?'kỳ tổ chức thủ công. Nhập học sinh rồi mở Tổ chức riêng tại danh sách kỳ thi':exam_mode==='subject'?'kỳ thi theo môn':'kỳ thi mặc định'}.`,'success');
   notifyExamSelected(data,true);
 }
 function syncSubjectExamMode(){
   const examId=$('subject-exam-select').value;
   const exam=state.exams.find(x=>x.id===examId);
+  if(exam?.exam_mode==='manual')return;
   const mode=exam?.exam_mode==='subject'||exam?.exam_mode==='choice'?'subject':'default';
   $('subject-config-kind').value=mode;
   const modeSelect=$('subject-mode');
@@ -271,7 +273,7 @@ function syncSubjectExamMode(){
 }
 async function loadDefaultSubjectClassConfig(){
  const examId=$('settings-exam-select').value, panel=$('default-subject-class-config'), listPanel=$('default-config-list-panel'), box=$('default-config-classes');
- const enabled=!!examId&&!isSubjectExam(examId);panel.classList.toggle('hidden',!enabled);listPanel.classList.toggle('hidden',!enabled);
+ const enabled=!!examId&&!isSubjectExam(examId)&&!isManualExam(examId);panel.classList.toggle('hidden',!enabled);listPanel.classList.toggle('hidden',!enabled);
  $('settings-subject-mode-note').classList.toggle('hidden',!!examId&&!isSubjectExam(examId));
  if(!enabled){$('default-config-list-body').innerHTML='<tr><td colspan="6" class="empty">Chọn một kỳ thi mặc định để cấu hình.</td></tr>';return}
  const candidates=await selectAllPages(()=>state.client.from('exam_candidates').select('class_code').eq('exam_id',examId).order('class_code'));
@@ -318,6 +320,9 @@ async function deleteDefaultSubjectClassConfig(subjectCode){
  message($('default-config-message'),`Đã xóa cấu hình môn ${name}.`,'success');
 }
 function switchTab(tab){
+  if(isManualExam(state.selectedExam)&&['subjects','sbd','rooming','forms','scripts','scores','absences','settings'].includes(tab)){
+    openManualExamWorkspace(state.selectedExam).catch(error=>message($('global-message'),error.message,'error'));return;
+  }
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('hidden',p.id!==`tab-${tab}`));
   if(tab==='school-students'){
@@ -1282,6 +1287,7 @@ function restoreSavedRooming(record,assignments,candidates,{examId,planType,subj
 }
 async function previewRooming(){
  const examId=$('rooming-exam-select').value;
+ if(isManualExam(examId)){await openManualExamWorkspace(examId);return}
  if(!examId){message($('rooming-message'),'Hãy chọn kỳ thi.','error');return}
  if(state.preview&&!state.preview.restoredFromDatabase){
   message($('rooming-message'),'Phương án hiện tại đang được chỉnh sửa. Hãy tiếp tục điều chỉnh hoặc lưu; không cần bấm xem trước lại.','info');
@@ -2089,6 +2095,10 @@ function sbdRoomInputs(){
   prefix:$('sbd-prefix').value.trim(),totalLength:Number($('sbd-length').value),prefixLength:Number($('sbd-prefix-length').value)};
 }
 function invalidateSbdRoomPreview(){sbdRoomPreview=null;$('sbd-room-preview-result').innerHTML=''}
+function isManualExam(examId){return state.exams.find(exam=>exam.id===examId)?.exam_mode==='manual'}
+async function openManualExamWorkspace(examId){
+ const {openManualExam}=await import('./manual-exam.js?v=169');return openManualExam({state,examId,selectAllPages});
+}
 function isSubjectExam(examId){const mode=state.exams.find(exam=>exam.id===examId)?.exam_mode;return mode==='subject'||mode==='choice'}
 async function refreshSubjectSbdControls(){
  const examId=$('sbd-exam-select').value,wrap=$('sbd-subject-wrap'),select=$('sbd-subject'),note=$('sbd-mode-note');
@@ -2205,6 +2215,7 @@ function wireSbdRoomMode(){
 }
 async function resetSbdAndElectivePlan(){
  const examId=$('sbd-exam-select')?.value;
+ if(isManualExam(examId)){await openManualExamWorkspace(examId);return}
  if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi xoá SBD cũ.','error');return}
  if(isSubjectExam(examId)){
   const subjectCode=$('sbd-subject').value;
@@ -2236,6 +2247,7 @@ async function resetSbdAndElectivePlan(){
 }
 async function assignSbdByRoom(){
  const examId=$('sbd-exam-select')?.value;
+ if(isManualExam(examId)){await openManualExamWorkspace(examId);return}
  if(!examId){message($('sbd-message'),'Hãy chọn kỳ thi trước khi đánh số báo danh.','error');return}
  if(isSubjectExam(examId)){
    const btn=$('assign-sbd-rooming');btn.disabled=true;
@@ -2936,8 +2948,10 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ $('accounts-open-grading').onclick=async()=>{if(state.role!=='admin')return;showScreen('grader-screen');$('grader-back-admin').classList.remove('hidden');try{await operations.enterAsGrader()}catch(e){message($('grader-message'),e.message,'error')}};$('grader-back-admin').onclick=()=>{if(state.role!=='admin')return;showScreen('app-screen');switchTab('accounts')}; $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=async()=>{try{const{openManualGrading}=await import('./manual-exam.js?v=169');await openManualGrading({state})}catch(error){message($('grader-message'),error.message,'error')}}; $('accounts-open-grading').onclick=async()=>{if(state.role!=='admin')return;showScreen('grader-screen');$('grader-back-admin').classList.remove('hidden');try{await operations.enterAsGrader()}catch(e){message($('grader-message'),e.message,'error')}};$('grader-back-admin').onclick=()=>{if(state.role!=='admin')return;showScreen('app-screen');switchTab('accounts')}; $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const selectBtn=e.target.closest('[data-select-exam]');
+  const manualBtn=e.target.closest('[data-manual-exam]');
+  if(manualBtn){try{await openManualExamWorkspace(manualBtn.dataset.manualExam)}catch(error){message($('global-message'),error.message,'error')}return;}
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
   if(selectBtn){
@@ -2956,9 +2970,9 @@ function wire(){ $('accounts-open-grading').onclick=async()=>{if(state.role!=='a
     const school_year=prompt('Năm học:',exam.school_year||'');
     if(school_year===null)return;
     if(!school_year.trim()){message($('global-message'),'Năm học không được để trống.','error');return;}
-    const modeInput=prompt('Loại kỳ thi: nhập 1 = Kỳ thi mặc định, 2 = Kỳ thi theo môn.',isSubjectExam(exam.id)?'2':'1');
+    const modeInput=exam.exam_mode==='manual'?'3':prompt('Loại kỳ thi: nhập 1 = Kỳ thi mặc định, 2 = Kỳ thi theo môn.',isSubjectExam(exam.id)?'2':'1');
     if(modeInput===null)return;
-    const exam_mode=modeInput.trim()==='2'?'subject':modeInput.trim()==='1'?'default':null;
+    const exam_mode=exam.exam_mode==='manual'?'manual':modeInput.trim()==='2'?'subject':modeInput.trim()==='1'?'default':null;
     if(!exam_mode){message($('global-message'),'Loại kỳ thi không hợp lệ. Hãy nhập 1 hoặc 2.','error');return;}
     const {error}=await state.client.from('exam_sessions').update({name:name.trim(),school_year:school_year.trim(),exam_mode}).eq('id',exam.id);
     if(error){message($('global-message'),`Không sửa được kỳ thi: ${error.message}`,'error');return;}
