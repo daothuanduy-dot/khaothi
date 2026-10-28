@@ -23,6 +23,16 @@ function timestamp(session,slot){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(session.date)||!/^\d{2}:\d{2}$/.test(start||''))throw new Error(`Nhập ngày và giờ cho buổi ${session.name}.`);
  const time=Date.parse(session.date+'T'+start+':00+07:00');if(!Number.isFinite(time))throw new Error('Ngày/giờ buổi thi không hợp lệ.');return time;
 }
+export function manualPaperSchedule(payload){
+ const {config,entries}=payload,result=[];
+ for(const room of payload.rooms)for(const session of config.sessions)for(const slot of [1,2]){
+  const codes=new Set(entries.filter(e=>e.room_id===room.id&&e.session===session.id&&Number(e.slot)===slot).map(e=>e.subject));
+  const subjects=config.subjects.filter(s=>codes.has(s.code)).sort((a,b)=>Number(a.code==='N1')-Number(b.code==='N1'));
+  let offset=0;
+  for(const subject of subjects){result.push({room_id:room.id,session:session.id,slot,subject:subject.code,offset,minutes:subject.minutes});offset+=subject.minutes}
+ }
+ return result;
+}
 export function validateManualPlan(payload,candidates){
  const {config,choices,sbds,rooms,entries}=payload;
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
@@ -32,6 +42,7 @@ export function validateManualPlan(payload,candidates){
  const roomMap=new Map(rooms.map(r=>[r.id,r]));if(roomMap.size!==rooms.length)throw new Error('Mã phòng phân bổ bị trùng.');
  const subjectMap=new Map(config.subjects.map(s=>[s.code,s]));
  for(const subject of subjectMap.values())if(subject.form!==(subject.code==='VAN'?'essay':'mcq')||!Number.isInteger(subject.minutes)||subject.minutes<1)throw new Error('Chỉ Ngữ văn tự luận; các môn khác trắc nghiệm. Thời lượng phải là số phút nguyên dương.');
+ const paperTimes=new Map(manualPaperSchedule(payload).map(t=>[JSON.stringify([t.room_id,t.session,t.slot,t.subject]),t]));
  const candidateMap=new Map(candidates.map(c=>[idOf(c),c])),seen=new Set(),times=new Map(),roomTimes=new Map();
  for(const c of candidates){const g=manualGroupFor(c,config),selected=choices[idOf(c)]||[];if(selected.length!==2||new Set(selected).size!==2||selected.some(code=>['TOAN','VAN'].includes(code)||!g.subjects.includes(code)))throw new Error(`${c.student_name}: chọn đúng hai môn ngoài Toán/Văn thuộc nhóm.`)}
  for(const entry of entries){
@@ -45,7 +56,8 @@ export function validateManualPlan(payload,candidates){
   if(room.is_private&&kind==='remaining')throw new Error('Phòng riêng không áp dụng cho môn còn lại.');
   const key=idOf(c)+'|'+entry.subject;if(seen.has(key))throw new Error('Một học sinh bị xếp trùng môn.');seen.add(key);
   if(config.roster_only===true)continue;
-  const begin=timestamp(session,Number(entry.slot)),end=begin+subject.minutes*60000,list=times.get(idOf(c))||[];
+  const offset=paperTimes.get(JSON.stringify([entry.room_id,entry.session,Number(entry.slot),entry.subject])).offset;
+  const begin=timestamp(session,Number(entry.slot))+offset*60000,end=begin+subject.minutes*60000,list=times.get(idOf(c))||[];
   if(Number(entry.slot)===2&&begin<=timestamp(session,1))throw new Error(`Ca 2 phải bắt đầu sau ca 1: ${session.name}.`);
   if(list.some(t=>begin<t.end&&end>t.begin))throw new Error(`${c.student_name} bị trùng thời gian thi.`);list.push({begin,end});times.set(idOf(c),list);
   const roomList=roomTimes.get(room.code)||[];for(const previous of roomList)if(previous.room_id!==room.id&&begin<previous.end&&end>previous.begin)throw new Error(`Phòng ${room.code} được dùng trùng thời gian.`);
@@ -59,7 +71,7 @@ export function validateManualPlan(payload,candidates){
   const perSlot=new Map();for(const e of rows){const key=e.session+'|'+e.slot;if(!perSlot.has(key))perSlot.set(key,[]);perSlot.get(key).push(e)}
   for(const same of perSlot.values()){
    if(new Set(same.map(e=>String(e.candidate_id))).size!==same.length)throw new Error('Học sinh trùng ca trong phòng.');
-   if(same.some(e=>e.subject==='N1')&&same.some(e=>e.subject!=='N1'))throw new Error(`Phòng ${room.code}: phần nghe Tiếng Anh không trộn môn khác cùng ca.`);
+   if(same.some(e=>e.subject==='N1')&&same.some(e=>e.subject!=='N1')&&same.some(e=>Number(e.slot)!==2))throw new Error(`Phòng ${room.code}: Tiếng Anh ghép môn khác phải ở ca cuối buổi.`);
    const seats=same.map(e=>Number(e.seat)).sort((a,b)=>a-b);if(seats.some((n,i)=>n!==i+1))throw new Error('Vị trí trong phòng phải liên tục từ 1.');
   }
  }
