@@ -101,10 +101,11 @@ export function addManualRoom(payload,candidates,poolRoomId,code){
  copy.rooms.push({...source,id,code:String(code).trim()});return adjustManualRoom(copy,candidates,donor.id,count(donor)-1);
 }
 export function importManualChoices(rows,candidates,config,choices={},privateNames={}){
+ if(!Array.isArray(rows)||!rows.length)throw new Error('Tệp không có dòng đăng ký.');
  const next=structuredClone(choices),privateNext=structuredClone(privateNames),seen=new Set(),byCode=new Map();
  for(const c of candidates){const code=String(c.student_code||'').trim();if(byCode.has(code))throw new Error('Mã học sinh bị trùng trong kỳ, không nhập theo họ tên.');byCode.set(code,c)}
  const normalize=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase().replace(/[^A-Z0-9]/g,'');
- const subjects=new Map(config.subjects.flatMap(s=>[[normalize(s.code),s.code],[normalize(s.name),s.code]]));subjects.set('ANH','N1');subjects.set('GDKTPL','KTPL');
+ const subjects=new Map(config.subjects.flatMap(s=>[[normalize(s.code),s.code],[normalize(s.name),s.code]]));subjects.set('ANH','N1');subjects.set('GDKTPL','KTPL');subjects.set('LY','LY');subjects.set('HOA','HOA');subjects.set('SINH','SINH');subjects.set('SU','SU');subjects.set('DIA','DIA');subjects.set('TIN','TIN');
  for(const row of rows){const code=String(row.student_code??'').trim(),c=byCode.get(code);if(!c)throw new Error('Không tìm thấy mã học sinh '+code);if(seen.has(code))throw new Error('Lặp mã học sinh '+code);seen.add(code);
   const pair=[subjects.get(normalize(row.mon1)),subjects.get(normalize(row.mon2))],group=manualGroupFor(c,config);
   if(pair.some(s=>!s||['TOAN','VAN'].includes(s)||!group.subjects.includes(s))||pair[0]===pair[1])throw new Error(`Mã ${code}: hai môn chọn không hợp lệ với nhóm lớp.`);
