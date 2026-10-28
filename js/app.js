@@ -4,7 +4,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -216,7 +216,7 @@ async function loadExams(){
   body.innerHTML='';
   if(!state.exams.length)body.innerHTML='<tr><td colspan="6" class="empty">Chưa có kỳ thi. Hãy tạo kỳ thi đầu tiên.</td></tr>';
   for(const exam of state.exams){
-    const tr=document.createElement('tr'),mode=exam.exam_mode==='manual'?'Kỳ thi tổ chức thủ công':exam.exam_mode==='subject'||exam.exam_mode==='choice'?'Kỳ thi theo môn':'Kỳ thi mặc định';
+    const tr=document.createElement('tr'),mode=exam.exam_mode==='manual'?'Kỳ thi tổ chức thủ công':exam.exam_mode==='choice'?'Kỳ thi lựa chọn':exam.exam_mode==='subject'?'Kỳ thi theo môn':'Kỳ thi mặc định';
     tr.innerHTML=`<td><b>${esc(exam.name)}</b><br><small>${esc(exam.id)}</small></td><td>${esc(exam.school_year)}</td><td><span class="tag">${mode}</span></td><td><span class="tag">${esc(exam.status)}</span></td><td>${exam.created_at?new Date(exam.created_at).toLocaleDateString('vi-VN'):'—'}</td><td><button class="small-btn" data-select-exam="${esc(exam.id)}">Chọn kỳ thi</button> <button class="small-btn" data-edit-exam="${esc(exam.id)}">Sửa</button> <button class="small-btn" data-delete-exam="${esc(exam.id)}">Xóa</button></td>`;
     if(exam.exam_mode==='manual')tr.lastElementChild.insertAdjacentHTML('afterbegin',`<button class="small-btn" data-manual-exam="${esc(exam.id)}">Tổ chức riêng</button> `);
     body.append(tr);
@@ -251,24 +251,24 @@ async function createExam(event){
   state.selectedExam=data.id;
   syncSubjectExamMode();
   updateSelectedExamTitle();
-  message($('global-message'),`Đã tạo ${exam_mode==='manual'?'kỳ tổ chức thủ công. Nhập học sinh rồi mở Tổ chức riêng tại danh sách kỳ thi':exam_mode==='subject'?'kỳ thi theo môn':'kỳ thi mặc định'}.`,'success');
+  message($('global-message'),`Đã tạo ${exam_mode==='manual'?'kỳ tổ chức thủ công. Nhập học sinh rồi mở Tổ chức riêng tại danh sách kỳ thi':exam_mode==='choice'?'kỳ thi lựa chọn — SBD chung theo phòng tổ hợp':exam_mode==='subject'?'kỳ thi theo môn':'kỳ thi mặc định'}.`,'success');
   notifyExamSelected(data,true);
 }
 function syncSubjectExamMode(){
   const examId=$('subject-exam-select').value;
   const exam=state.exams.find(x=>x.id===examId);
   if(exam?.exam_mode==='manual')return;
-  const mode=exam?.exam_mode==='subject'||exam?.exam_mode==='choice'?'subject':'default';
+  const mode=exam?.exam_mode==='choice'?'choice':exam?.exam_mode==='subject'?'subject':'default';
   $('subject-config-kind').value=mode;
   const modeSelect=$('subject-mode');
   // The previous implementation only changed the value, leaving `disabled`
   // unchanged. This made the dropdown greyed out when switching from default to choice.
-  modeSelect.disabled=mode!=='subject';
-  if(mode!=='subject')modeSelect.value='required';
-  $('subject-order-wrap').classList.toggle('hidden',mode!=='subject'||modeSelect.value!=='elective');
+  modeSelect.disabled=mode==='default';
+  if(mode==='default')modeSelect.value='required';
+  $('subject-order-wrap').classList.toggle('hidden',mode==='default'||modeSelect.value!=='elective');
   $('subject-scope').dispatchEvent(new Event('change'));
   const note=$('subject-mode-note');
-  if(note)note.textContent=mode==='subject'
+  if(note)note.textContent=mode==='choice'?'Kỳ thi lựa chọn: lưu phòng tổ hợp, cấp SBD chung theo phòng, rồi tách phòng riêng.':mode==='subject'
     ?'Đây là kỳ thi theo môn: danh sách dự thi được quản lý theo từng môn; SBD được cấp riêng cho từng môn.'
     :'Đây là kỳ thi mặc định: dùng SBD chung trong kỳ thi và cấu hình môn theo khối/lớp.';
 }
@@ -2133,7 +2133,7 @@ function isManualExam(examId){return state.exams.find(exam=>exam.id===examId)?.e
 async function openManualExamWorkspace(examId){
  const {openManualExam}=await import('./manual-exam.js?v=179');return openManualExam({state,examId,selectAllPages});
 }
-function isSubjectExam(examId){const mode=state.exams.find(exam=>exam.id===examId)?.exam_mode;return mode==='subject'||mode==='choice'}
+function isSubjectExam(examId){const mode=state.exams.find(exam=>exam.id===examId)?.exam_mode;return mode==='subject'}
 async function refreshSubjectSbdControls(){
  const examId=$('sbd-exam-select').value,wrap=$('sbd-subject-wrap'),select=$('sbd-subject'),note=$('sbd-mode-note');
  const subjectExam=isSubjectExam(examId);wrap.classList.toggle('hidden',!subjectExam);
@@ -2183,7 +2183,7 @@ async function refreshSbdRoomControls(){
  if(!active)return;
  const select=$('sbd-room-round');
  if(!examId||!state.client){select.innerHTML='<option value="">-- Chọn kỳ thi --</option>';return}
- if(!isSubjectExam(examId))throw new Error('Cách cấp SBD theo tổ hợp chỉ áp dụng cho kỳ thi theo môn.');
+ if(isSubjectExam(examId))throw new Error('SBD theo phòng tổ hợp chỉ dùng cho kỳ có SBD chung.');
  if(select.dataset.examId===examId&&select.value)return;
  const request=++sbdRoundRequest;select.disabled=true;
  try{
@@ -3005,10 +3005,10 @@ function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=as
     const school_year=prompt('Năm học:',exam.school_year||'');
     if(school_year===null)return;
     if(!school_year.trim()){message($('global-message'),'Năm học không được để trống.','error');return;}
-    const modeInput=exam.exam_mode==='manual'?'3':prompt('Loại kỳ thi: nhập 1 = Kỳ thi mặc định, 2 = Kỳ thi theo môn.',isSubjectExam(exam.id)?'2':'1');
+    const modeInput=exam.exam_mode==='manual'?'3':prompt('Loại kỳ thi: 1 = Mặc định, 2 = Theo môn (SBD riêng), 3 = Lựa chọn (SBD chung theo phòng tổ hợp).',exam.exam_mode==='choice'?'3':isSubjectExam(exam.id)?'2':'1');
     if(modeInput===null)return;
-    const exam_mode=exam.exam_mode==='manual'?'manual':modeInput.trim()==='2'?'subject':modeInput.trim()==='1'?'default':null;
-    if(!exam_mode){message($('global-message'),'Loại kỳ thi không hợp lệ. Hãy nhập 1 hoặc 2.','error');return;}
+    const exam_mode=exam.exam_mode==='manual'?'manual':modeInput.trim()==='2'?'subject':modeInput.trim()==='1'?'default':modeInput.trim()==='3'?'choice':null;
+    if(!exam_mode){message($('global-message'),'Loại kỳ thi không hợp lệ. Hãy nhập 1, 2 hoặc 3.','error');return;}
     const {error}=await state.client.from('exam_sessions').update({name:name.trim(),school_year:school_year.trim(),exam_mode}).eq('id',exam.id);
     if(error){message($('global-message'),`Không sửa được kỳ thi: ${error.message}`,'error');return;}
     message($('global-message'),'Đã cập nhật thông tin kỳ thi.','success');
@@ -3034,7 +3034,7 @@ function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=as
     await loadExams();
     return;
   }
-});$('sbd-exam-select').onchange=()=>{state.selectedExam=$('sbd-exam-select').value||null;updateSelectedExamTitle();notifyExamSelected(state.exams.find(exam=>exam.id===state.selectedExam));$('sbd-message').classList.add('hidden')};$('rooming-exam-select').onchange=()=>{state.selectedExam=$('rooming-exam-select').value||null;updateSelectedExamTitle();notifyExamSelected(state.exams.find(exam=>exam.id===state.selectedExam));state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;loadCandidates()};$('download-csv-template').addEventListener('click',downloadExcelTemplate);$('import-form').addEventListener('submit',importCsv);$('candidate-edit-form').addEventListener('submit',saveCandidate);$('candidate-add-open').onclick=()=>openCandidateModal();$('candidate-cancel-edit').onclick=resetCandidateForm;$('candidate-modal-close').onclick=resetCandidateForm;$('candidate-search').addEventListener('input',renderCandidateTable);$('candidate-grade-filter').onchange=()=>{populateCandidateClassFilter();renderCandidateTable()};$('candidate-class-filter').onchange=renderCandidateTable;$('candidate-clear-filters').onclick=()=>{$('candidate-grade-filter').value='';populateCandidateClassFilter();$('candidate-class-filter').value='';$('candidate-search').value='';renderCandidateTable()};$('candidate-table-body').addEventListener('click',e=>{const edit=e.target.closest('[data-candidate-edit]');if(edit)openCandidateModal(edit.dataset.candidateEdit)});$('candidate-table-body').addEventListener('change',e=>{const box=e.target.closest('[data-candidate-check]');if(box)updateCandidateSelection(box.dataset.candidateCheck,box.checked)});const selectVisible=checked=>{const ids=getFilteredCandidates().map(c=>c.id);const s=new Set(state.selectedCandidateIds||[]);ids.forEach(id=>checked?s.add(id):s.delete(id));state.selectedCandidateIds=[...s];renderCandidateTable()};$('candidate-select-all').onchange=e=>selectVisible(e.target.checked);$('candidate-header-check').onchange=e=>selectVisible(e.target.checked);$('candidate-bulk-delete').onclick=deleteSelectedCandidates;$('download-subject-template').onclick=downloadSubjectTemplate;$('subject-manage-close').onclick=()=>{$('subject-manage-dialog').close();subjectManageContext=null};$('subject-manage-action').onchange=()=>{$('subject-manage-target-wrap').classList.toggle('hidden',$('subject-manage-action').value!=='move')};$('subject-manage-select-all').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=true);$('subject-manage-clear').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=false);$('subject-manage-add-all').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=true);$('subject-manage-add-clear').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=false);$('subject-manage-save').onclick=saveSubjectManager;$('subject-config-kind').onchange=async()=>{const choice=$('subject-config-kind').value==='choice';$('subject-mode').value=choice?'elective':'required';$('subject-mode').disabled=!choice;$('subject-order-wrap').classList.toggle('hidden',!choice);if(!choice&&['class_students','student'].includes($('subject-scope').value))$('subject-scope').value='class';$('subject-scope').dispatchEvent(new Event('change'));const examId=$('subject-exam-select').value;if(examId&&state.client){const{error}=await state.client.from('exam_sessions').update({exam_mode:choice?'choice':'default'}).eq('id',examId);if(error)message($('subject-message'),`Không lưu được hình thức kỳ thi: ${error.message}. Hãy chạy migration v0.1.21.`, 'error');else{const e=state.exams.find(x=>x.id===examId);if(e)e.exam_mode=choice?'choice':'default';message($('subject-message'),`Đã lưu hình thức kỳ thi: ${choice?'Kỳ thi lựa chọn':'Kỳ thi mặc định'}.`,'success')}}};$('subject-mode').onchange=()=>{$('subject-order-wrap').classList.toggle('hidden',$('subject-mode').value!=='elective')};$('subject-config-kind').dispatchEvent(new Event('change'));$('subject-mode').dispatchEvent(new Event('change'));$('apply-subject').onclick=async()=>{
+});$('sbd-exam-select').onchange=()=>{state.selectedExam=$('sbd-exam-select').value||null;updateSelectedExamTitle();notifyExamSelected(state.exams.find(exam=>exam.id===state.selectedExam));$('sbd-message').classList.add('hidden')};$('rooming-exam-select').onchange=()=>{state.selectedExam=$('rooming-exam-select').value||null;updateSelectedExamTitle();notifyExamSelected(state.exams.find(exam=>exam.id===state.selectedExam));state.preview=null;$('save-rooming').disabled=true;$('lock-rooming').disabled=true;loadCandidates()};$('download-csv-template').addEventListener('click',downloadExcelTemplate);$('import-form').addEventListener('submit',importCsv);$('candidate-edit-form').addEventListener('submit',saveCandidate);$('candidate-add-open').onclick=()=>openCandidateModal();$('candidate-cancel-edit').onclick=resetCandidateForm;$('candidate-modal-close').onclick=resetCandidateForm;$('candidate-search').addEventListener('input',renderCandidateTable);$('candidate-grade-filter').onchange=()=>{populateCandidateClassFilter();renderCandidateTable()};$('candidate-class-filter').onchange=renderCandidateTable;$('candidate-clear-filters').onclick=()=>{$('candidate-grade-filter').value='';populateCandidateClassFilter();$('candidate-class-filter').value='';$('candidate-search').value='';renderCandidateTable()};$('candidate-table-body').addEventListener('click',e=>{const edit=e.target.closest('[data-candidate-edit]');if(edit)openCandidateModal(edit.dataset.candidateEdit)});$('candidate-table-body').addEventListener('change',e=>{const box=e.target.closest('[data-candidate-check]');if(box)updateCandidateSelection(box.dataset.candidateCheck,box.checked)});const selectVisible=checked=>{const ids=getFilteredCandidates().map(c=>c.id);const s=new Set(state.selectedCandidateIds||[]);ids.forEach(id=>checked?s.add(id):s.delete(id));state.selectedCandidateIds=[...s];renderCandidateTable()};$('candidate-select-all').onchange=e=>selectVisible(e.target.checked);$('candidate-header-check').onchange=e=>selectVisible(e.target.checked);$('candidate-bulk-delete').onclick=deleteSelectedCandidates;$('download-subject-template').onclick=downloadSubjectTemplate;$('subject-manage-close').onclick=()=>{$('subject-manage-dialog').close();subjectManageContext=null};$('subject-manage-action').onchange=()=>{$('subject-manage-target-wrap').classList.toggle('hidden',$('subject-manage-action').value!=='move')};$('subject-manage-select-all').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=true);$('subject-manage-clear').onclick=()=>document.querySelectorAll('.subject-manage-current-check').forEach(x=>x.checked=false);$('subject-manage-add-all').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=true);$('subject-manage-add-clear').onclick=()=>document.querySelectorAll('.subject-manage-add-check').forEach(x=>x.checked=false);$('subject-manage-save').onclick=saveSubjectManager;$('subject-config-kind').onchange=()=>syncSubjectExamMode();$('subject-mode').onchange=()=>{$('subject-order-wrap').classList.toggle('hidden',$('subject-mode').value!=='elective')};$('subject-config-kind').dispatchEvent(new Event('change'));$('subject-mode').dispatchEvent(new Event('change'));$('apply-subject').onclick=async()=>{
   const b=$('apply-subject');const old=b.textContent;
   if(b.dataset.busy==='1')return;
   b.dataset.busy='1';b.disabled=true;b.textContent='Đang xử lý...';
