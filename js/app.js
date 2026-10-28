@@ -1,9 +1,10 @@
 import {createSbdGroupEditor} from './sbd-group-editor.js?v=156';
+import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -2136,9 +2137,10 @@ function isSubjectExam(examId){const mode=state.exams.find(exam=>exam.id===examI
 async function refreshSubjectSbdControls(){
  const examId=$('sbd-exam-select').value,wrap=$('sbd-subject-wrap'),select=$('sbd-subject'),note=$('sbd-mode-note');
  const subjectExam=isSubjectExam(examId);wrap.classList.toggle('hidden',!subjectExam);
- for(const id of ['room-sort-mode','sbd-length','sbd-prefix-length','sbd-prefix','room-previous-exam'])$(id)?.closest('label')?.classList.toggle('hidden',subjectExam);
+ for(const id of ['room-sort-mode','room-previous-exam'])$(id)?.closest('label')?.classList.toggle('hidden',subjectExam);
+ for(const id of ['sbd-length','sbd-prefix-length','sbd-prefix'])$(id)?.closest('label')?.classList.remove('hidden');
  if(!subjectExam){select.innerHTML='<option value="">-- Chọn môn thi --</option>';if(note)note.textContent='Kỳ thi mặc định dùng một SBD chung trong toàn kỳ thi.';return false}
- if(note)note.textContent='Kỳ thi theo môn: chọn môn để lập SBD riêng từ 0001 theo thứ tự họ và tên.';
+ if(note)note.textContent='Kỳ thi theo môn: chọn môn, độ dài và tiền tố để lập SBD riêng theo thứ tự họ và tên. Mỗi môn bắt đầu từ số thứ tự 1.';
  if(!examId||!state.client){select.innerHTML='<option value="">-- Chọn môn thi --</option>';return true}
  const previous=select.value;
  const registrations=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code').eq('exam_id',examId).order('subject_code'));
@@ -2156,12 +2158,12 @@ async function assignSubjectSbd(examId){
  const candidates=await selectAllPages(()=>state.client.from('exam_candidates').select('id,student_code,student_name,class_code').eq('exam_id',examId).in('id',ids));
  if(candidates.length!==ids.length)throw new Error('Danh sách học sinh dự thi không còn đầy đủ. Hãy tải lại danh sách môn trước khi cấp SBD.');
  const ordered=[...candidates].sort((a,b)=>compareVietnameseName(a.student_name,b.student_name)||String(a.student_code||'').localeCompare(String(b.student_code||''),'vi',{numeric:true}));
- const assignments=ordered.map((candidate,index)=>({candidate_id:candidate.id,sbd:String(index+1).padStart(4,'0')}));
+ const assignments=numberSubjectCandidates(ordered,{totalLength:Number($('sbd-length').value),prefixLength:Number($('sbd-prefix-length').value),prefix:$('sbd-prefix').value.trim()});
  const{error}=await state.client.rpc('exam_assign_subject_sbd',{p_exam_id:examId,p_subject_code:subjectCode,p_assignments:assignments});
  if(error)throw new Error(`Không lưu được SBD theo môn. Hãy chạy migration v0.1.125. ${error.message}`);
  clearSbdRoster();
  $('sbd-room-preview-result').innerHTML=`<p>Đã cấp ${assignments.length} SBD cho môn ${esc(subjectName(subjectCode))} (${esc(subjectCode)}).</p><div class="table-wrap"><table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th></tr></thead><tbody>${ordered.map((candidate,index)=>`<tr><td>${assignments[index].sbd}</td><td>${esc(candidate.student_name)}</td><td>${esc(candidate.class_code||'—')}</td></tr>`).join('')}</tbody></table></div>`;
- message($('sbd-message'),`Đã cấp ${assignments.length} SBD từ 0001 cho môn ${subjectName(subjectCode)}, theo thứ tự họ và tên.`,'success');
+ message($('sbd-message'),`Đã cấp ${assignments.length} SBD từ ${assignments[0].sbd} đến ${assignments.at(-1).sbd} cho môn ${subjectName(subjectCode)}, theo thứ tự họ và tên.`,'success');
 }
 async function refreshSbdRoomControls(){
  const examId=$('sbd-exam-select').value;
@@ -2259,7 +2261,7 @@ async function resetSbdAndElectivePlan(){
    const{data,error}=await state.client.rpc('exam_reset_subject_sbd',{p_exam_id:examId,p_subject_code:subjectCode});
    if(error)throw new Error(`Không xóa được SBD theo môn. Hãy chạy migration v0.1.125. ${error.message}`);
    clearSbdRoster();
-   $('sbd-room-preview-result').innerHTML='';message($('sbd-message'),`Đã xóa ${Number(data?.deleted_count)||0} SBD của môn ${subjectName(subjectCode)}. Có thể lập lại từ 0001.`,'success');
+   $('sbd-room-preview-result').innerHTML='';message($('sbd-message'),`Đã xóa ${Number(data?.deleted_count)||0} SBD của môn ${subjectName(subjectCode)}. Có thể chọn độ dài và tiền tố để lập lại.`,'success');
   }catch(error){message($('sbd-message'),error.message||String(error),'error')}
   finally{button.disabled=false}
   return;
