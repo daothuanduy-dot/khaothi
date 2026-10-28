@@ -1,9 +1,11 @@
 import {optimizeByGroups,validateGroupSbdSequence} from './group-rooming.js?v=158';
-import {optimizeMandatoryRooms,optimizeElectiveRooms,assignElectiveCandidateToRoom,isValidSbd} from './rooming.js?v=158';
+import {applyFixedSubjectSlots,assertElectiveLayoutEditable,normalizeDraftRoomNames} from './elective-layout.js?v=184';
+import {optimizeMandatoryRooms,optimizeElectiveRooms,isValidSbd} from './rooming.js?v=158';
 
 // Build a complete replacement before changing the preview, so a failed move is atomic.
 export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomCode,release=false,placements}={}){
  const ids=new Set(selectedIds.map(String)),pool=preview.pool;
+ assertElectiveLayoutEditable(preview);
  if(groupText!==null)validateGroupSbdSequence(pool,groupText);
  if([...ids].some(id=>!pool.some(c=>String(c.id??c.candidate_id)===id)))throw new Error('Học sinh không thuộc phương án này.');
  const privateRooms=preview.result.rooms.filter(r=>r.is_private).map(r=>({...r}));
@@ -25,7 +27,7 @@ export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomC
  for(const room of privateRooms){
   const members=pool.filter(c=>locked.get(String(c.id??c.candidate_id))===room.room_code),rows=[];
   for(const c of members){
-   const row=preview.planType==='elective'?assignElectiveCandidateToRoom(c,rows,room.room_code):{...c,candidate_id:c.id??c.candidate_id,room_code:room.room_code,subject_code:preview.subjectCode};
+   const row=preview.planType==='elective'?{...c,candidate_id:c.id??c.candidate_id,room_code:room.room_code,ca1_subject_code:c.elective_subjects[0],ca2_subject_code:c.elective_subjects[1]}:{...c,candidate_id:c.id??c.candidate_id,room_code:room.room_code,subject_code:preview.subjectCode};
    if(!row)throw new Error(`Không thể ghép môn hai ca trong phòng ${room.room_code}.`);
    rows.push(row);
   }
@@ -45,12 +47,13 @@ export function redistributePrivateRooms(preview,groupText,{selectedIds=[],roomC
   for(const row of regular.assignments)if(row.room_code===old)row.room_code=code;
  }
  const capacity=Math.max(preview.options.capacity,...occupied.map(r=>r.student_count));
- return {ok:true,rooms:[...regular.rooms,...occupied].map((r,i)=>({...r,room_number:i+1,capacity,regular_capacity:options.capacity})),assignments:[...regular.assignments,...assignments],summary:{}};
+ const result={ok:true,rooms:[...regular.rooms,...occupied].map((r,i)=>({...r,room_number:i+1,capacity,regular_capacity:options.capacity})),assignments:[...regular.assignments,...assignments],summary:{}};
+ return preview.planType==='elective'?applyFixedSubjectSlots(normalizeDraftRoomNames(result,preview.options),preview.result.rooms[0]?.fixed_subject_slots||{}):result;
 }
 
 export function importPrivateRoomRows(preview,groupText,rows){
  if(preview.finalized||preview.saving||preview.finalizing||preview.options.fixedSeats)throw new Error('Phương án đang khóa hoặc kế thừa vị trí cố định, không thể nhập phòng riêng.');
- if(preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Hãy lưu phòng tổ hợp, cấp SBD rồi tải lại phương án trước khi nhập phòng riêng.');
+ if(preview.planType!=='elective'&&preview.pool.some(c=>!isValidSbd(c.sbd)))throw new Error('Hãy cấp SBD trước khi nhập phòng riêng cho môn bắt buộc.');
  const byCode=new Map();
  for(const c of preview.pool){const code=String(c.student_code??'').trim();if(!code||byCode.has(code))throw new Error('Mã học sinh trong phương án bị thiếu hoặc trùng.');byCode.set(code,c)}
  const seen=new Set(),placements=new Map();
