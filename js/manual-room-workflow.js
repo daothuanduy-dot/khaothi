@@ -1,8 +1,8 @@
-import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualHallSlots} from './manual-exam-engine.js?v=177';
+import {manualNameCompare,manualGroupFor,validateManualPlan,validateManualChoiceSlots} from './manual-exam-engine.js?v=178';
 const id=c=>String(c.id??c.candidate_id);
 const roomNumber=r=>r.is_private?(r.code==='Hội trường 2'?24:23):Number(r.code);
 function splitHalls(students,choices,session,tasks,config){
- try{arrangeHallSubjects(students,choices,session,tasks,config);return [students,[]]}catch{}
+ try{arrangeRoomSubjects(students,choices,session,tasks,config);return [students,[]]}catch{}
  const graph=new Map(),colors=new Map(),last=new Set(['N1',...(session.last||[])]);
  for(const c of students){const [a,b]=choices[id(c)];for(const [x,y] of [[a,b],[b,a]]){if(!graph.has(x))graph.set(x,new Set());graph.get(x).add(y)}}
  for(const code of graph.keys())if(last.has(code))colors.set(code,3);
@@ -19,9 +19,9 @@ function splitHalls(students,choices,session,tasks,config){
   const options=[0,1].filter(bit=>((colors.get(pair[0])>>bit)&1)!==((colors.get(pair[1])>>bit)&1));
   const target=options.length===2?(halls[0].length<=halls[1].length?0:1):options[0];halls[target].push(...members);
  }
- halls.forEach(hall=>arrangeHallSubjects(hall,choices,session,tasks,config));return halls;
+ halls.forEach(hall=>arrangeRoomSubjects(hall,choices,session,tasks,config));return halls;
 }
-function arrangeHallSubjects(students,choices,session,tasks,config){
+function arrangeRoomSubjects(students,choices,session,tasks,config){
  const graph=new Map(),colors=new Map(),last=new Set(['N1',...(session.last||[])]);
  const label=code=>config.subjects.find(s=>s.code===code)?.name||code;
  const conflict=()=>new Error('Hội trường: không thể chia các cặp môn thành hai ca mà mỗi môn chỉ thi một ca và Tiếng Anh ở ca 2. Kiểm tra các cặp môn và danh sách Hội trường.');
@@ -34,6 +34,19 @@ function arrangeHallSubjects(students,choices,session,tasks,config){
   if(forced.length&&colors.get(forced[0])!==1)for(const subject of component)colors.set(subject,1-colors.get(subject));
  }
  for(const c of students){const pair=choices[id(c)],first=pair.find(s=>colors.get(s)===0),second=pair.find(s=>colors.get(s)===1);if(!first||!second)throw new Error('Không thể xếp ca Hội trường: '+pair.map(label).join(' / '));tasks.set(id(c),[first,second])}
+}
+function packChoiceRooms(students,choices,session,capacity,config){
+ const fits=members=>{try{arrangeRoomSubjects(members,choices,session,new Map(),config);return true}catch{return false}};
+ // Find the fewest valid contiguous rooms in the established pair/name order.
+ const cost=Array(students.length+1).fill(Infinity),previous=[];cost[0]=0;
+ for(let end=1;end<=students.length;end++)for(let size=1;size<=capacity&&size<=end;size++){
+  const begin=end-size;if(cost[begin]+1>=cost[end])continue;
+  if(fits(students.slice(begin,end))){cost[end]=cost[begin]+1;previous[end]=begin}
+ }
+ const contiguous=[];for(let end=students.length;end>0;end=previous[end])contiguous.unshift(students.slice(previous[end],end));
+ // Reuse spare seats in compatible rooms when pair boundaries would waste rooms.
+ const packed=[];for(const c of students){const room=packed.find(r=>r.length<capacity&&fits([...r,c]));if(room)room.push(c);else packed.push([c])}
+ return packed.length<contiguous.length?packed:contiguous;
 }
 export function buildChoiceRooms(config,candidates,choices,privateNames={}){
  if(!candidates.length)throw new Error('Kỳ thi chưa có học sinh.');
@@ -54,12 +67,16 @@ export function buildChoiceRooms(config,candidates,choices,privateNames={}){
   const room={id:'CH'+code,code,group,kind:'chosen',is_private:isPrivate,capacity:isPrivate?Math.max(1,students.length):config.small_capacity,pool:'chosen|'+group};rooms.push(room);
   students.forEach((c,i)=>tasks.get(id(c)).forEach((subject,j)=>entries.push({candidate_id:id(c),subject,session:session.id,slot:j+1,room_id:room.id,kind:'chosen',seat:i+1})));
  }
- for(const pool of pools){pool.students.sort((a,b)=>tasks.get(id(a)).join('|').localeCompare(tasks.get(id(b)).join('|'))||manualNameCompare(a,b));for(let i=0;i<pool.students.length;i+=config.small_capacity)add(pool.students.slice(i,i+config.small_capacity),pool.group,false)}
+ for(const pool of pools){
+  pool.students.sort((a,b)=>tasks.get(id(a)).join('|').localeCompare(tasks.get(id(b)).join('|'))||manualNameCompare(a,b));
+  for(const members of packChoiceRooms(pool.students,choices,session,config.small_capacity,config)){arrangeRoomSubjects(members,choices,session,tasks,config);add(members,pool.group,false)}
+ }
  halls.forEach((members,i)=>{if(members.length)add(members.sort(manualNameCompare),'*',true,i)});
- return {config,choices:structuredClone(choices),privateNames:Object.fromEntries(halls.flatMap((members,i)=>members.map(c=>[id(c),'Hội trường '+(i+1)]))),rooms,entries,sbds:{},workflow_stage:'chosen'};
+ const result={config,choices:structuredClone(choices),privateNames:Object.fromEntries(halls.flatMap((members,i)=>members.map(c=>[id(c),'Hội trường '+(i+1)]))),rooms,entries,sbds:{},workflow_stage:'chosen'};
+ validateManualChoiceSlots(result);return result;
 }
 export function numberChoiceRooms(payload,candidates){
- validateManualHallSlots(payload);
+ validateManualChoiceSlots(payload);
  const copy=structuredClone(payload),{prefix,digits}=copy.config;
  if(!/^\d{2,3}$/.test(prefix)||![6,8].includes(Number(digits)))throw new Error('SBD dùng tiền tố 2–3 chữ số và tổng 6 hoặc 8 chữ số.');
  const ordered=copy.rooms.filter(r=>r.kind==='chosen').sort((a,b)=>roomNumber(a)-roomNumber(b)).flatMap(r=>copy.entries.filter(e=>e.room_id===r.id&&Number(e.slot)===1).sort((a,b)=>a.seat-b.seat).map(e=>e.candidate_id));
@@ -68,7 +85,7 @@ export function numberChoiceRooms(payload,candidates){
  copy.sbds=Object.fromEntries(ordered.map((key,i)=>[key,prefix+String(i+1).padStart(width,'0')]));copy.workflow_stage='numbered';return copy;
 }
 export function buildCoreRooms(payload){
- validateManualHallSlots(payload);
+ validateManualChoiceSlots(payload);
  const copy=structuredClone(payload);if(copy.entries.some(e=>!copy.sbds[e.candidate_id]))throw new Error('Đánh SBD theo phòng lựa chọn trước.');
  copy.rooms=copy.rooms.filter(r=>r.kind!=='core');copy.entries=copy.entries.filter(e=>e.kind!=='core');
  for(const r of copy.rooms.filter(r=>r.kind==='chosen')){
@@ -106,6 +123,12 @@ export function adjustChoiceRoom(payload,candidates,roomId,count){
  if(quotas.at(-1)<0||quotas.at(-1)>tail.at(-1).capacity||count>ids.length)throw new Error('Phòng cuối không đủ sức chứa để điều chỉnh.');
  copy.entries=copy.entries.filter(e=>!tail.some(r=>r.id===e.room_id));let offset=0;
  tail.forEach((r,i)=>{for(const [seat,key] of ids.slice(offset,offset+quotas[i]).entries())for(const e of rows.filter(e=>e.candidate_id===key))copy.entries.push({...e,room_id:r.id,seat:seat+1});offset+=quotas[i];if(!quotas[i])copy.rooms=copy.rooms.filter(t=>t.id!==r.id)});
+ for(const r of tail.filter(r=>copy.rooms.some(t=>t.id===r.id))){
+  const roomRows=copy.entries.filter(e=>e.room_id===r.id),memberIds=new Set(roomRows.map(e=>e.candidate_id)),tasks=new Map();
+  try{arrangeRoomSubjects(candidates.filter(c=>memberIds.has(id(c))),copy.choices,copy.config.sessions.find(s=>s.id===copy.config.chosen_session),tasks,copy.config)}catch{throw new Error(`Không thể chỉnh sĩ số phòng ${r.code}: các cặp môn làm một môn phải thi cả hai ca. Giữ phương án cũ; chọn sĩ số khác.`)}
+  for(const e of roomRows)e.slot=tasks.get(e.candidate_id).indexOf(e.subject)+1;
+ }
+ validateManualChoiceSlots(copy);
  const stage=payload.workflow_stage;
  copy.rooms=copy.rooms.filter(r=>r.kind==='chosen');copy.entries=copy.entries.filter(e=>e.kind==='chosen');copy.sbds={};copy.workflow_stage='chosen';
  if(stage==='chosen')return copy;
