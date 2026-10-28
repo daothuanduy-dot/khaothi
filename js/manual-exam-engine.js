@@ -53,7 +53,7 @@ export function validateManualPlan(payload,candidates){
  for(const c of candidates)for(const code of manualGroupFor(c,config).subjects)if(!seen.has(idOf(c)+'|'+code))throw new Error(`${c.student_name} chưa được xếp môn ${code}.`);
  for(const room of rooms){
   const rows=entries.filter(e=>e.room_id===room.id),ids=new Set(rows.map(e=>String(e.candidate_id))),capacity=Number(room.capacity),limit=room.kind==='remaining'?48:26;
-  if(!room.code||!rows.length||!Number.isInteger(capacity)||capacity<1||capacity>limit||(room.kind==='remaining'&&capacity<44)||ids.size>capacity)throw new Error(`Phòng ${room.code} vượt sức chứa hoặc chưa hợp lệ.`);
+  if(!String(room.code||'').trim()||!rows.length||!Number.isSafeInteger(capacity)||capacity<1||(!room.is_private&&(capacity>limit||(room.kind==='remaining'&&capacity<44)||ids.size>capacity)))throw new Error(`Phòng ${room.code} vượt sức chứa hoặc chưa hợp lệ.`);
   if(!config.groups.some(g=>g.id===room.group))throw new Error('Phòng chưa thuộc nhóm.');
   const perSlot=new Map();for(const e of rows){const key=e.session+'|'+e.slot;if(!perSlot.has(key))perSlot.set(key,[]);perSlot.get(key).push(e)}
   for(const same of perSlot.values()){
@@ -65,7 +65,8 @@ export function validateManualPlan(payload,candidates){
  return true;
 }
 export function generateManualPlan(config,candidates,choices,privateNames={}){
- for(const [key,max,min] of [['small_capacity',26,1],['large_capacity',48,44],['private_capacity',26,1]])if(!Number.isInteger(config[key])||config[key]<min||config[key]>max)throw new Error('Kiểm tra sức chứa: phòng nhỏ/riêng 1–26, phòng lớn 44–48.');
+ for(const [key,max,min] of [['small_capacity',26,1],['large_capacity',48,44]])if(!Number.isInteger(config[key])||config[key]<min||config[key]>max)throw new Error('Kiểm tra sức chứa: phòng nhỏ 1–26, phòng lớn 44–48.');
+ if(!Number.isSafeInteger(config.private_capacity)||config.private_capacity<1)throw new Error('Số chỗ gợi ý phòng riêng phải là số nguyên dương, không giới hạn 26.');
  const sbds=numberManualCandidates(candidates,config),rooms=[],entries=[],pools=new Map();
  const ordered=[...candidates].sort((a,b)=>compare(sbds[idOf(a)],sbds[idOf(b)]));
  for(const c of ordered){
@@ -83,9 +84,8 @@ export function generateManualPlan(config,candidates,choices,privateNames={}){
   }
  }
  let index=0;for(const pool of pools.values()){
-  const capacity=pool.kind==='remaining'?config.large_capacity:pool.special?config.private_capacity:config.small_capacity;
-  if(pool.special&&pool.students.length>capacity)throw new Error(`Phòng riêng ${pool.priv} vượt sức chứa.`);
-  for(let start=0;start<pool.students.length;start+=capacity){const members=pool.students.slice(start,start+capacity),id='R'+(++index),code=pool.special?`${pool.g.id}-${pool.priv}`:`${pool.g.id}-${pool.kind==='remaining'?'L':'N'}${String(index).padStart(2,'0')}`;
+  const capacity=pool.kind==='remaining'?config.large_capacity:pool.special?Math.max(config.private_capacity,pool.students.length):config.small_capacity;
+  for(let start=0;start<pool.students.length;start+=capacity){const members=pool.students.slice(start,start+capacity),id='R'+(++index),code=pool.special?pool.priv:`${pool.g.id}-${pool.kind==='remaining'?'L':'N'}${String(index).padStart(2,'0')}`;
    rooms.push({id,code,group:pool.g.id,kind:pool.kind,is_private:!!pool.special,capacity,pool:JSON.stringify([pool.g.id,pool.kind,pool.bundle])});
    members.forEach((c,i)=>{for(const task of pool.tasks.get(idOf(c)))entries.push({candidate_id:idOf(c),subject:task.subject,session:task.session,slot:Number(task.slot),room_id:id,kind:pool.kind,seat:i+1})});
   }
@@ -130,4 +130,62 @@ export function adjustManualRoom(payload,candidates,roomId,count){
   for(const task of tasks)chunk.forEach((id,j)=>copy.entries.push({...task,candidate_id:id,room_id:tail[i].id,seat:j+1}));
  }
  if(offset!==list.length)throw new Error('Không thể cân đối toàn bộ học sinh.');validateManualPlan(copy,candidates);return copy;
+}
+const manualTaskKey=rows=>JSON.stringify([...new Set(rows.map(e=>JSON.stringify([e.subject,e.session,Number(e.slot)])))].sort());
+export function renameManualPrivateRoom(payload,candidates,roomId,name){
+ const copy=structuredClone(payload),room=copy.rooms.find(r=>r.id===roomId);name=String(name||'').trim();
+ if(!room?.is_private||!name)throw new Error('Nhập tên phòng riêng.');
+ const old=room.code,ids=new Set(copy.rooms.filter(r=>r.is_private&&r.group===room.group&&r.code===old).map(r=>r.id));
+ for(const r of copy.rooms)if(ids.has(r.id))r.code=name;
+ copy.privateNames??={};for(const e of copy.entries)if(ids.has(e.room_id))copy.privateNames[e.candidate_id]=name;
+ validateManualPlan(copy,candidates);return copy;
+}
+export function setManualPrivateMembers(payload,candidates,roomId,selectedIds){
+ const copy=structuredClone(payload),target=copy.rooms.find(r=>r.id===roomId);
+ if(!target?.is_private)throw new Error('Chọn phòng riêng để thay đổi thành viên.');
+ const selected=new Set(selectedIds.map(String)),byId=new Map(candidates.map(c=>[idOf(c),c]));
+ for(const id of selected)if(!byId.has(id)||manualGroupFor(byId.get(id),copy.config).id!==target.group)throw new Error('Học sinh phải thuộc nhóm của phòng riêng.');
+ const oldRoomIds=new Set(copy.rooms.filter(r=>r.is_private&&r.group===target.group&&r.code===target.code).map(r=>r.id));
+ const oldMembers=new Set(copy.entries.filter(e=>oldRoomIds.has(e.room_id)).map(e=>e.candidate_id)),affected=new Set([...oldMembers,...selected]);
+ const original=copy.entries,signatures=new Map(copy.rooms.map(r=>[r.id,manualTaskKey(original.filter(e=>e.room_id===r.id))]));
+ copy.entries=copy.entries.filter(e=>!affected.has(e.candidate_id)||e.kind==='remaining');copy.privateNames??={};
+ let nextId=Math.max(0,...copy.rooms.map(r=>Number(r.id.replace(/^R/,''))||0));
+ const count=r=>new Set(copy.entries.filter(e=>e.room_id===r.id).map(e=>e.candidate_id)).size;
+ function createRoom(kind,tasks,isPrivate){
+  const id='R'+(++nextId);let code=target.code;if(!isPrivate){let i=1;do{code=`${target.group}-N${String(i++).padStart(2,'0')}`}while(copy.rooms.some(r=>r.code===code))}
+  const room={id,code,group:target.group,kind,is_private:isPrivate,capacity:isPrivate?Math.max(copy.config.private_capacity||1,selected.size):copy.config.small_capacity,pool:JSON.stringify([target.group,kind,tasks.map(e=>({subject:e.subject,session:e.session,slot:e.slot})).sort((a,b)=>compare(a.subject,b.subject))])};
+  copy.rooms.push(room);signatures.set(id,manualTaskKey(tasks));return room;
+ }
+ for(const id of affected){
+  if(selected.has(id))copy.privateNames[id]=target.code;else delete copy.privateNames[id];
+  for(const kind of ['core','chosen']){
+   const tasks=original.filter(e=>e.candidate_id===id&&e.kind===kind);if(!tasks.length)throw new Error('Phương án thiếu bài thi của học sinh.');
+   let room;if(selected.has(id))room=copy.rooms.find(r=>r.is_private&&r.group===target.group&&r.kind===kind&&r.code===target.code)||createRoom(kind,tasks,true);
+   else {const normal=copy.rooms.filter(r=>!r.is_private&&r.group===target.group&&r.kind===kind&&signatures.get(r.id)===manualTaskKey(tasks));room=[...normal].reverse().find(r=>count(r)<r.capacity)||createRoom(kind,tasks,false)}
+   for(const task of tasks){const row={...task,room_id:room.id,seat:0};delete row.phach;delete row.entry_key;copy.entries.push(row)}
+  }
+ }
+ copy.rooms=copy.rooms.filter(r=>count(r)>0);
+ // Retain the user-entered quotas and room names; restore SBD order in affected ordinary pools.
+ const pools=new Map();for(const r of copy.rooms.filter(r=>!r.is_private&&r.group===target.group&&['core','chosen'].includes(r.kind))){const key=r.kind+'|'+signatures.get(r.id);if(!pools.has(key))pools.set(key,[]);pools.get(key).push(r)}
+ for(const rooms of pools.values()){
+  const ids=new Set(rooms.map(r=>r.id)),rows=copy.entries.filter(e=>ids.has(e.room_id)),students=[...new Set(rows.map(e=>e.candidate_id))].sort((a,b)=>compare(copy.sbds[a],copy.sbds[b])),quotas=rooms.map(count);
+  copy.entries=copy.entries.filter(e=>!ids.has(e.room_id));let at=0;
+  rooms.forEach((r,i)=>{for(const id of students.slice(at,at+quotas[i]))for(const row of rows.filter(e=>e.candidate_id===id))copy.entries.push({...row,room_id:r.id});at+=quotas[i]});
+ }
+ for(const r of copy.rooms){
+  const members=[...new Set(copy.entries.filter(e=>e.room_id===r.id).map(e=>e.candidate_id))].sort((a,b)=>compare(copy.sbds[a],copy.sbds[b]));
+  for(const e of copy.entries.filter(e=>e.room_id===r.id))e.seat=members.indexOf(e.candidate_id)+1;
+  if(r.is_private)r.capacity=Math.max(r.capacity,members.length);
+ }
+ validateManualPlan(copy,candidates);return copy;
+}
+export function resizeManualPrivateRoom(payload,candidates,roomId,count){
+ const target=payload.rooms.find(r=>r.id===roomId);count=Number(count);
+ if(!target?.is_private||!Number.isSafeInteger(count)||count<0)throw new Error('Sĩ số phòng riêng phải là số nguyên không âm.');
+ const ownRooms=new Set(payload.rooms.filter(r=>r.is_private&&r.group===target.group&&r.code===target.code).map(r=>r.id)),otherPrivate=new Set(payload.entries.filter(e=>payload.rooms.some(r=>r.id===e.room_id&&r.is_private&&!ownRooms.has(r.id))).map(e=>e.candidate_id));
+ const current=[...new Set(payload.entries.filter(e=>ownRooms.has(e.room_id)).map(e=>e.candidate_id))].sort((a,b)=>compare(payload.sbds[a],payload.sbds[b]));
+ const free=candidates.filter(c=>manualGroupFor(c,payload.config).id===target.group&&!current.includes(idOf(c))&&!otherPrivate.has(idOf(c))).map(idOf).sort((a,b)=>compare(payload.sbds[a],payload.sbds[b]));
+ const available=[...current,...free];if(count>available.length)throw new Error(`Có ${available.length} học sinh có thể đưa vào phòng này. Dùng Chọn học sinh để chuyển từ phòng riêng khác.`);
+ return setManualPrivateMembers(payload,candidates,roomId,available.slice(0,count));
 }
