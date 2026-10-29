@@ -5,9 +5,9 @@ import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147&blocks=188&absences=189';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168&absences=189';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147&blocks=188&absences=189&resetrooming=190';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168&absences=189&resetrooming=190';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
 import {wireRanking} from './ranking.js?v=0.1.147';
@@ -19,7 +19,7 @@ import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precisi
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-29-choice-absences-189';
+const APP_BUILD='2026-10-29-reset-official-rooming-190';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1914,6 +1914,24 @@ async function finalizeRooming(){
   if(state.preview===preview)updateRoomingActions();
  }
 }
+async function resetOfficialRooming(){
+ const examId=$('rooming-exam-select').value,exam=state.exams.find(e=>e.id===examId),button=$('reset-official-rooming');
+ if(!examId||!exam){message($('rooming-message'),'Hãy chọn kỳ thi cần lập lại.','error');return}
+ if(!['default','choice'].includes(exam.exam_mode)){message($('rooming-message'),'Chức năng này áp dụng kỳ mặc định/lựa chọn dùng SBD chung. Không dùng cho kỳ theo môn hoặc wizard thủ công.','error');return}
+ if(state.preview?.saving||state.preview?.finalizing||button?.dataset.busy==='1')return;
+ const confirmation=prompt(`Kỳ thi: ${exam.name}\nLƯU TRỮ rồi XÓA toàn bộ phân phòng chính thức, bản nháp và SBD chung của kỳ này (mọi môn, mọi đợt). Toán/Văn phải lập lại theo phòng lựa chọn mới. Giữ học sinh và đăng ký môn. Danh sách đã in không còn hiệu lực.\nChặn nếu có điểm, phách hoặc báo vắng. Không xóa dữ liệu kỳ khác.\nNhập LAP LAI SBD để xác nhận:`);
+ if(confirmation!=='LAP LAI SBD')return;
+ if(button){button.disabled=true;button.dataset.busy='1'}
+ try{
+  const {data,error}=await state.client.rpc('exam_archive_rooming_and_reset_sbd',{p_exam_id:examId,p_confirmation:confirmation});
+  if(error)throw new Error(`Không thể xóa phân phòng để lập lại: ${error.message}${error.code==='PGRST202'?' — Cần cài SQL v0.1.113.':''}`);
+  invalidateSbdRoomPreview();clearSbdRoster();
+  state.preview=null;state.formData=null;state.candidates=[];state.sbdExamId=null;state.sbdConfig=null;
+  clearRoomingPreview();$('preview-rooming').textContent='Xem trước phương án phòng';
+  message($('rooming-message'),`Đã lưu trữ hồ sơ cũ (${data?.archive_id||''}), xóa ${Number(data?.cleared_count)||0} SBD và toàn bộ phương án phòng của kỳ. Tải lại trang, lập phòng/Hội trường, cố định ca, lưu phòng rồi cấp SBD và chốt lại các môn.`,'success');
+ }catch(error){message($('rooming-message'),error.message||String(error),'error')}
+ finally{if(button){button.disabled=false;button.dataset.busy='0'}}
+}
 function roomingRows(){
  if(!state.preview)return [];
  const {result,planType,subjectCode}=state.preview;
@@ -3097,6 +3115,7 @@ function wireRoomingEditor(){
  $('rooming-table-body').addEventListener('click',event=>{const button=event.target.closest('[data-edit-free-room]');if(button)openFreeRoom(button.dataset.editFreeRoom)});
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
+ if($('reset-official-rooming'))$('reset-official-rooming').onclick=resetOfficialRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
  let draggedAssignmentId=null;
  $('assignment-table-body').addEventListener('change',event=>{
