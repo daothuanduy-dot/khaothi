@@ -70,13 +70,14 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
   for(const row of assignments){
     const id=String(row.candidate_id),room=String(row.room_code||'').trim();
     if(!room)continue;
-    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set(),mandatoryRooms:new Map()});
+    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set(),mandatoryRooms:new Map(),mandatoryCodes:new Set(),electiveCodes:new Set()});
     const group=byId.get(id);
     const subject=String(row.subject_code||'').toUpperCase();
     const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&(row.subject_type==='mandatory'||(!row.subject_type&&['TOAN','VAN'].includes(subject))));
     const subjects=row.plan_type==='elective'?[row.ca1_subject_code,row.ca2_subject_code].filter(Boolean):[subject].filter(Boolean);
     const label=subjects.length?subjects.map(code=>nameOf(code)).join(' / ')+': '+room:room;
     group[required?'mandatory':'elective'].add(label);
+    group[required?'mandatoryCodes':'electiveCodes'].add(room);
     if(required){
       if(!group.mandatoryRooms.has(room))group.mandatoryRooms.set(room,new Set());
       if(subject)group.mandatoryRooms.get(room).add(subject);
@@ -91,7 +92,7 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
         rooms.mandatory.add('Toán/Ngữ văn: '+room);
       }
     }
-    return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng'};
+    return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng',mandatory_room_codes:[...(rooms?.mandatoryCodes||[])],elective_room_codes:[...(rooms?.electiveCodes||[])]};
   }).sort((a,b)=>String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
 }
 
@@ -256,6 +257,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       return [key,{title:cleanFormTitle(value.title)||spec[1],header:{...defaultFont(true),...(value.header||raw?.header)},body:{...defaultFont(),...(value.body||raw?.body)},widths:spec[3].map((w,i)=>Number(value.widths?.[i]||raw?.widths?.[key]?.[i])||w)}];
     }));
     settings.margins=normalizeFormMargins(raw?.margins);
+    settings.classrooms.show_mandatory_subjects=raw?.classrooms?.show_mandatory_subjects===true;
+    settings.classrooms.show_elective_subjects=raw?.classrooms?.show_elective_subjects===true;
     return settings;
   };
   const currentFormPrintSettings=()=>{
@@ -279,6 +282,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(!Number.isFinite(value)||value<0||value>30)throw new Error('Lề in phải từ 0 đến 30 mm.');
       return [side,value];
     }));
+    settings.classrooms.show_mandatory_subjects=$('forms-classrooms-show-mandatory-subjects')?.checked===true;
+    settings.classrooms.show_elective_subjects=$('forms-classrooms-show-elective-subjects')?.checked===true;
     return settings;
   };
   const applyFormPrintSettings=settings=>{
@@ -288,6 +293,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       value.widths.forEach((width,i)=>$(`forms-${key}-width-${i}`).value=width);
     }
     const margins=normalizeFormMargins(settings?.margins);
+    const flags=normalizeFormPrintSettings(settings).classrooms;
+    if($('forms-classrooms-show-mandatory-subjects'))$('forms-classrooms-show-mandatory-subjects').checked=flags.show_mandatory_subjects;
+    if($('forms-classrooms-show-elective-subjects'))$('forms-classrooms-show-elective-subjects').checked=flags.show_elective_subjects;
     for(const side of Object.keys(defaultFormMargins))$(`forms-margin-${side}`).value=margins[side];
   };
 
@@ -310,7 +318,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       .map(code=>[code,rows.filter(row=>(row.class_code||'Chưa xếp lớp')===code)]);
   }
   const shortRoomLabels=value=>String(value??'').replace(/phòng/gi,'P');
-  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',shortRoomLabels(row.mandatory_rooms),shortRoomLabels(row.elective_rooms),''];
+  const classRoomColumn=(row,kind)=>{
+    const value=String(row[kind+'_rooms']||'Chưa phân phòng');
+    if(value==='Chưa phân phòng')return value;
+    if($('forms-classrooms-show-'+kind+'-subjects')?.checked===true)return shortRoomLabels(value);
+    const codes=row[kind+'_room_codes']||value.split(';').map(label=>label.slice(label.lastIndexOf(':')+1).trim()).filter(Boolean);
+    return [...new Set(codes)].map(shortRoomLabels).join('; ')||'Chưa phân phòng';
+  };
+  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',classRoomColumn(row,'mandatory'),classRoomColumn(row,'elective'),''];
   function classReceiptGroups(forms){
     const groups=new Map();
     const selected=$('forms-class-filter').value||'';
