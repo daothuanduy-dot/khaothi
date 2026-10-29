@@ -102,7 +102,8 @@ export function absenceSubjectValues(row){
   return [...row.querySelectorAll('[data-absence-subject]:checked')].map(control=>control.value);
 }
 export function absenceAllowedSubjects(exam,candidate,registrations,configs){
-  const rows=exam?.exam_mode==='subject'?registrations.filter(row=>String(row.candidate_id)===String(candidate.id)):configs.filter(row=>row.class_code===candidate.class_code);
+  const registered=registrations.filter(row=>String(row.candidate_id)===String(candidate.id)),classSubjects=configs.filter(row=>row.class_code===candidate.class_code);
+  const rows=exam?.exam_mode==='subject'?registered:exam?.exam_mode==='choice'?[...classSubjects,...registered]:classSubjects;
   return [...new Set(rows.map(row=>String(row.subject_code||'').trim().toUpperCase()).filter(code=>code&&code!=='*'))].sort();
 }
 
