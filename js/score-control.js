@@ -8,10 +8,25 @@ export function scriptControlSummary(rows){
     zero:rows.filter(row=>scriptEntryState(row)==='zero').length,noPaper:rows.filter(row=>scriptEntryState(row)==='no_paper').length,
     absent:rows.filter(row=>row.snapshot_absent||row.reported_absent).length,violation:rows.filter(row=>row.violations?.length).length};
 }
+export function scriptScoreIssue(row){
+ if(!row.has_score)return '';
+ if(row.no_paper)return row.score!=null&&Number(row.score)!==0?'Không bài nhưng điểm khác 0':'';
+ if(row.score==null||row.score===''||!Number.isFinite(Number(row.score)))return 'Điểm không hợp lệ';
+ if(row.maximum_score==null||row.score_step==null)return 'Chưa đủ cấu hình để kiểm tra';
+ const score=Number(row.score),step=Number(row.score_step);
+ if(score<0||score>Number(row.maximum_score)||step<=0||Math.abs(score/step-Math.round(score/step))>1e-7)return 'Sai thang hoặc bước điểm';
+ if(row.decimal_places!=null&&Math.abs(score-Number(score.toFixed(Number(row.decimal_places))))>1e-8)return 'Sai số chữ số lẻ';
+ return '';
+}
+export function scriptControlReview(rows){
+ const absent=r=>r.snapshot_absent||r.reported_absent;
+ return {absentWithScore:rows.filter(r=>absent(r)&&r.has_score).length,invalid:rows.filter(r=>scriptScoreIssue(r)&&!scriptScoreIssue(r).startsWith('Chưa đủ')).length,
+ unchecked:rows.filter(r=>scriptScoreIssue(r).startsWith('Chưa đủ')).length,missing:rows.filter(r=>!absent(r)&&r.phach_code&&!r.has_score).length};
+}
 export function filterScriptControl(rows,{head='',status='all',query=''}={}){
   const text=query.trim().toLocaleLowerCase('vi');
   return rows.filter(row=>(!head||row.head===head)&&(!text||[row.phach_code,row.sbd].some(value=>String(value||'').toLocaleLowerCase('vi').includes(text)))&&
-    (status==='all'||status==='scored'&&row.has_score||status==='violation'&&row.violations?.length||status==='absent'&&(row.snapshot_absent||row.reported_absent)||scriptEntryState(row)===status));
+    (status==='all'||status==='scored'&&row.has_score||status==='invalid'&&!!scriptScoreIssue(row)||status==='absent_scored'&&row.has_score&&(row.snapshot_absent||row.reported_absent)||status==='violation'&&row.violations?.length||status==='absent'&&(row.snapshot_absent||row.reported_absent)||scriptEntryState(row)===status));
 }
 export function wireScoreControl({state,$,esc,message,subjectName=code=>code,onScoresCleared=()=>{}}){
   let examId='',runId='',runs=[],rows=[],selected=new Set(),preview=null,busy=false;
@@ -28,14 +43,15 @@ export function wireScoreControl({state,$,esc,message,subjectName=code=>code,onS
   function render(){
     const exam=state.exams.find(row=>row.id===examId),current=runs.find(row=>row.id===runId);
     $('score-control-exam').textContent=exam?`Kỳ thi: ${exam.name} (${exam.school_year})${current?` · Phương án ${current.id}`:''}`:'Chọn kỳ thi tại tab Kỳ thi.';
-    $('score-control-summary').textContent=summaryText(scriptControlSummary(rows));
+    const review=scriptControlReview(rows);
+    $('score-control-summary').textContent=summaryText(scriptControlSummary(rows))+` · Cần nhập ${review.missing} · Có kết quả nhưng vắng ${review.absentWithScore} · Sai thang/bước ${review.invalid} · Chưa kiểm tra được ${review.unchecked}. Đủ điểm không đồng nghĩa đúng điểm; cần đối chiếu bài chấm.`;
     const heads=[...new Set(rows.map(row=>row.head).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
-    $('score-control-head-summary').innerHTML=heads.length?`<table><thead><tr><th>Đầu phách</th><th>Tổng bài</th><th>Có điểm/Không bài</th><th>Chưa nhập</th><th>Vắng</th></tr></thead><tbody>${heads.map(head=>{
-      const s=scriptControlSummary(rows.filter(row=>row.head===head));return `<tr><td><button type="button" data-control-head="${esc(head)}">${esc(head)}</button></td><td>${s.total}</td><td>${s.entered}</td><td>${s.missing}</td><td>${s.absent}</td></tr>`;
+    $('score-control-head-summary').innerHTML=heads.length?`<table><thead><tr><th>Đầu phách</th><th>Tổng bài</th><th>Có điểm/Không bài</th><th>Chưa nhập (không vắng)</th><th>Vắng</th><th>Có kết quả nhưng vắng</th><th>Sai thang/bước</th></tr></thead><tbody>${heads.map(head=>{
+      const items=rows.filter(row=>row.head===head),s=scriptControlSummary(items),review=scriptControlReview(items);return `<tr><td><button type="button" data-control-head="${esc(head)}">${esc(head)}</button></td><td>${s.total}</td><td>${s.entered}</td><td>${s.missing}</td><td>${s.absent}</td><td>${review.absentWithScore}</td><td>${review.invalid}</td></tr>`;
     }).join('')}</tbody></table>`:'';
     const labels={score:'Có điểm',zero:'Điểm 0',no_paper:'Không bài',missing:'Chưa nhập',absent:'Vắng',unassigned:'Chưa có phách'};
     $('score-control-rows').innerHTML=`<table><thead><tr><th>Chọn</th><th>Phách</th><th>SBD</th><th>Lớp</th><th>Điểm gốc</th><th>Nhập điểm</th><th>Vắng / Vi phạm</th></tr></thead><tbody>${visible().map(row=>{
-      const flags=[row.snapshot_absent?'Vắng khi đánh phách':'',row.reported_absent?'Có báo vắng':'',...(row.violations||[]).map(v=>`Vi phạm ${v.round_no?`đợt ${v.round_no}`:'chưa phân đợt'}: ${v.penalty_type==='zero'?'điểm 0':`trừ ${v.deduction_percent}%`}`)].filter(Boolean);
+      const flags=[scriptScoreIssue(row),row.has_score&&(row.snapshot_absent||row.reported_absent)?'Có kết quả nhưng vắng — cần đối chiếu':'',row.snapshot_absent?'Vắng khi đánh phách':'',row.reported_absent?'Có báo vắng':'',...(row.violations||[]).map(v=>`Vi phạm ${v.round_no?`đợt ${v.round_no}`:'chưa phân đợt'}: ${v.penalty_type==='zero'?'điểm 0':`trừ ${v.deduction_percent}%`}`)].filter(Boolean);
       return `<tr><td><input type="checkbox" data-control-record="${esc(row.id)}" aria-label="Chọn phách ${esc(row.phach_code||'chưa có mã')}" ${selected.has(row.id)?'checked':''} ${busy||!row.has_score||!row.phach_code?'disabled':''}></td><td>${esc(row.phach_code||'—')}</td><td>${esc(row.sbd||'')}</td><td>${esc(row.class_code||'')}</td><td>${row.has_score&&!row.no_paper?esc(row.score):'—'}</td><td>${esc(labels[scriptEntryState(row)])}</td><td>${esc(flags.join('; ')||'—')}</td></tr>`;
     }).join('')||'<tr><td colspan="7">Không có bài theo bộ lọc.</td></tr>'}</tbody></table>`;
     $('score-control-selected').textContent=`Đã chọn ${selected.size} phách có điểm/Không bài, gồm cả các phách đang ẩn bởi bộ lọc.`;
@@ -55,7 +71,7 @@ export function wireScoreControl({state,$,esc,message,subjectName=code=>code,onS
     if(!id){runId='';return}
     const data=await rpc('exam_get_script_score_control',{p_run_id:id});
     if(data.run.exam_id!==examId||data.run.subject_code!==$('score-control-subject').value)throw new Error('Phương án phách không đúng kỳ thi/môn.');
-    runId=id;rows=data.rows;
+    runId=id;rows=data.rows.map(row=>({...row,maximum_score:data.config?.maximum_score,score_step:data.config?.score_step,decimal_places:data.config?.decimal_places}));
     const head=$('score-control-head').value;
     const heads=[...new Set(rows.map(row=>row.head).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
     $('score-control-head').innerHTML='<option value="">Tất cả đầu phách</option>'+heads.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');

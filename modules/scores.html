@@ -1,5 +1,6 @@
 <section class="tab-panel hidden" id="tab-scores">
   <div class="section-heading"><div><h2>Tổng hợp điểm</h2><p>Nhập điểm trắc nghiệm từ Excel theo cột SBD/điểm tùy chọn, ghép với điểm tự luận đã nhập theo phách.</p></div></div>
+  <div class="form-actions"><button id="open-absent-scores" type="button" class="btn btn-light">Nhập điểm học sinh vắng</button></div>
   <section id="score-control" class="panel">
     <h3>Kiểm soát điểm tự luận theo phách</h3>
     <p id="score-control-exam" role="status">Chọn kỳ thi ở tab Kỳ thi.</p>
@@ -8,7 +9,7 @@
       <label>Môn đã có phách<select id="score-control-subject"></select></label>
       <label>Phương án phách đã khóa<select id="score-control-run"></select></label>
       <label>Đầu phách<select id="score-control-head"><option value="">Tất cả đầu phách</option></select></label>
-      <label>Trạng thái<select id="score-control-filter"><option value="all">Tất cả</option><option value="missing">Chưa nhập điểm (không gồm vắng)</option><option value="scored">Có điểm / đã ghi Không bài</option><option value="zero">Điểm 0</option><option value="no_paper">Không bài</option><option value="absent">Vắng</option><option value="violation">Có vi phạm</option></select></label>
+      <label>Trạng thái<select id="score-control-filter"><option value="all">Tất cả</option><option value="invalid">Sai thang/bước hoặc chưa kiểm tra được</option><option value="absent_scored">Có kết quả nhưng vắng</option><option value="missing">Chưa nhập điểm (không gồm vắng)</option><option value="scored">Có điểm / đã ghi Không bài</option><option value="zero">Điểm 0</option><option value="no_paper">Không bài</option><option value="absent">Vắng</option><option value="violation">Có vi phạm</option></select></label>
       <label>Tìm phách / SBD<input id="score-control-search" type="search" placeholder="Mã phách hoặc SBD"></label>
     </div>
     <div class="form-actions"><button id="score-control-refresh" class="btn btn-light" type="button">Tải lại</button><button id="score-control-select-visible" class="btn btn-light" type="button">Chọn các phách có điểm đang hiện</button><button id="score-control-clear-selection" class="btn btn-light" type="button">Bỏ chọn tất cả</button></div>
@@ -42,7 +43,7 @@
   </div>
   <p class="help-text">Chọn môn và đọc hình thức đã lưu; chỉ bấm Lưu nếu cần thay đổi. Tự luận lấy điểm qua phách, trắc nghiệm đối chiếu SBD. Môn kết hợp cộng hai thành phần khi đủ điểm. Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F; dòng dữ liệu thường bắt đầu từ dòng 2.</p>
   <div class="form-grid">
-    <label><input id="scores-include-absent" type="checkbox"> Tính học sinh vắng (0 điểm môn vắng)</label>
+    <label><input id="scores-include-absent" type="checkbox" disabled> Học sinh vắng luôn bị loại khỏi thống kê, kể cả đã nhập điểm</label>
     <label><input id="scores-include-violations" type="checkbox"> Tính học sinh vi phạm (điểm sau xử lý)</label>
   </div>
   <p class="help-text">Bỏ tích để loại trường hợp tương ứng khỏi thống kê môn. Đổi lựa chọn rồi nhấn Tải điểm tổng hợp. Khi vừa vắng vừa vi phạm, chỉ đưa vào thống kê nếu tích cả hai; điểm tính là 0. Điểm gốc được giữ nguyên.</p>

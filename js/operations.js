@@ -1,6 +1,6 @@
 export function displayExamScore(value){return value==null||value===''?'':Number(value).toFixed(2)}
 export function subjectResultStatus(row){
-  if(row.is_absent)return 'Vắng';
+  if(row.is_absent)return row.total_score==null?'Vắng':'Vắng — có điểm bổ sung (không thống kê)';
   if(row.essay_missing&&row.mcq_missing)return 'Thiếu cả hai phần';
   if(row.essay_missing)return 'Thiếu tự luận';
   if(row.mcq_missing)return 'Thiếu trắc nghiệm';

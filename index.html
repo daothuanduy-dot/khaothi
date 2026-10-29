@@ -220,7 +220,8 @@
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <button id="manual-grading-open" type="button" class="btn btn-light">Nhập điểm kỳ tổ chức thủ công</button>
     <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
-    <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM NGỮ VĂN</div><h1>Chấm bài theo phách</h1><p>Môn Ngữ văn dùng mã môn VAN; chọn đầu phách để mở danh sách bài được giao.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
+    <button id="grader-absent-scores" type="button" class="btn btn-light">Nhập điểm học sinh vắng theo lớp được phân công</button>
+    <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM THEO PHÂN CÔNG</div><h1>Chấm bài theo phách</h1><p>Môn Ngữ văn dùng mã môn VAN; chọn đầu phách để mở danh sách bài được giao.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
     <div class="form-grid">
       <label>Kỳ thi<select id="grader-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
       <label id="grader-subject-wrap" class="hidden">Môn thi<select id="grader-subject"><option value="VAN">Ngữ văn (VAN)</option></select></label>
@@ -237,7 +238,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script id="app-entry" type="module" src="./js/app.js?v=0.1.147&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.147&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {
