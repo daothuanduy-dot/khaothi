@@ -74,6 +74,15 @@
     <fieldset><legend>Môn đưa vào thống kê</legend><p>Bỏ tích môn không cần hiển thị. Áp dụng cho bảng thống kê, Excel và bản in; không thay đổi đăng ký hoặc điểm.</p><div id="choice-report-subjects"></div></fieldset>
     <div id="choice-report-results"></div>
   </section>
+  <section class="panel" id="top-students-panel">
+    <h3>Top 3 học sinh theo nhóm lớp</h3>
+    <p>Xếp theo tổng điểm các môn được tính, không theo trung bình. Đồng hạng 1, 1, 3; lấy đầy đủ học sinh có hạng từ 1 đến 3. Môn vắng và chưa có điểm không được cộng; điểm 0 được tính. Kỳ mặc định chỉ cộng môn Tính điểm, kỳ lựa chọn/theo môn cộng các môn dự thi.</p>
+    <button type="button" class="btn btn-primary" id="top-students-load">Tải dữ liệu Top 3</button>
+    <details open><summary>Cấu hình nhóm lớp Top 3</summary><p>Tạo nhiều nhóm rồi tích lớp; một lớp chỉ thuộc một nhóm. Lưu nhóm trên trình duyệt theo kỳ thi, độc lập với nhóm SBD và nhóm xếp hạng lớp.</p><div id="top-students-groups"></div></details>
+    <div id="top-students-message" class="notice hidden" role="status"></div>
+    <div class="form-actions"><button type="button" class="btn btn-light" id="top-students-excel" disabled>Xuất Excel Top 3</button><button type="button" class="btn btn-light" id="top-students-pdf" disabled>In / lưu PDF Top 3</button></div>
+    <div id="top-students-results" class="table-wrap"></div>
+  </section>
   <section class="panel" id="class-report-panel">
     <h3>Thống kê các môn theo lớp / tổng hợp khối</h3>
     <div class="form-grid">
