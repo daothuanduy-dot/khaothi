@@ -5,8 +5,8 @@ import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147&blocks=188';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -19,7 +19,7 @@ import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precisi
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-29-mandatory-inherit-elective-187';
+const APP_BUILD='2026-10-29-contiguous-subjects-188';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -1569,6 +1569,7 @@ function rebuildRoomingFromAssignments(preview){
  renumberRoomingAssignments(preview);
 }
 function renumberRoomingAssignments(preview){
+ if(preview.planType==='elective'&&preview.result.assignments.every(a=>!String(a.sbd||'').trim())){preview.result=orderElectiveRoomPlan(preview.result);return}
  const roomOrder=new Map((preview.result.rooms||[]).map((room,index)=>[room.room_code,index]));
  const nextByRoom=new Map();
  for(const assignment of preview.result.assignments||[]){
@@ -1656,8 +1657,8 @@ async function changePrivateRoom(action){
   preview.result=result;preview.options.capacity=result.rooms[0]?.capacity||preview.options.capacity;
   preview.adjustmentMode='manual';$('rooming-adjustment-mode').value='manual';
   preview.assignmentsCreated=true;preview.saved=null;preview.sourcePlanId=null;preview.suggestionValid=true;
-  rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=result.assignments.map(a=>({...a}));
-  renderRooming(result,preview.planType);
+  rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=preview.result.assignments.map(a=>({...a}));
+  renderRooming(preview.result,preview.planType);
   message($('rooming-message'),'Đã cập nhật phòng riêng và phân bổ lại các học sinh còn lại. SBD được giữ nguyên. Hãy kiểm tra và lưu.','success');
  }catch(error){message($('rooming-message'),error.message,'error')}
 }
@@ -1691,7 +1692,7 @@ async function importPrivateRoomFile(){
   preview.result=result;preview.options.capacity=result.rooms[0]?.capacity||preview.options.capacity;
   preview.adjustmentMode='manual';$('rooming-adjustment-mode').value='manual';
   preview.assignmentsCreated=true;preview.saved=null;preview.sourcePlanId=null;preview.suggestionValid=true;
-  rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=result.assignments.map(a=>({...a}));renderRooming(result,preview.planType);
+  rebuildRoomingFromAssignments(preview);preview.suggestedAssignments=preview.result.assignments.map(a=>({...a}));renderRooming(preview.result,preview.planType);
   message($('rooming-message'),'Đã nhập phòng riêng theo tên trong Excel, giữ nguyên SBD. Kiểm tra danh sách rồi lưu lại phân bổ.','success');
  }catch(error){message($('rooming-message'),error.message,'error')}
 }
@@ -1758,7 +1759,7 @@ async function updateRoomPlanCount(event){
    preview.assignmentsCreated=true;preview.adjustmentMode='manual';$('rooming-adjustment-mode').value='manual';
    preview.saved=null;preview.sourcePlanId=null;preview.restoredFromDatabase=false;preview.suggestionValid=true;
    syncRoomingResult(result,preview.planType);
-   preview.suggestedAssignments=result.assignments.map(a=>({...a}));
+   preview.suggestedAssignments=preview.result.assignments.map(a=>({...a}));
    message($('rooming-message'),'Đã điều chỉnh lũy tiến đến cuối nhóm, giữ nguyên SBD và phòng riêng. Kiểm tra danh sách rồi lưu phân bổ trước khi chốt.','success');
   }catch(error){message($('rooming-message'),error.message||String(error),'error')}
   finally{preview.saving=false;if(state.preview===preview)renderRooming(preview.result,preview.planType)}
@@ -1857,7 +1858,7 @@ async function saveRooming(){
  preview.saving=true;updateRoomingActions();
  $('preview-rooming').disabled=true;$('rooming-exam-select').disabled=true;$('room-plan-type').disabled=true;
  try{
-  if(preview.planType==='elective'&&preview.adjustmentMode!=='manual'&&preview.result.assignments.every(row=>!String(row.sbd||'').trim())){
+  if(preview.planType==='elective'&&preview.result.assignments.every(row=>!String(row.sbd||'').trim())){
    preview.result=orderElectiveRoomPlan(preview.result);
    renderRooming(preview.result,preview.planType);
   }else if(preview.adjustmentMode==='manual')renumberRoomingAssignments(preview);

@@ -318,7 +318,7 @@ export function numberSavedElectiveRooms(plan,options={}){
   for(const room of ordered.rooms){
     const members=assignments.filter(row=>row.room_code===room.room_code);
     if(members.some((row,index)=>Number(row.seat_number)!==index+1))throw new Error('Phòng chưa có thứ tự vị trí liên tục hợp lệ. Hãy xếp và lưu lại phòng trước.');
-    if(plan.adjustment_mode!=='manual'){
+    {
       const closed=new Set();let previous=null;
       const closedPairs=new Set();let previousPair=null;
       for(const row of members){
