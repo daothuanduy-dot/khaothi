@@ -26,7 +26,23 @@
           </div>
           <div id="subject-delete-message" class="notice hidden" role="status" aria-live="polite"></div>
         </section>
-        <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
+        <section class="panel" aria-labelledby="amend-heading">
+ <h3 id="amend-heading">Đính chính môn dự thi</h3>
+ <p>Đổi đăng ký môn lựa chọn trắc nghiệm để ghép điểm và thống kê đúng môn. Giữ nguyên SBD, phòng, ca thi, môn còn lại và điểm. Việc điều chuyển phòng do nhà trường xử lý riêng.</p>
+ <button id="amend-load" type="button" class="btn btn-light">Tải danh sách điều chỉnh</button>
+ <div class="form-grid">
+ <label>Học sinh (SBD — tên — lớp)<select id="amend-candidate"></select></label>
+ <label>Môn cũ<select id="amend-old"></select></label>
+ <label>Môn mới<select id="amend-new"></select></label>
+ <label>Lý do<textarea id="amend-reason" minlength="5" maxlength="1000"></textarea></label>
+ </div>
+ <button id="amend-check" type="button" class="btn btn-light">Kiểm tra và xem trước</button>
+ <div id="amend-preview-result"></div>
+ <button id="amend-apply" type="button" class="btn btn-primary" disabled>Xác nhận lưu đính chính</button>
+ <div id="amend-message" class="notice hidden" role="status" aria-live="polite"></div>
+ <h4>Lịch sử đính chính</h4><div id="amend-history" class="table-wrap"></div>
+ </section>
+ <section class="panel subject-roster-panel" aria-labelledby="roster-heading">
           <div class="section-heading"><div><h3 id="roster-heading">Quản lý môn lựa chọn theo lớp</h3><p>Chọn khối/lớp, chỉnh trực tiếp Môn 1 và Môn 2. Toán và Ngữ văn được mặc định là môn bắt buộc.</p></div><button id="roster-reload" type="button" class="btn btn-light">Tải danh sách</button></div>
           <div class="roster-import-box">
             <label for="roster-excel-file"><strong>Nạp môn lựa chọn từ Excel</strong><span>File gồm các cột “Mã DD Bộ GD&ĐT”, “Họ tên”, “Môn 1”, “Môn 2”; môn ngoại ngữ dùng mã N1–N7, các môn khác dùng mã trong danh mục.</span></label>

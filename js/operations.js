@@ -65,7 +65,13 @@ export function mandatoryListingGroups(assignments){
     .map(group=>({...group,rows:group.rows.sort((a,b)=>String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}))}));
 }
 
+export function effectiveSlotRows(assignments){
+ return assignments.flatMap(row=>row.plan_type==='elective'&&row.ca1_room_code&&row.ca2_room_code&&row.ca1_room_code!==row.ca2_room_code
+  ?[{...row,room_code:row.ca1_room_code,ca2_subject_code:null},{...row,room_code:row.ca2_room_code,ca1_subject_code:null}]
+  :[{...row,room_code:row.plan_type==='elective'?(row.ca1_room_code||row.room_code):row.room_code}]);
+}
 export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
+  assignments=effectiveSlotRows(assignments);
   const byId=new Map();
   for(const row of assignments){
     const id=String(row.candidate_id),room=String(row.room_code||'').trim();
@@ -385,7 +391,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const assignments=[];
       let officialPlans=[];
       if(roundNo){
-        officialPlans=await readPages(()=>state.client.from('exam_rooming_round_plans')
+        officialPlans=await readPages(()=>state.client.from('exam_effective_rooming_round_plans')
           .select('id,round_no,plan_type,subject_code,rooms,assignments,status,created_at')
           .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
         for(const plan of officialPlans||[]){
@@ -427,14 +433,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         return {...row,sequence:index+1,
           subject_one:row.ca1_subject_code||row.subject_code||registration.one||'',
           subject_two:row.ca2_subject_code||registration.two||'',
-          note:''};
+          note:row.amended?`Đã điều chỉnh: ca 1 ${nameOf(row.ca1_subject_code)} tại ${row.ca1_room_code}; ca 2 ${nameOf(row.ca2_subject_code)} tại ${row.ca2_room_code}. Xem thông báo riêng.`:''};
       }).sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||
         String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}));
       const receiptRows=[];
       for(const row of expanded){
         if(row.plan_type==='elective'){
-          receiptRows.push({...row,subject_code:row.ca1_subject_code,subject_order:1});
-          receiptRows.push({...row,subject_code:row.ca2_subject_code,subject_order:2});
+          receiptRows.push({...row,room_code:row.ca1_room_code||row.room_code,subject_code:row.ca1_subject_code,subject_order:1});
+          receiptRows.push({...row,room_code:row.ca2_room_code||row.room_code,subject_code:row.ca2_subject_code,subject_order:2});
         }else receiptRows.push({...row,subject_order:null});
       }
       const rosterRows=candidates.map((candidate,index)=>{
@@ -937,13 +943,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const roundNo=Number($('script-round')?.value||0)||null;
     let target=null,records=[];
     if(roundNo){
-      const plans=await readPages(()=>state.client.from('exam_rooming_round_plans')
+      const plans=await readPages(()=>state.client.from('exam_effective_rooming_round_plans')
         .select('id,round_no,plan_type,subject_code,assignments,created_at')
         .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
       for(const plan of plans||[]){
         const rows=(Array.isArray(plan.assignments)?plan.assignments:[]).map(row=>({...row,subject_code:row.subject_code||plan.subject_code||''}));
         const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
-        if(relevant.length){target=plan;records=relevant;break}
+        if(relevant.length){target=plan;records=relevant.map(row=>({...row,room_code:row.ca1_subject_code===code?(row.ca1_room_code||row.room_code):row.ca2_subject_code===code?(row.ca2_room_code||row.room_code):row.room_code}));break}
       }
     }else{
       const finals=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
@@ -1869,6 +1875,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     catch(error){message($(notice),`Không khởi tạo được chức năng này. Hãy cập nhật đầy đủ các tệp giao diện. ${error.message}`,'error')}
   }
   return{
+    invalidateAmendmentData:()=>{
+      ++formDataRequest;++scoreRevision;combinedContext=null;cache.forms=null;cache.combinedScores=[];cache.subjectStatistics=null;
+      cache.scriptRooms=[];cache.scriptFinalizationId=null;absenceExamId='';
+      for(const id of ['forms-export-xlsx','forms-export-pdf','scores-export'])if($(id))$(id).disabled=true;
+      $('scores-results').innerHTML='';$('scores-class-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-result-controls').hidden=true;
+      message($('forms-message'),'Đã điều chỉnh môn. Tải lại biểu mẫu để cập nhật phòng thực tế theo ca.','info');
+    },
     refreshExamSelectors:()=>{setExamOptions();refreshScores();},
     refreshScores,
     invalidateCombinedScores:()=>{
