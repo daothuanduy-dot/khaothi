@@ -1,6 +1,16 @@
 <section class="tab-panel hidden" id="tab-settings">
   <div class="section-heading"><div><h2>Cấu hình kỳ thi</h2><p>Thiết lập môn, lớp và hình thức thi trước khi xếp phòng, đánh phách hoặc nhập điểm.</p></div></div>
   <div class="form-grid"><label>Kỳ thi<select id="settings-exam-select"><option value="">-- Chọn kỳ thi --</option></select></label></div>
+  <section id="supplemental-panel" class="panel hidden">
+    <h3>Môn thi bổ sung — kỳ thi lựa chọn</h3>
+    <p>Trắc nghiệm 100%, thang điểm 10. Điểm môn bổ sung dùng để ghi Excel CSDL, không tính vào thống kê chính, tổng điểm, điểm trung bình hay Top 3. Nếu học sinh đã chọn môn này thì dùng chung điểm và vẫn thống kê theo đăng ký lựa chọn.</p>
+    <label>Môn bổ sung<select id="supplemental-subject"></select></label>
+    <p>Chọn lớp để áp dụng cho toàn bộ học sinh của lớp, hoặc chọn riêng học sinh. Bỏ toàn bộ lựa chọn để gỡ cấu hình môn chưa có điểm.</p>
+    <div id="supplemental-scopes"></div>
+    <div class="form-actions"><button id="supplemental-refresh" type="button" class="btn btn-light">Tải lại cấu hình</button><button id="supplemental-save" type="button" class="btn btn-primary" disabled>Lưu môn bổ sung</button></div>
+    <div id="supplemental-message" class="notice hidden" role="status"></div>
+    <p id="supplemental-summary"></p>
+  </section>
   <section id="ranking-setup" class="panel">
     <h3>Học kỳ phân công và ban xếp hạng</h3>
     <div id="ranking-message" class="notice hidden" role="status"></div>

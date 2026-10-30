@@ -38,7 +38,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   const examId=state.selectedExam;
   const sources={};for(const code of [...new Set(mappings.filter(m=>m.enabled).map(m=>m.subject))]){
    if(!code)throw new Error('Có sheet chưa chọn môn nguồn.');
-   const {data,error}=await state.client.rpc('exam_get_subject_results',{p_exam_id:examId,p_subject_code:code});if(error)throw new Error(`${code}: ${error.message}`);
+    const {data,error}=await state.client.rpc('exam_get_subject_results_for_export',{p_exam_id:examId,p_subject_code:code});if(error)throw new Error(`${code}: ${error.message} (cần migration 202)`);
    sources[code]=[...(data||[])].sort((a,b)=>String(a.candidate_id).localeCompare(String(b.candidate_id)));
   }return sources;
  }
