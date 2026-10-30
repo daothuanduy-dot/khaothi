@@ -7,7 +7,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193';
-import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199';
+import {loadTabModules} from './module-loader.js?v=0.1.147&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=200';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -17,11 +17,12 @@ import {createStudentPicker} from './student-picker.js?v=0.1.147';
 import {wireScoreControl} from './score-control.js?v=0.1.147&absentscores=191&roomlabels=192&amendments=193';
 import {wireClassReport} from './class-report.js?v=0.1.147&classreport=197';
 import {wireTopStudents} from './top-students.js?v=199';
+import {wireTemplateExport} from './template-export.js?v=200';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.147';
-const APP_BUILD='2026-10-30-top-template-199';
+const APP_BUILD='2026-10-30-template-export-200';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -33,6 +34,7 @@ let violations=null;
 let scoreControl=null;
 let classReport=null;
 let topStudents=null;
+let templateExport=null;
 let choiceReports=null;
 let schoolStudents=[];
 let schoolStudentCatalog=[];
@@ -343,7 +345,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='accounts')accounts?.refresh();
-  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();classReport?.refresh();choiceReports?.refresh();topStudents?.refresh();}
+  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();classReport?.refresh();choiceReports?.refresh();topStudents?.refresh();templateExport?.refresh();}
   if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
     .then(ready=>{if(ready)return violations?.refresh()})
     .catch(error=>message($('absence-message'),error.message,'error'));
@@ -3200,6 +3202,7 @@ async function boot(){
   try{choiceReports=wireChoiceReports({state,$,esc,message,createPrintFrame})}catch(error){message($('choice-report-message'),error.message,'error')}
   try{classReport=wireClassReport({state,$,esc,message,createPrintFrame})}catch(error){message($('class-report-message'),error.message,'error')}
   try{topStudents=wireTopStudents({state,$,esc,message,createPrintFrame})}catch(error){message($('top-students-message'),error.message,'error')}
+  try{templateExport=wireTemplateExport({state,$,esc,message,subjectName})}catch(error){message($('template-export-message'),error.message,'error')}
   try{scoreControl=wireScoreControl({state,$,esc,message,subjectName,onScoresCleared:()=>{operations?.invalidateCombinedScores();classReport?.invalidate();choiceReports?.invalidate()}})}
   catch(error){console.error('Không khởi tạo được kiểm soát điểm:',error);message($('score-control-message'),error.message,'error')}
   try{

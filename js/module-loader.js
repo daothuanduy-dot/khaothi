@@ -5,7 +5,7 @@ const MODULE_VERSION = '0.1.147';
 
 export async function loadTabModules() {
   const modules = await Promise.all(TAB_MODULES.map(async name => {
-    const moduleUrl = new URL(`../modules/${name}.html?v=${MODULE_VERSION}&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199`, import.meta.url);
+    const moduleUrl = new URL(`../modules/${name}.html?v=${MODULE_VERSION}&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=200`, import.meta.url);
     const response = await fetch(moduleUrl, {
       cache: 'no-cache'
     });

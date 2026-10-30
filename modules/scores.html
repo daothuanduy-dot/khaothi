@@ -74,6 +74,25 @@
     <fieldset><legend>Môn đưa vào thống kê</legend><p>Bỏ tích môn không cần hiển thị. Áp dụng cho bảng thống kê, Excel và bản in; không thay đổi đăng ký hoặc điểm.</p><div id="choice-report-subjects"></div></fieldset>
     <div id="choice-report-results"></div>
   </section>
+  <section class="panel" id="template-export-panel">
+    <h3>Ghi kết quả vào mẫu Excel CSDL</h3>
+    <p>Chọn thư mục chứa .xlsx, xác nhận môn và cột đích từng sheet, xem trước rồi xác nhận tạo ZIP kết quả. Không ghi trực tiếp thư mục nguồn, không sửa điểm trong CSDL. Mẫu có thể khác năm/học kỳ; thông tin mẫu chỉ để đối chiếu, không cố định cấu hình.</p>
+    <div class="form-grid">
+      <label>Thư mục tệp mẫu<input id="template-export-files" type="file" webkitdirectory directory multiple></label>
+      <label>Đợt điểm đích<select id="template-export-period"><option value="mid1">Giữa HKI</option><option value="end1">Cuối HKI</option><option value="mid2">Giữa HKII</option><option value="end2">Cuối HKII</option></select></label>
+      <label>Làm tròn khi ghi<select id="template-export-decimals"><option value="keep">Giữ nguyên giá trị điểm nguồn</option><option value="1">1 chữ số thập phân</option><option value="2">2 chữ số thập phân</option><option value="3">3 chữ số thập phân</option></select></label>
+      <label><input id="template-export-overwrite" type="checkbox"> Cho phép thay điểm đã có (không thay ô công thức)</label>
+      <label><input id="template-export-absent" type="checkbox"> Ghi cả điểm bổ sung môn vắng nếu đã có</label>
+    </div>
+    <button type="button" class="btn btn-primary" id="template-export-read">1. Đọc và xác định cột / môn</button>
+    <div id="template-export-mappings"></div>
+    <label><input id="template-export-mapping-confirm" type="checkbox"> Tôi đã kiểm tra và xác nhận môn, cột đích, lớp và vùng học sinh của các sheet được chọn</label>
+    <button type="button" class="btn btn-light" id="template-export-check" disabled>2. Kiểm tra và xem trước dữ liệu</button>
+    <div id="template-export-message" class="notice hidden" role="status"></div>
+    <div id="template-export-preview"></div>
+    <label><input id="template-export-final" type="checkbox"> Tôi xác nhận tạo tệp theo dữ liệu đã xem trước và lựa chọn ghi đè ở trên</label>
+    <button type="button" class="btn btn-primary" id="template-export-write" disabled>3. Xác nhận ghi và tải ZIP kết quả</button>
+  </section>
   <section class="panel" id="top-students-panel">
     <h3>Top 3 học sinh theo nhóm lớp</h3>
     <p>Xếp theo tổng điểm các môn được tính, không theo trung bình. Đồng hạng 1, 1, 3; lấy đầy đủ học sinh có hạng từ 1 đến 3. Môn vắng và chưa có điểm không được cộng; điểm 0 được tính. Kỳ mặc định chỉ cộng môn Tính điểm, kỳ lựa chọn/theo môn cộng các môn dự thi.</p>
