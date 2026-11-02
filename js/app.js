@@ -3311,6 +3311,7 @@ function wireRoomingEditor(){
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
  $('apply-rooming-other-subjects').onclick=applyRoomingToOtherSubjects;
+ if($('grader-class-scores'))$('grader-class-scores').onclick=async()=>{try{const {openClassScores}=await import('./class-scores.js?v=223');await openClassScores({state,examId:state.selectedExam||''})}catch(e){message($('grader-message'),e.message,'error')}};
  for(const id of ['open-absent-scores','grader-absent-scores'])if($(id))$(id).onclick=async()=>{try{const {openAbsentScores}=await import('./absent-scores.js?v=191');await openAbsentScores({state,examId:state.selectedExam||'',subjectName})}catch(e){message($(state.role==='admin'?'global-message':'grader-message'),e.message,'error')}};
  if($('reset-official-rooming'))$('reset-official-rooming').onclick=resetOfficialRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
