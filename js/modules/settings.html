@@ -1,0 +1,38 @@
+<section class="tab-panel hidden" id="tab-settings">
+  <div class="section-heading"><div><h2>Cấu hình kỳ thi</h2><p>Thiết lập môn, lớp và hình thức thi trước khi xếp phòng, đánh phách hoặc nhập điểm.</p></div></div>
+  <div class="form-grid"><label>Kỳ thi<select id="settings-exam-select"><option value="">-- Chọn kỳ thi --</option></select></label></div>
+  <section id="ranking-setup" class="panel">
+    <h3>Học kỳ phân công và ban xếp hạng</h3>
+    <div id="ranking-message" class="notice hidden" role="status"></div>
+    <label>Học kỳ lấy giáo viên<select id="ranking-period"><option value="">-- Chọn học kỳ --</option></select></label>
+    <p>Liên kết này dùng để tra giáo viên dạy từng lớp, môn và GVCN khi thống kê.</p>
+    <div class="form-actions"><button id="ranking-refresh" class="btn btn-light" type="button">Tải lại</button><button id="ranking-save" class="btn btn-primary" type="button" disabled>Lưu liên kết và các ban</button><button id="ranking-new" class="btn btn-light" type="button">Thêm ban</button></div>
+    <p id="ranking-summary" role="status"></p>
+    <div id="ranking-list" class="table-wrap"></div>
+    <div id="ranking-editor" hidden>
+      <h4 id="ranking-editor-title">Thiết lập ban</h4>
+      <div class="form-grid"><label>Tên ban<input id="ranking-name" maxlength="100" placeholder="Ví dụ: Khoa học tự nhiên"></label><label>Khối<select id="ranking-grade"></select></label></div>
+      <p>Chọn các lớp cùng khối. Mỗi lớp chỉ thuộc một ban trong kỳ thi.</p>
+      <div id="ranking-classes" class="checkbox-grid"></div>
+      <div class="form-actions"><button id="ranking-apply" class="btn btn-light" type="button">Đưa vào danh sách ban</button><button id="ranking-cancel" class="btn btn-light" type="button">Hủy sửa ban</button></div>
+    </div>
+    <p>Chỉ xếp hạng trong cùng ban. Hệ thống kiểm tra các lớp có cùng bộ môn Tính điểm; ban chưa phù hợp vẫn lưu được để hoàn thiện, nhưng chưa đủ điều kiện xếp hạng.</p>
+  </section>
+  <div id="default-subject-class-config" class="panel hidden">
+    <div class="section-heading"><div><h3>Thêm hoặc sửa cấu hình môn</h3><p>Chọn môn, các lớp dự thi và hình thức thi. Nút Lưu sẽ thêm mới hoặc cập nhật cấu hình của môn đang chọn.</p></div></div>
+    <div class="form-grid">
+      <label>Môn thi<select id="default-config-subject"></select></label>
+      <label>Hình thức thi<select id="default-config-method"><option value="room">Thi chia phòng</option><option value="class">Thi tại lớp</option></select></label>
+      <label>Loại môn<select id="default-config-subject-type"><option value="required">Bắt buộc</option><option value="elective">Lựa chọn</option></select></label>
+      <label class="check-field"><span>Tổng hợp</span><span><input id="default-config-counted" type="checkbox" checked> Tính điểm tổng hợp</span></label>
+    </div>
+    <div class="picker-panel"><div class="picker-heading"><strong>Chọn lớp áp dụng</strong><div><button id="default-config-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="default-config-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><p id="default-config-availability" class="muted"></p><div id="default-config-classes" class="checkbox-grid"></div></div>
+    <div class="form-actions"><button id="default-config-save" class="btn btn-primary" type="button">Lưu cấu hình môn</button><button id="default-config-reset" class="btn btn-light" type="button">Thêm cấu hình khác</button></div>
+    <div id="default-config-message" class="notice hidden"></div>
+  </div>
+  <section id="default-config-list-panel" class="panel hidden">
+    <div class="section-heading"><div><h3>Danh sách môn đã cấu hình</h3><p>Chọn Sửa để nạp lại dữ liệu vào biểu mẫu. Xóa sẽ xóa cấu hình môn–lớp và danh sách dự thi được tạo từ cấu hình đó.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Môn</th><th>Loại</th><th>Hình thức</th><th>Lớp áp dụng</th><th>Tính điểm</th><th>Thao tác</th></tr></thead><tbody id="default-config-list-body"><tr><td colspan="6" class="empty">Chọn kỳ thi mặc định.</td></tr></tbody></table></div>
+  </section>
+  <div id="settings-subject-mode-note" class="notice notice-info">Kỳ thi theo môn không dùng cụm cấu hình này; đăng ký môn và SBD được quản lý theo từng môn.</div>
+</section>

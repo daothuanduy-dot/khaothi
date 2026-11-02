@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Hệ thống quản lý kỳ thi, số báo danh và xếp phòng thi THPT Lê Hồng Phong">
+  <title>Khảo thí trực tuyến | THPT Lê Hồng Phong</title>
+  <link rel="stylesheet" href="./css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+  <style>
+    #tab-scores [hidden]{display:none!important}
+    .score-control-scroll{max-height:360px;overflow:auto;margin:12px 0}
+    .score-control-scroll table{border-collapse:separate;border-spacing:0}
+    .score-control-scroll thead th{position:sticky;top:0;z-index:1;background:#eef3fa}
+    #score-control-preview{border:1px solid #f0b7ae;background:#fff9f8}
+    .absence-outside-note{max-width:350px;padding:8px;margin-top:7px;background:#fff3dd;color:#805600;border-radius:7px;font-size:12px}
+    .absence-outside-note label{display:flex;gap:7px;align-items:center;margin-top:5px}
+    .absence-outside-note input{width:16px!important;min-height:16px!important;height:16px;flex:none}
+    .absence-subject-checks{display:grid;grid-template-columns:repeat(2,minmax(100px,1fr));gap:7px 12px;min-width:240px;max-height:150px;overflow:auto;border:1px solid #dce4f1;border-radius:8px;padding:8px;margin:0}
+    .absence-subject-checks label{display:flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;font-weight:400}
+    .absence-subject-checks input[type="checkbox"]{width:16px!important;min-height:16px!important;height:16px;flex:none;margin:0}
+    .absence-subject-checks:disabled{opacity:.55}
+    #tab-absences [hidden]{display:none!important}
+    .attendance-scroll{max-height:440px;overflow:auto;scroll-margin-top:20px}
+    .attendance-report{max-height:300px}
+    .attendance-scroll table{border-collapse:separate;border-spacing:0}
+    .attendance-scroll thead th{position:sticky;top:0;z-index:1;background:#eef3fa}
+    .attendance-scroll td{vertical-align:middle}
+    .student-picker{position:relative;min-width:0}
+    .student-picker>label{display:block;margin-bottom:7px}
+    .student-picker-field{display:flex;border:1px solid #cad6e8;border-radius:10px;background:white;overflow:hidden}
+    .student-picker-field input{flex:1;min-width:0;width:100%;border:0!important;box-shadow:none!important}
+    .student-picker-field button{flex:none;border:0;background:#f1f5fb;min-width:38px;cursor:pointer}
+    .student-picker-field:focus-within{outline:2px solid #2563eb;outline-offset:1px}
+    .student-picker-options{position:absolute;top:100%;left:0;right:0;z-index:20;max-height:260px;overflow:auto;background:white;border:1px solid #cad6e8;border-radius:10px;box-shadow:0 12px 28px #172d4a22}
+    .student-picker-option{padding:10px 12px;cursor:pointer;overflow-wrap:anywhere}
+    .student-picker-option:hover,.student-picker-option.active{background:#e8f0ff}
+    .student-picker-option[aria-selected="true"]{font-weight:600;color:#1d4ed8}
+    .student-picker-empty{padding:12px;color:#64748b}
+    #ranking-editor[hidden]{display:none!important}
+    #teaching-class-picker[hidden]{display:none!important}
+    #teaching-picker-list{max-height:350px;overflow:auto;margin:12px 0}
+    #teaching-matrix{max-height:65vh;overflow:auto}
+    #teaching-matrix table{border-collapse:separate;border-spacing:0}
+    #teaching-matrix thead th{position:sticky;top:0;z-index:2;background:#eef3fa}
+    #teaching-matrix tr>th:first-child{position:sticky;left:0;z-index:1;background:#eef3fa;min-width:90px}
+    #teaching-matrix thead th:first-child{z-index:3}
+    #teaching-matrix select{min-width:180px;max-width:250px;width:100%}
+    #teaching-matrix .teaching-empty{background:#fff7e6}
+    #teaching-matrix .teaching-dirty{box-shadow:inset 0 0 0 2px #3b82f6}
+    #accounts-dialog [hidden]{display:none!important}
+    #accounts-dialog{max-height:90vh;overflow:auto}
+    #login-screen{max-width:520px;margin:48px auto;padding:32px;border:1px solid #dce4f1;border-radius:20px;background:#fff;box-shadow:0 16px 48px #18315312}
+    #login-screen h1{font-size:28px;margin:12px 0}#login-screen .login-intro{line-height:1.65;color:#52627a}
+    #login-form{display:grid;grid-template-columns:1fr;gap:18px;margin-top:24px}#login-form label{display:grid;gap:8px;font-weight:600}
+    #login-form input{width:100%;min-width:0;box-sizing:border-box;min-height:44px}#login-form button,#google-login{min-height:44px}
+    .login-password-field{display:flex;gap:8px;align-items:center}.login-password-field input{flex:1}.login-password-field button{flex:none}
+    #google-login{width:100%}.login-divider{text-align:center;color:#66758a;margin:18px 0}.login-help{font-size:14px;line-height:1.6;color:#52627a}
+    .login-access-note{padding:14px;background:#eff6ff;border-radius:10px;color:#274469;font-size:14px;line-height:1.6}
+    .login-config{margin-top:20px;font-size:13px;color:#52627a}.login-config summary{cursor:pointer}.login-config button{margin-top:12px}
+    @media(max-width:600px){#login-screen{margin:20px 12px;padding:24px 20px}#login-screen h1{font-size:25px}}
+    .candidate-toolbar{align-items:center;gap:16px}.candidate-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,1fr) minmax(220px,2fr) auto;gap:12px;align-items:end;margin:18px 0}
+    .candidate-bulk-toolbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin-bottom:12px;background:#f5f7fb;border:1px solid #dce4f1;border-radius:12px}
+    .select-all-label{display:flex;align-items:center;gap:8px}.candidate-bulk-toolbar span{color:#64748b;margin-right:auto}
+    .candidate-actions{white-space:nowrap}.danger-btn{background:#fff0f0!important;color:#b42318!important;border:1px solid #fecaca!important}
+    .candidate-modal{width:min(760px,calc(100vw - 28px));max-width:760px;border:0;border-radius:18px;padding:0;box-shadow:0 24px 80px #0f172a44}
+    .candidate-modal::backdrop{background:#0f172a88;backdrop-filter:blur(2px)}.candidate-modal form{padding:24px}
+    .modal-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.modal-heading h3{margin:0 0 6px}.modal-heading p{margin:0;color:#64748b}
+    .modal-close{border:0;background:#eef2f7;border-radius:10px;width:38px;height:38px;font-size:25px;cursor:pointer}
+    .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+    .candidate-modal label{display:flex;flex-direction:column;gap:7px}
+    .candidate-modal input,.candidate-modal select{width:100%;box-sizing:border-box}
+    #round-candidate-dialog{width:min(900px,94vw);max-height:90vh;overflow:auto;border:1px solid #d7e0ee;border-radius:16px;padding:20px}
+    #round-candidate-dialog::backdrop{background:rgba(15,23,42,.45)}
+    .round-candidate-form{padding:4px}.round-candidate-form .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}.round-candidate-form .modal-header h3{margin:0 0 6px}.round-candidate-form .modal-header p{margin:0;color:#64748b}.round-candidate-filters{grid-template-columns:1fr 1fr 2fr}.round-candidate-list{max-height:52vh;overflow:auto;border:1px solid #d7e0ee;border-radius:12px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}.round-candidate-row{display:grid!important;grid-template-columns:auto 1fr;column-gap:8px;align-items:center;padding:9px;border-radius:8px;background:#f8fafc}.round-candidate-row small{grid-column:2;color:#64748b}.round-candidate-row input{width:auto!important}
+    @media(max-width:800px){.round-candidate-filters,.round-candidate-list{grid-template-columns:1fr}}
+    .candidate-row-check{width:16px;height:16px}
+    @media(max-width:800px){.candidate-filters{grid-template-columns:1fr 1fr}.candidate-modal form{padding:18px}.candidate-modal .form-grid{grid-template-columns:1fr}}
+  .roster-import-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:14px;margin:14px 0;display:flex;flex-direction:column;gap:8px}
+.roster-import-box label{display:flex;flex-direction:column;gap:4px}.roster-import-box label span,.roster-import-box .help-text{font-size:13px;color:#64748b;margin:0}
+.roster-import-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.roster-import-controls input{max-width:100%;flex:1;min-width:240px}
+</style>
+<style>
+.candidate-delete-progress{margin:12px 0 16px;padding:14px 16px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px}
+.delete-progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#1e3a8a}
+.delete-progress-track{height:10px;background:#dbeafe;border-radius:999px;overflow:hidden;margin:10px 0}
+.delete-progress-bar{height:100%;background:#2563eb;border-radius:999px;transition:width .2s ease}
+#candidate-delete-progress-detail{margin:0;color:#475569;font-size:.9rem}
+.candidate-delete-progress.done{background:#f0fdf4;border-color:#bbf7d0}.candidate-delete-progress.done .delete-progress-heading{color:#166534}.candidate-delete-progress.done .delete-progress-bar{background:#16a34a}
+.candidate-delete-progress.failed{background:#fff7ed;border-color:#fed7aa}.candidate-delete-progress.failed .delete-progress-heading{color:#9a3412}.candidate-delete-progress.failed .delete-progress-bar{background:#ea580c}
+</style><style>
+.picker-panel{border:1px solid #d7e0ee;border-radius:12px;padding:12px;min-width:0}
+.picker-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.picker-heading>div{display:flex;gap:6px}
+.btn-small{padding:6px 10px;font-size:13px}
+.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;max-height:260px;overflow:auto}
+.picker-option{display:flex;align-items:flex-start;gap:8px;border:1px solid #e2e8f0;border-radius:8px;padding:9px 10px;font-weight:500;min-width:0}
+.picker-option input{margin-top:3px;flex:0 0 auto}
+.picker-option span{overflow-wrap:anywhere}
+.picker-empty{color:#64748b;padding:10px}
+ .version-pill{font-size:12px;font-weight:700;background:#eaf2ff;color:#1d4ed8;border:1px solid #bfdbfe}
+</style>
+<style>
+.subject-roster-panel,.overage-panel,.roster-stat-panel{margin-top:20px;padding:18px;border:1px solid #dce4f1;border-radius:16px;background:#fff}
+.roster-filters{grid-template-columns:minmax(140px,1fr) minmax(160px,1fr) minmax(200px,1.5fr) auto}
+.roster-checkbox{display:flex!important;align-items:center;gap:8px;min-height:42px}.roster-checkbox input{width:auto}
+.roster-summary,.roster-stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.roster-summary .metric,.roster-stat-card{border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.roster-summary .metric span,.roster-stat-card span{font-size:13px;color:#64748b}.roster-summary .metric strong,.roster-stat-card strong{font-size:22px;color:#0f172a}
+.roster-table-wrap{max-height:560px;overflow:auto}.roster-table-wrap thead th{position:sticky;top:0;background:#f1f5f9;z-index:1}
+.roster-table-wrap select{min-width:130px;max-width:180px;padding:7px;border:1px solid #cbd5e1;border-radius:8px;background:white}
+.roster-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:12px}.roster-footer>div{display:flex;gap:8px;align-items:center}
+.roster-stats-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.roster-stat-card .stat-bar{height:7px;border-radius:99px;background:#dbeafe;overflow:hidden}.roster-stat-card .stat-bar i{display:block;height:100%;background:#2563eb}
+.roster-dirty{background:#fff7ed!important;border-color:#fdba74!important}.overage-tag{display:inline-block;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;padding:3px 7px;border-radius:99px;font-size:12px;font-weight:700}
+@media(max-width:850px){.roster-filters,.overage-filters{grid-template-columns:1fr 1fr}.roster-summary{grid-template-columns:1fr}.roster-table-wrap{overflow-x:auto}.roster-table-wrap table{min-width:850px}}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.149</span><span id="connection-state" class="status-pill">Chưa kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+  </header>
+  <main class="container">
+    <section id="setup-screen" class="panel setup-panel">
+      <div class="eyebrow">CẤU HÌNH LẦN ĐẦU</div><h1>Kết nối Supabase</h1>
+      <p>Nhập URL và khóa <b>publishable/anon</b> của project Supabase khảo thí. Không nhập khóa <code>service_role</code>.</p>
+      <form id="setup-form" class="form-grid">
+        <label>Supabase Project URL<input id="supabase-url" type="url" placeholder="https://xxxxxxxx.supabase.co" required></label>
+        <label>Publishable / anon key<input id="supabase-key" type="password" placeholder="sb_publishable_... hoặc anon key" required autocomplete="off"></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Kết nối</button><button class="btn btn-light" id="clear-config" type="button">Xóa cấu hình</button></div>
+      </form>
+      <div id="setup-message" class="notice hidden" role="alert" aria-live="polite"></div>
+      <p class="hint">Cấu hình được lưu trong trình duyệt hiện tại. Nếu dùng máy dùng chung, hãy đăng xuất và xóa cấu hình khi cần.</p>
+    </section>
+
+    <section id="login-screen" class="panel login-panel hidden">
+      <div class="eyebrow">CỔNG NHẬP ĐIỂM GIÁO VIÊN</div>
+      <h1>Đăng nhập để nhập điểm</h1>
+      <p class="login-intro">Sử dụng tài khoản cá nhân do nhà trường cấp. Môn thi và danh sách bài được hiển thị theo phân công của bạn.</p>
+      <form id="login-form" class="form-grid">
+        <label>Email tài khoản<input id="login-email" type="email" required autocomplete="username" placeholder="giaovien@truong.edu.vn" autocapitalize="none" spellcheck="false"></label>
+        <label>Mật khẩu<span class="login-password-field"><input id="login-password" type="password" required autocomplete="current-password"><button id="login-toggle-password" class="btn btn-light" type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></span></label>
+        <button id="login-submit" class="btn btn-primary" type="submit">Đăng nhập</button>
+      </form>
+      <div id="login-message" class="notice hidden" role="alert" aria-live="polite"></div>
+      <div class="login-divider">hoặc</div>
+      <button id="google-login" class="btn btn-light" type="button">Đăng nhập bằng Google</button>
+      <p class="login-help">Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị nhà trường để được hỗ trợ.</p>
+      <div class="login-access-note">Giáo viên được chuyển đến khu vực nhập điểm. Quản trị viên được chuyển đến trang quản lý theo quyền của tài khoản.</div>
+      <details class="login-config"><summary>Cấu hình kết nối dành cho quản trị</summary><button class="btn btn-light" id="change-config" type="button">Đổi cấu hình</button></details>
+    </section>
+
+    <section id="app-screen" class="hidden">
+      <div class="welcome-row"><div><div class="eyebrow">BẢNG ĐIỀU KHIỂN</div><h1 id="app-title">Quản lý kỳ thi</h1><p>Quản lý kỳ thi, đăng ký môn lựa chọn và phương án xếp phòng.</p></div><button id="reload-exams" class="btn btn-light">Làm mới</button></div>
+      <nav class="tabs" aria-label="Chức năng"><button class="tab active" data-tab="exams">Kỳ thi</button><button class="tab" data-tab="school-students">DS học sinh</button><button class="tab" data-tab="candidates">Hồ sơ thí sinh</button><button class="tab" data-tab="subjects">Môn thi</button><button class="tab" data-tab="sbd">Quản lý SBD</button><button class="tab" data-tab="rooming">Xếp phòng thi</button><button class="tab" data-tab="forms">Biểu mẫu</button><button class="tab" data-tab="absences">Vắng / Vi phạm</button><button class="tab" data-tab="scripts">Quản lý phách</button><button class="tab" data-tab="accounts">Quản lý tài khoản</button><button class="tab" data-tab="teaching">Phân công giảng dạy</button><button class="tab" data-tab="scores">Tổng hợp điểm</button><button class="tab" data-tab="settings">Cấu hình</button></nav>
+      <div id="global-message" class="notice hidden"></div>
+
+            <div class="tab-module" id="module-exams" data-module="exams"></div>
+
+            <div class="tab-module" id="module-school-students" data-module="school-students"></div>
+
+            <div class="tab-module" id="module-candidates" data-module="candidates"></div>
+
+            <div class="tab-module" id="module-subjects" data-module="subjects"></div>
+
+            <div class="tab-module" id="module-sbd" data-module="sbd"></div>
+
+            <div class="tab-module" id="module-rooming" data-module="rooming"></div>
+
+            <div class="tab-module" id="module-forms" data-module="forms"></div>
+
+            <div class="tab-module" id="module-absences" data-module="absences"></div>
+
+            <div class="tab-module" id="module-scripts" data-module="scripts"></div>
+
+            <div class="tab-module" id="module-scores" data-module="scores"></div>
+
+            <div class="tab-module" id="module-settings" data-module="settings"></div>
+            <div class="tab-module" id="module-accounts" data-module="accounts"></div>
+            <div class="tab-module" id="module-teaching" data-module="teaching"></div>
+    </section>
+<dialog id="subject-manage-dialog" class="modal-dialog">
+  <div class="modal-header"><div><h3 id="subject-manage-title">Quản lý học sinh theo môn</h3><p id="subject-manage-subtitle">Thêm, chuyển môn hoặc xóa đăng ký.</p></div><button id="subject-manage-close" class="btn btn-light" type="button">Đóng</button></div>
+  <div class="form-grid">
+    <label>Thao tác<select id="subject-manage-action"><option value="remove">Xóa đăng ký môn đã chọn</option><option value="move">Chuyển học sinh sang môn khác</option></select></label>
+    <label id="subject-manage-target-wrap" class="hidden">Môn đích<select id="subject-manage-target"></select></label>
+  </div>
+  <div class="picker-panel"><div class="picker-heading"><strong>Học sinh đã đăng ký môn này</strong><div><button id="subject-manage-select-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-manage-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-manage-current" class="checkbox-grid"></div></div>
+  <div class="picker-panel" style="margin-top:12px"><div class="picker-heading"><strong>Thêm học sinh chưa đăng ký môn này</strong><div><button id="subject-manage-add-all" class="btn btn-light btn-small" type="button">Chọn tất cả</button><button id="subject-manage-add-clear" class="btn btn-light btn-small" type="button">Bỏ chọn</button></div></div><div id="subject-manage-available" class="checkbox-grid"></div></div>
+  <div id="subject-manage-message" class="notice hidden"></div>
+  <div class="modal-actions"><button id="subject-manage-save" class="btn btn-primary" type="button">Lưu thay đổi</button></div>
+</dialog>
+<style>
+#subject-manage-dialog{width:min(1000px,94vw);max-height:90vh;overflow:auto;border:1px solid #d7e0ee;border-radius:16px;padding:20px}
+#subject-manage-dialog::backdrop{background:rgba(15,23,42,.45)}
+#subject-manage-dialog .modal-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+#subject-manage-dialog .modal-header h3{margin:0 0 6px}
+#subject-manage-dialog .modal-header p{margin:0;color:#64748b}
+.room-editor-dialog{width:min(960px,94vw);max-height:90vh;overflow:auto}
+.room-editor-dialog form{padding:24px}
+.room-editor-columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.room-editor-columns section{display:flex;flex-direction:column;gap:8px;min-width:0}
+.room-editor-columns select{width:100%;min-height:260px;border:1px solid #cbd5e1;border-radius:10px;padding:8px}
+.room-editor-columns option{padding:5px}
+.rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
+@media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
+</style>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.125 · build 2026-10-22-subject-exam-sbd</span></span><span>GitHub Pages + Supabase</span></footer>
+  </main>
+  <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
+    <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
+    <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM NGỮ VĂN</div><h1>Chấm bài theo phách</h1><p>Môn Ngữ văn dùng mã môn VAN; chọn đầu phách để mở danh sách bài được giao.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
+    <div class="form-grid">
+      <label>Kỳ thi<select id="grader-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
+      <label id="grader-subject-wrap" class="hidden">Môn thi<select id="grader-subject"><option value="VAN">Ngữ văn (VAN)</option></select></label>
+      <label>Đầu phách<select id="grader-prefix"><option value="">-- Tất cả đầu phách --</option></select></label>
+      <label class="check-field"><span>Nhập nhanh</span><span><input id="grader-use-default" type="checkbox"> Điền điểm mặc định cho các phách chưa nhập</span></label>
+      <input id="grader-default-score" type="hidden">
+    </div>
+    <div class="form-actions"><button id="grader-save-all" class="btn btn-primary" type="button">Lưu túi bài</button><button id="grader-edit-bag" class="btn btn-light" type="button">Sửa túi bài</button></div>
+    <div id="grader-message" class="notice hidden" role="status" aria-live="polite"></div>
+    <div id="grader-window-status" class="notice notice-info" role="status">Chọn kỳ thi để xem thời hạn nhập điểm.</div>
+    <p class="help-text">Nhập nhanh bằng số liền: 775 → 7,75; 85 → 8,5; 10 → 10. Nhấn Enter để sang phách kế tiếp. “Không bài” được lưu riêng, không nhầm với điểm 0. Lưu và Sửa áp dụng cho toàn bộ túi bài đang mở.</p>
+    <div id="grader-score-rules" class="notice notice-info">Điểm được kiểm tra theo cấu hình của môn.</div>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Mã phách</th><th>Điểm nhập</th><th>Không bài</th><th>Cập nhật</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và đầu phách.</td></tr></tbody></table></div>
+  </section>
+  <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
+  <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
+    <script type="module" src="./js/app.js?v=0.1.149&absences=149" data-previous-src="js/app.js?v=0.1.128"></script>
+  <script>
+    (() => {
+      // Runs independently of app.js, including when an old app/loader is served.
+      document.addEventListener('click', event => {
+        if (!event.target.closest('[data-tab="teaching"]')) return;
+        if (document.getElementById('tab-teaching')) return;
+        const notice=document.getElementById('global-message');
+        notice.textContent='Chưa tải được giao diện Phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html rồi tải lại bằng Ctrl+F5. Chạy SQL riêng không bổ sung được giao diện này.';
+        notice.className='notice notice-error';
+      });
+      const form = document.getElementById('setup-form');
+      form.addEventListener('submit', event => {
+        if (form.dataset.connectionHandler === 'ready') return;
+        event.preventDefault();
+        const notice = document.getElementById('setup-message');
+        notice.textContent = 'Ứng dụng chưa khởi tạo xong nên chưa thể kết nối. Hãy tải lại trang bằng Ctrl+F5; nếu vẫn gặp lỗi, kiểm tra Console để xem lỗi tải js/app.js.';
+        notice.className = 'notice notice-error';
+        notice.classList.remove('hidden');
+      });
+    })();
+  </script>
+</body>
+</html>
