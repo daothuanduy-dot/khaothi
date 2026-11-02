@@ -1,14 +1,22 @@
 const TAB_MODULES = ['exams', 'school-students', 'candidates', 'subjects', 'sbd', 'rooming', 'forms', 'absences', 'scripts', 'accounts', 'teaching', 'scores', 'settings'];
 // Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
-const MODULE_VERSION = '0.1.203';
+const MODULE_VERSION = '0.1.204';
 // Legacy compatibility marker retained for older static checks: MODULE_VERSION = '0.1.90'.
 
 export async function loadTabModules() {
   const modules = await Promise.all(TAB_MODULES.map(async name => {
     const moduleUrl = new URL(`../modules/${name}.html?v=${MODULE_VERSION}&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202`, import.meta.url);
-    const response = await fetch(moduleUrl, {
-      cache: 'no-cache'
-    });
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let response;
+    try {
+      response=await fetch(moduleUrl,{cache:'no-cache',signal:controller.signal});
+    } catch(error) {
+      if(controller.signal.aborted)throw new Error(`Hết thời gian tải giao diện module "${name}" sau 15 giây.`);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       throw new Error(`Không tải được giao diện module "${name}" (HTTP ${response.status}).`);
     }

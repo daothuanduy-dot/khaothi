@@ -6,24 +6,24 @@ import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.203&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.203&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.203&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
-import {wireAccounts} from './accounts.js?v=0.1.203';
-import {wireTeaching} from './teaching.js?v=0.1.203';
-import {wireRanking} from './ranking.js?v=0.1.203';
-import {wireViolations} from './violations.js?v=0.1.203';
-import {createStudentPicker} from './student-picker.js?v=0.1.203';
-import {wireScoreControl} from './score-control.js?v=0.1.203&absentscores=191&roomlabels=192&amendments=193';
-import {wireClassReport} from './class-report.js?v=0.1.203&classreport=197';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.204&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
+import {loadTabModules} from './module-loader.js?v=0.1.204&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.204&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
+import {wireAccounts} from './accounts.js?v=0.1.204';
+import {wireTeaching} from './teaching.js?v=0.1.204';
+import {wireRanking} from './ranking.js?v=0.1.204';
+import {wireViolations} from './violations.js?v=0.1.204';
+import {createStudentPicker} from './student-picker.js?v=0.1.204';
+import {wireScoreControl} from './score-control.js?v=0.1.204&absentscores=191&roomlabels=192&amendments=193';
+import {wireClassReport} from './class-report.js?v=0.1.204&classreport=197';
 import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=202';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
-import {wireChoiceReports} from './choice-report.js?v=0.1.203&choice=151&precision=168';
-import {loadExamRounds} from './rounds.js?v=0.1.203';
+import {wireChoiceReports} from './choice-report.js?v=0.1.204&choice=151&precision=168';
+import {loadExamRounds} from './rounds.js?v=0.1.204';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.203';
-const APP_BUILD='2026-11-02-subject-room-phach-203';
+const APP_VERSION='v0.1.204';
+const APP_BUILD='2026-11-02-connection-diagnostics-204';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -67,11 +67,33 @@ function message(el,text,type='info'){el.textContent=text;el.className=`notice n
 function hide(el){el.classList.add('hidden')}
 function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen','grader-screen'])$(id).classList.toggle('hidden',id!==name)}
 function setConnection(text,ok=false){$('connection-state').textContent=text;$('connection-state').style.background=ok?'#166534':'transparent';$('connection-state').style.color=ok?'white':'#dce8fb'}
+const CONNECTION_TIMEOUT_MS=15000;
+async function fetchWithTimeout(url,options,label){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),CONNECTION_TIMEOUT_MS);
+  try{return await globalThis.fetch(url,{...options,signal:controller.signal})}
+  catch(error){
+    if(controller.signal.aborted)throw new Error(`${label} quá thời gian chờ ${CONNECTION_TIMEOUT_MS/1000} giây.`);
+    throw error;
+  }finally{clearTimeout(timeout)}
+}
+async function waitForConnection(promise){
+  let timeout;
+  try{
+    return await Promise.race([
+      promise,
+      new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error(`Khởi tạo phiên Supabase quá ${CONNECTION_TIMEOUT_MS/1000} giây.`)),CONNECTION_TIMEOUT_MS)})
+    ]);
+  }finally{clearTimeout(timeout)}
+}
 function saveConfig(url,key){localStorage.setItem('exam_supabase_url',url);localStorage.setItem('exam_supabase_key',key)}
 function readConfig(){return validatePublicConfig(publicConfig)}
 async function connect(url,key){
   ({url,key}=validatePublicConfig({url,key}));
   state.client=null;state.session=null;
+  const fetch=(endpoint,options)=>fetchWithTimeout(endpoint,options,'Kết nối Supabase');
+  setConnection('Đang kết nối...');
+  message($('login-message'),'Đang kiểm tra khả năng kết nối tới cơ sở dữ liệu...','info');
   if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase JS từ CDN. Kiểm tra kết nối Internet, tiện ích chặn quảng cáo hoặc mở CDN jsDelivr.');
   let parsed;
   try{parsed=new URL(url)}catch{throw new Error('URL project không hợp lệ. Hãy sao chép nguyên URL trong Supabase → Settings → API.')}
@@ -96,8 +118,10 @@ async function connect(url,key){
     }
   }
   if(!reachable)throw new Error('Không xác minh được kết nối tới Supabase. Kiểm tra URL project, khóa publishable/anon, trạng thái project và kết nối mạng. Chi tiết: '+probeErrors.join(' | '));
+  setConnection('Đang mở phiên...');
+  message($('login-message'),'Đã tới được Supabase, đang kiểm tra phiên đăng nhập...','info');
   const client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  const {data,error}=await client.auth.getSession();
+  const {data,error}=await waitForConnection(client.auth.getSession());
   if(error)throw new Error('Đã tới được Supabase nhưng không đọc được phiên xác thực trong trình duyệt: '+error.message);
   state.client=client;state.session=data.session||null;
   setConnection('Đã kết nối Supabase',true);
@@ -117,7 +141,7 @@ function showConnectionFailure(error){
   setConnection('Kết nối lỗi');
   showScreen('login-screen');
   $('login-submit').disabled=true;$('google-login').disabled=true;
-  message($('login-message'),'Chưa kết nối được hệ thống. Vui lòng tải lại trang hoặc liên hệ quản trị nhà trường.','error');
+  message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
 function updateVersionDisplay(){const label=`Phiên bản ${APP_VERSION} · build ${APP_BUILD}`;const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
@@ -3184,12 +3208,15 @@ function wireRoomingEditor(){
 async function boot(){
   showScreen('login-screen');
   $('login-submit').disabled=true;$('google-login').disabled=true;
+  setConnection('Đang tải giao diện...');
+  message($('login-message'),'Đang tải các thành phần của ứng dụng...','info');
   try{
     const moduleVersion=await loadTabModules();
     if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
     ensureCandidateClassDropdown();
   }catch(error){
     showScreen('login-screen');
+    setConnection('Lỗi giao diện');
     console.error('Không tải được giao diện khi khởi động:',error);
     message($('login-message'),'Không tải được giao diện, ứng dụng chưa đến bước kết nối cơ sở dữ liệu. '+(error.message||String(error)),'error');
     return;
