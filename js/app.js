@@ -7,8 +7,8 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.220&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.220&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
+import {loadTabModules} from './module-loader.js?v=0.1.221&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.221&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireRanking} from './ranking.js?v=0.1.212';
@@ -22,7 +22,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.220';
+const APP_VERSION='v0.1.221';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -2008,6 +2008,78 @@ async function saveRooming(){
   if(state.preview===preview)updateRoomingActions();
  }
 }
+// v0.1.221: Batch-copy an official fixed-seat plan only to subjects with the
+// exact same eligible candidate IDs. Never replace an existing official plan.
+async function applyRoomingToOtherSubjects(){
+ const button=$('apply-rooming-other-subjects');
+ const preview=state.preview;
+ if(!preview||preview.planType!=='mandatory'||!preview.finalized||!preview.sourcePlanId){
+  message($('rooming-message'),'Chỉ áp dụng từ phương án môn bắt buộc đã phân phòng chính thức.','error');return;
+ }
+ const {examId,roundNo,subjectCode}=preview;
+ if(preview.saving||preview.finalizing)return;
+ const originalKey=roomingSelectionKey();
+ button.disabled=true;
+ try{
+  const {data:roster,error:rosterError}=await state.client.rpc('exam_get_round_candidates',{p_exam_id:examId,p_round_no:roundNo});
+  if(rosterError)throw rosterError;
+  const candidates=Array.isArray(roster)?roster:[];
+  const classConfigs=await selectAllPages(()=>state.client.from('exam_subject_class_configs')
+   .select('subject_code,class_code,exam_method,is_counted').eq('exam_id',examId));
+  const subjectRows=await selectAllPages(()=>state.client.from('exam_round_subjects')
+   .select('subject_code').eq('exam_id',examId).eq('round_no',roundNo));
+  const allowedSubjects=new Set(subjectRows.map(r=>String(r.subject_code||'').trim().toUpperCase()));
+  const configBySubject=new Map();
+  for(const row of classConfigs){
+   const code=String(row.subject_code||'').trim().toUpperCase();
+   if(row.exam_method!=='room'||row.is_counted!==true)continue;
+   if(!configBySubject.has(code))configBySubject.set(code,new Set());
+   configBySubject.get(code).add(String(row.class_code||'').trim().toUpperCase());
+  }
+  const sourceAssignments=preview.result.assignments;
+  const sourceIds=new Set(sourceAssignments.map(a=>String(a.candidate_id)));
+  if(sourceIds.size!==sourceAssignments.length||!sourceIds.size)throw new Error('Phương án nguồn có mã thí sinh trùng hoặc rỗng.');
+  const sourceRooms=preview.result.rooms.filter(r=>Number(r.student_count)>0);
+  const available=[];
+  const skipped=[];
+  for(const code of [...allowedSubjects].sort()){
+   if(code===subjectCode)continue;
+   const classes=configBySubject.get(code);
+   // Whole-exam mandatory subjects are eligible only when the roster is identical.
+   const ids=new Set(candidates.filter(c=>['TOAN','VAN','N1'].includes(code)||classes?.has(String(c.class_code||'').trim().toUpperCase())).map(c=>String(c.id)));
+   if(!ids.size||ids.size!==sourceIds.size||[...sourceIds].some(id=>!ids.has(id))){skipped.push(`${code}: danh sách thí sinh khác môn nguồn`);continue;}
+   const existing=await findCurrentRoomingFinalization(examId,'mandatory',code,roundNo);
+   if(existing){skipped.push(`${code}: đã có phương án chính thức`);continue;}
+   available.push(code);
+  }
+  if(roomingSelectionKey()!==originalKey||state.preview!==preview)throw new Error('Bạn đã chuyển môn trong lúc kiểm tra. Hãy thực hiện lại.');
+  if(!available.length){message($('rooming-message'),'Không có môn đủ điều kiện để áp dụng. '+skipped.join('; '),'info');return;}
+  if(!confirm(`Sao chép nguyên vị trí phòng/SBD từ ${subjectName(subjectCode)} cho ${available.map(subjectName).join(', ')}?\nKhông ghi đè phương án chính thức.\n${skipped.length?'Bỏ qua: '+skipped.join('; '):''}`))return;
+  const results=[];
+  for(const code of available){
+   if(roomingSelectionKey()!==originalKey||state.preview!==preview){results.push('Đã dừng: thay đổi lựa chọn môn');break;}
+   try{
+    // Re-check before each write to prevent overwriting a newly finalized plan.
+    if(await findCurrentRoomingFinalization(examId,'mandatory',code,roundNo)){results.push(`${code}: bỏ qua (đã chốt)`);continue;}
+    const rooms=sourceRooms.map(r=>({...r,subject_code:code,subject_name:subjectName(code),ca1_subject_codes:[code],ca2_subject_codes:[]}));
+    const assignments=sourceAssignments.map(a=>({...a,subject_code:code}));
+    const {data:saved,error:saveError}=await state.client.rpc('exam_save_rooming_round_plan',{
+     p_exam_id:examId,p_round_no:roundNo,p_plan_type:'mandatory',p_subject_code:code,
+     p_adjustment_mode:'automatic',p_capacity:preview.options.capacity,
+     p_room_prefix:preview.options.roomPrefix,p_first_room_number:preview.options.firstRoomNumber,
+     p_rooms:rooms,p_assignments:assignments,p_lock:false
+    });
+    if(saveError)throw saveError;
+    if(!saved?.plan_id)throw new Error('Không nhận được mã phương án đã lưu');
+    const {error:finalError}=await state.client.rpc('exam_finalize_rooming_round_plan',{p_plan_id:saved.plan_id});
+    if(finalError)throw new Error(`Đã lưu nháp nhưng chưa chốt: ${finalError.message}`);
+    results.push(`${code}: thành công (${assignments.length} học sinh, ${rooms.length} phòng)`);
+   }catch(e){results.push(`${code}: lỗi — ${e.message||String(e)}`);}
+  }
+  message($('rooming-message'),`Kết quả áp dụng hàng loạt:\n${results.join('\n')}${skipped.length?'\nBỏ qua: '+skipped.join('; '):''}`,'info');
+ }catch(e){message($('rooming-message'),`Không thể áp dụng hàng loạt: ${e.message||String(e)}`,'error');}
+ finally{button.disabled=false;updateRoomingActions();}
+}
 async function finalizeRooming(){
  const preview=state.preview;
  if(!preview)return;
@@ -3238,6 +3310,7 @@ function wireRoomingEditor(){
  $('rooming-table-body').addEventListener('click',event=>{const button=event.target.closest('[data-edit-free-room]');if(button)openFreeRoom(button.dataset.editFreeRoom)});
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
+ $('apply-rooming-other-subjects').onclick=applyRoomingToOtherSubjects;
  for(const id of ['open-absent-scores','grader-absent-scores'])if($(id))$(id).onclick=async()=>{try{const {openAbsentScores}=await import('./absent-scores.js?v=191');await openAbsentScores({state,examId:state.selectedExam||'',subjectName})}catch(e){message($(state.role==='admin'?'global-message':'grader-message'),e.message,'error')}};
  if($('reset-official-rooming'))$('reset-official-rooming').onclick=resetOfficialRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
