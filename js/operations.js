@@ -1282,12 +1282,27 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       <p>Chọn giáo viên hoặc nhóm cùng môn từ danh mục dùng chung. Túi chưa giao không được nhập điểm.</p>
       <table><thead><tr><th>Túi / phòng</th><th>Giám khảo hoặc nhóm</th></tr></thead><tbody>${rooms.map(room=>
         `<tr><td>${esc(room)}${assignmentByRoom.get(room)?.method==='draw'?' · bốc thăm':''}</td><td><select data-bag-room="${esc(room)}"><option value="">Chưa giao (không được nhập điểm)</option>${graderOptions}${groupOptions}</select></td></tr>`).join('')}</tbody></table>
-      <div class="form-actions"><button type="button" class="btn btn-light" id="draw-bag-assignments">Bốc thăm đều cho giám khảo</button><button type="button" class="btn btn-primary" id="save-bag-assignments">Lưu phân công túi</button>
+      <div class="form-actions"><button type="button" class="btn btn-light" id="quick-group-bag-assignments">Gán nhanh cho nhóm chấm</button><button type="button" class="btn btn-light" id="draw-bag-assignments">Bốc thăm đều cho giám khảo</button><button type="button" class="btn btn-primary" id="save-bag-assignments">Lưu phân công túi</button>
       <button type="button" class="btn btn-light" id="close-bag-assignments">Đóng</button></div>`;
     for(const select of panel.querySelectorAll('[data-bag-room]')){
       const assignment=assignmentByRoom.get(select.dataset.bagRoom);
       if(assignment)select.value=assignment.value;
     }
+    $('quick-group-bag-assignments').onclick=()=>{
+      // Distribute all bags across the grading groups for this subject, in room order.
+      // Preview locally first: the existing save action persists the allocation.
+      const availableGroups=(groups||[]).filter(group=>group.id);
+      if(!availableGroups.length){
+        message($('script-message'),`Môn ${nameOf(run.subject_code)} chưa có nhóm chấm. Hãy tạo nhóm trước khi gán nhanh.`,'error');
+        return;
+      }
+      const selects=[...panel.querySelectorAll('[data-bag-room]')];
+      if(!selects.length)return;
+      if(!confirm(`Gán nhanh ${selects.length} túi bài cho ${availableGroups.length} nhóm chấm của môn ${nameOf(run.subject_code)} theo vòng luân phiên? Các lựa chọn đang hiển thị sẽ bị thay thế; nhấn Lưu phân công túi để ghi vào Supabase.`))return;
+      selects.forEach((select,index)=>{select.value=`group:${availableGroups[index%availableGroups.length].id}`;});
+      const distribution=availableGroups.map((group,index)=>`${group.name}: ${Math.floor(selects.length/availableGroups.length)+(index<selects.length%availableGroups.length?1:0)} túi`).join('; ');
+      message($('script-message'),`Đã gán nhanh trên giao diện ${selects.length} túi. ${distribution}. Nhấn “Lưu phân công túi” để lưu chính thức.`,'success');
+    };
     $('close-bag-assignments').onclick=()=>panel.classList.add('hidden');
     $('draw-bag-assignments').onclick=async event=>{
       const button=event.currentTarget;
