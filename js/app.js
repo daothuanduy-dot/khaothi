@@ -6,24 +6,24 @@ import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.206&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.206&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.206&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
-import {wireAccounts} from './accounts.js?v=0.1.206';
-import {wireTeaching} from './teaching.js?v=0.1.206';
-import {wireRanking} from './ranking.js?v=0.1.206';
-import {wireViolations} from './violations.js?v=0.1.206';
-import {createStudentPicker} from './student-picker.js?v=0.1.206';
-import {wireScoreControl} from './score-control.js?v=0.1.206&absentscores=191&roomlabels=192&amendments=193';
-import {wireClassReport} from './class-report.js?v=0.1.206&classreport=197';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.208&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
+import {loadTabModules} from './module-loader.js?v=0.1.208&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.208&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
+import {wireAccounts} from './accounts.js?v=0.1.208';
+import {wireTeaching} from './teaching.js?v=0.1.208';
+import {wireRanking} from './ranking.js?v=0.1.208';
+import {wireViolations} from './violations.js?v=0.1.208';
+import {createStudentPicker} from './student-picker.js?v=0.1.208';
+import {wireScoreControl} from './score-control.js?v=0.1.208&absentscores=191&roomlabels=192&amendments=193';
+import {wireClassReport} from './class-report.js?v=0.1.208&classreport=197';
 import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=202';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
-import {wireChoiceReports} from './choice-report.js?v=0.1.206&choice=151&precision=168';
-import {loadExamRounds} from './rounds.js?v=0.1.206';
+import {wireChoiceReports} from './choice-report.js?v=0.1.208&choice=151&precision=168';
+import {loadExamRounds} from './rounds.js?v=0.1.208';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.206';
-const APP_BUILD='2026-11-02-connect-before-modules-206';
+const APP_VERSION='v0.1.208';
+const APP_BUILD='2026-11-02-startup-diagnostics-208';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -67,6 +67,10 @@ function message(el,text,type='info'){el.textContent=text;el.className=`notice n
 function hide(el){el.classList.add('hidden')}
 function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen','grader-screen'])$(id).classList.toggle('hidden',id!==name)}
 function setConnection(text,ok=false){$('connection-state').textContent=text;$('connection-state').style.background=ok?'#166534':'transparent';$('connection-state').style.color=ok?'white':'#dce8fb'}
+function startupStep(status,detail,type='info',connected=false){
+  setConnection(status,connected);
+  message($('login-message'),detail,type);
+}
 const CONNECTION_TIMEOUT_MS=15000;
 async function fetchWithTimeout(url,options,label){
   const controller=new AbortController();
@@ -89,11 +93,11 @@ async function waitForConnection(promise){
 function saveConfig(url,key){localStorage.setItem('exam_supabase_url',url);localStorage.setItem('exam_supabase_key',key)}
 function readConfig(){return validatePublicConfig(publicConfig)}
 async function connect(url,key){
+  startupStep('Bước 1/5 · cấu hình','Bước 1/5: Đang kiểm tra URL và khóa public Supabase...');
   ({url,key}=validatePublicConfig({url,key}));
   state.client=null;state.session=null;
   const fetch=(endpoint,options)=>fetchWithTimeout(endpoint,options,'Kết nối Supabase');
-  setConnection('Đang kết nối...');
-  message($('login-message'),'Đang kiểm tra khả năng kết nối tới cơ sở dữ liệu...','info');
+  startupStep('Bước 2/5 · thư viện','Bước 2/5: Đang kiểm tra thư viện Supabase trên trình duyệt...');
   if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase JS từ CDN. Kiểm tra kết nối Internet, tiện ích chặn quảng cáo hoặc mở CDN jsDelivr.');
   let parsed;
   try{parsed=new URL(url)}catch{throw new Error('URL project không hợp lệ. Hãy sao chép nguyên URL trong Supabase → Settings → API.')}
@@ -102,14 +106,19 @@ async function connect(url,key){
   if(!key||key.length<20)throw new Error('Publishable/anon key đang trống hoặc quá ngắn. Sao chép khóa public/publishable hoặc anon trong Supabase → Settings → API Keys; không dùng service_role.');
   if(/^eyJ[a-zA-Z0-9_-]+\./.test(key)){/* legacy anon JWT is accepted */}
   else if(!key.startsWith('sb_publishable_'))throw new Error('Khóa không có định dạng publishable/anon được hỗ trợ. Hãy sao chép lại đúng khóa public/publishable hoặc anon của project.');
-  // Verify network reachability. Some projects/proxies reject the Auth health
-  // route while PostgREST is reachable, so try both endpoints before failing.
+  // Check Auth and a real database table separately so failures identify the
+  // service that prevented startup.
   const probeErrors=[];
   let reachable=false;
-  for (const endpoint of [`${url}/auth/v1/health`, `${url}/rest/v1/`]) {
+  let probeSucceeded=0;
+  for (const endpoint of [`${url}/auth/v1/health`, `${url}/rest/v1/exam_sessions?select=id&limit=0`]) {
+    const isAuth=endpoint.includes('/auth/');
+    startupStep(isAuth?'Bước 3/5 · Supabase Auth':'Bước 4/5 · truy vấn CSDL',isAuth
+      ?'Bước 3/5: Đang xác minh phản hồi của dịch vụ Supabase Auth...'
+      :'Bước 4/5: Đang truy vấn thử bảng exam_sessions bằng khóa public...');
     try {
       const response=await fetch(endpoint,{method:'GET',headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'},cache:'no-store'});
-      if(response.ok){reachable=true;break;}
+      if(response.ok){reachable=true;probeSucceeded++;continue;}
       let detail='';try{detail=(await response.text()).slice(0,180)}catch{}
       probeErrors.push(`${new URL(endpoint).pathname}: HTTP ${response.status}${detail?` — ${detail}`:''}`);
       // An Auth health route may be unsupported by an intermediary. Continue to REST.
@@ -117,14 +126,14 @@ async function connect(url,key){
       probeErrors.push(`${new URL(endpoint).pathname}: ${e?.message||'NetworkError'}`);
     }
   }
-  if(!reachable)throw new Error('Không xác minh được kết nối tới Supabase. Kiểm tra URL project, khóa publishable/anon, trạng thái project và kết nối mạng. Chi tiết: '+probeErrors.join(' | '));
-  setConnection('Đang mở phiên...');
-  message($('login-message'),'Đã tới được Supabase, đang kiểm tra phiên đăng nhập...','info');
+  if(!reachable||probeErrors.length||probeSucceeded!==2)throw new Error('Không hoàn tất kiểm tra Supabase. '+probeErrors.join(' | '));
+  startupStep('Bước 5/5 · phiên đăng nhập','Bước 5/5: Auth và CSDL phản hồi thành công. Đang khởi tạo phiên đăng nhập...','info',true);
   const client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  state.client=client;
   const {data,error}=await waitForConnection(client.auth.getSession());
   if(error)throw new Error('Đã tới được Supabase nhưng không đọc được phiên xác thực trong trình duyệt: '+error.message);
-  state.client=client;state.session=data.session||null;
-  setConnection('Đã kết nối Supabase',true);
+  state.session=data.session||null;
+  startupStep('Đã kết nối Supabase','Đã hoàn tất kiểm tra Auth, truy vấn CSDL và phiên Supabase.','success',true);
 }
 async function openConnectedApp(){
   if(state.session?.user)await enterApp(state.session.user);
@@ -3208,8 +3217,7 @@ function wireRoomingEditor(){
 async function boot(){
   showScreen('login-screen');
   $('login-submit').disabled=true;$('google-login').disabled=true;
-  setConnection('Đang kết nối Supabase...');
-  message($('login-message'),'Đang xác minh kết nối cơ sở dữ liệu...','info');
+  startupStep('Bước 1/5 · bắt đầu','Bước 1/5: Ứng dụng đã khởi động, chuẩn bị kiểm tra cấu hình Supabase...');
   try{
     const config=readConfig();
     await connect(config.url,config.key);
@@ -3217,10 +3225,11 @@ async function boot(){
     showConnectionFailure(error);
     return;
   }
-  setConnection('Đã kết nối · đang tải giao diện',true);
-  message($('login-message'),'Đã kết nối Supabase. Đang tải các thành phần của ứng dụng...','info');
+  startupStep('Bước 6/6 · giao diện','Bước 6/6: Kết nối CSDL thành công. Chuẩn bị tải 13 module giao diện...','info',true);
   try{
-    const moduleVersion=await loadTabModules();
+    const moduleVersion=await loadTabModules({onProgress:({name,index,total})=>{
+      startupStep(`Bước 6/6 · module ${index}/${total}`,`Đã kết nối Supabase. Đang tải module giao diện ${index}/${total}: ${name}. Nếu bước này không đổi trong 15 giây, module sẽ báo lỗi tại đây.`,'info',true);
+    }});
     if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
     ensureCandidateClassDropdown();
   }catch(error){
@@ -3230,6 +3239,7 @@ async function boot(){
     message($('login-message'),'Đã kết nối Supabase nhưng không tải được giao diện: '+(error.message||String(error)),'error');
     return;
   }
+  startupStep('Hoàn tất','Kết nối Supabase và tải toàn bộ giao diện thành công. Có thể đăng nhập.','success',true);
   try{accounts=wireAccounts({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
   try{teaching=wireTeaching({state,$,esc,message,subjects:SUBJECTS})}
