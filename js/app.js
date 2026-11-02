@@ -6,24 +6,24 @@ import {numberSubjectCandidates} from './subject-sbd.js?v=182';
 let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.210&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.210&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.210&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
-import {wireAccounts} from './accounts.js?v=0.1.210';
-import {wireTeaching} from './teaching.js?v=0.1.210';
-import {wireRanking} from './ranking.js?v=0.1.210';
-import {wireViolations} from './violations.js?v=0.1.210';
-import {createStudentPicker} from './student-picker.js?v=0.1.210';
-import {wireScoreControl} from './score-control.js?v=0.1.210&absentscores=191&roomlabels=192&amendments=193';
-import {wireClassReport} from './class-report.js?v=0.1.210&classreport=197';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.211&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
+import {loadTabModules} from './module-loader.js?v=0.1.211&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.211&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
+import {wireAccounts} from './accounts.js?v=0.1.211';
+import {wireTeaching} from './teaching.js?v=0.1.211';
+import {wireRanking} from './ranking.js?v=0.1.211';
+import {wireViolations} from './violations.js?v=0.1.211';
+import {createStudentPicker} from './student-picker.js?v=0.1.211';
+import {wireScoreControl} from './score-control.js?v=0.1.211&absentscores=191&roomlabels=192&amendments=193';
+import {wireClassReport} from './class-report.js?v=0.1.211&classreport=197';
 import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=202';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
-import {wireChoiceReports} from './choice-report.js?v=0.1.210&choice=151&precision=168';
-import {loadExamRounds} from './rounds.js?v=0.1.210';
+import {wireChoiceReports} from './choice-report.js?v=0.1.211&choice=151&precision=168';
+import {loadExamRounds} from './rounds.js?v=0.1.211';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.210';
-const APP_BUILD='2026-11-02-login-button-enable-210';
+const APP_VERSION='v0.1.211';
+const APP_BUILD='2026-11-02-exam-selection-211';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -280,6 +280,19 @@ async function loadExams(){
   if($('forms-exam').value)await operations?.refreshFormRounds?.($('forms-exam').value)
     .catch(error=>message($('forms-message'),error.message,'error'));
   await loadCandidates();
+}
+function wireExamTableSelection(){
+  $('exam-table-body').addEventListener('click',async event=>{
+    const button=event.target.closest('[data-select-exam]');
+    if(!button)return;
+    state.selectedExam=button.dataset.selectExam;
+    for(const id of ['rooming-exam-select','subject-exam-select','sbd-exam-select','settings-exam-select','forms-exam','absence-exam','script-exam','school-student-exam'])$(id).value=state.selectedExam;
+    const exam=state.exams.find(item=>item.id===state.selectedExam);
+    syncSubjectExamMode();
+    updateSelectedExamTitle();
+    await loadCandidates();
+    notifyExamSelected(exam);
+  });
 }
 async function createExam(event){
   event.preventDefault();
@@ -3056,18 +3069,10 @@ async function renderRosterStats(){
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
 function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=async()=>{try{const{openManualGrading}=await import('./manual-exam.js?v=179');await openManualGrading({state})}catch(error){message($('grader-message'),error.message,'error')}}; $('accounts-open-grading').onclick=async()=>{if(state.role!=='admin')return;showScreen('grader-screen');$('grader-back-admin').classList.remove('hidden');try{await operations.enterAsGrader()}catch(e){message($('grader-message'),e.message,'error')}};$('grader-back-admin').onclick=()=>{if(state.role!=='admin')return;showScreen('app-screen');switchTab('accounts')}; $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
-  const selectBtn=e.target.closest('[data-select-exam]');
   const manualBtn=e.target.closest('[data-manual-exam]');
   if(manualBtn){try{await openManualExamWorkspace(manualBtn.dataset.manualExam)}catch(error){message($('global-message'),error.message,'error')}return;}
   const editBtn=e.target.closest('[data-edit-exam]');
   const deleteBtn=e.target.closest('[data-delete-exam]');
-  if(selectBtn){
-    state.selectedExam=selectBtn.dataset.selectExam;
-    $('rooming-exam-select').value=state.selectedExam;
-    $('subject-exam-select').value=state.selectedExam;$('sbd-exam-select').value=state.selectedExam;
-    const exam=state.exams.find(item=>item.id===state.selectedExam);
-    syncSubjectExamMode();updateSelectedExamTitle();loadCandidates();notifyExamSelected(exam);return;
-  }
   if(editBtn){
     const exam=state.exams.find(x=>x.id===editBtn.dataset.editExam);
     if(!exam)return;
@@ -3241,6 +3246,7 @@ async function boot(){
   }
   $('login-form').addEventListener('submit',submitLogin);
   $('login-submit').disabled=false;
+  wireExamTableSelection();
   startupStep('Hoàn tất','Kết nối Supabase và tải toàn bộ giao diện thành công. Có thể đăng nhập.','success',true);
   try{accounts=wireAccounts({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
