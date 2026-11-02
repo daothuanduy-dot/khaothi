@@ -126,7 +126,7 @@
 @media(max-width:850px){.roster-filters,.overage-filters{grid-template-columns:1fr 1fr}.roster-summary{grid-template-columns:1fr}.roster-table-wrap{overflow-x:auto}.roster-table-wrap table{min-width:850px}}
 </style>
 <style>
-/* v0.1.221: grading bag allocation overview */
+/* v0.1.222: grading bag allocation overview */
 #script-runs-body tr.script-assignment-complete {background:#e8f7ee;color:#14532d}
 #script-runs-body tr.script-assignment-partial {background:#fff2d6;color:#854d0e}
 #script-runs-body tr.script-assignment-none {background:#ffebeb;color:#991b1b}
@@ -138,7 +138,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.221</span><span id="connection-state" class="status-pill">Không kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.222</span><span id="connection-state" class="status-pill">Không kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -225,20 +225,22 @@
 .rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.221 · build 2026-11-02-batch-rooming-221</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.222 · build 2026-11-02-grading-modes-222</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <button id="manual-grading-open" type="button" class="btn btn-light">Nhập điểm kỳ tổ chức thủ công</button>
     <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
     <button id="grader-absent-scores" type="button" class="btn btn-light">Nhập điểm học sinh vắng theo lớp được phân công</button>
-    <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM THEO PHÂN CÔNG</div><h1>Chấm bài theo phách</h1><p>Môn Ngữ văn dùng mã môn VAN; chọn đầu phách để mở danh sách bài được giao.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
+    <div class="section-heading"><div><div class="eyebrow">NHẬP ĐIỂM THEO PHÂN CÔNG</div><h1>Nhập điểm bài kiểm tra</h1><p>Chọn phương thức phù hợp với phân công của giáo viên. Điểm học sinh vắng được nhập tại nút riêng phía trên.</p></div><button id="grader-logout" class="btn btn-light" type="button">Đăng xuất</button></div>
     <div class="form-grid">
+      <label>Phương thức nhập điểm<select id="grader-method"><option value="phach">Nhập theo phách</option><option value="class">Nhập theo danh sách lớp</option></select></label>
       <label>Kỳ thi<select id="grader-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
       <label id="grader-subject-wrap" class="hidden">Môn thi<select id="grader-subject"><option value="VAN">Ngữ văn (VAN)</option></select></label>
-      <label>Đầu phách<select id="grader-prefix"><option value="">-- Tất cả đầu phách --</option></select></label>
+      <label id="grader-prefix-wrap">Đầu phách<select id="grader-prefix"><option value="">-- Tất cả đầu phách --</option></select></label>
       <label class="check-field"><span>Nhập nhanh</span><span><input id="grader-use-default" type="checkbox"> Điền điểm mặc định cho các phách chưa nhập</span></label>
       <input id="grader-default-score" type="hidden">
     </div>
+    <div id="grader-class-workspace" class="notice notice-info hidden" role="status">Chế độ nhập điểm theo lớp yêu cầu quyền giáo viên đúng môn, đúng lớp và dịch vụ lưu điểm riêng trên Supabase. Chưa mở nhập điểm cho đến khi hoàn tất kiểm tra phân quyền phía cơ sở dữ liệu.</div>
     <div class="form-actions"><button id="grader-save-all" class="btn btn-primary" type="button">Lưu túi bài</button><button id="grader-edit-bag" class="btn btn-light" type="button">Sửa túi bài</button></div>
     <div id="grader-message" class="notice hidden" role="status" aria-live="polite"></div>
     <div id="grader-window-status" class="notice notice-info" role="status">Chọn kỳ thi để xem thời hạn nhập điểm.</div>
@@ -248,7 +250,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script id="app-entry" type="module" src="./js/app.js?v=0.1.221&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.222&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {

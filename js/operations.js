@@ -1597,7 +1597,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!cache.graderWork.length)message($('grader-message'),state.role==='admin'?'Đang xem giao diện bằng tài khoản Admin. Để nhập điểm, đăng nhập tài khoản giáo viên đã được gán môn và kỳ thi.':'Chưa có bài được giao. Liên hệ quản trị để gán môn, cấp quyền kỳ thi và khóa phương án phách.','info');
     $('grader-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+[...new Map(cache.graderWork.map(work=>[work.exam_id,work])).values()]
       .map(work=>`<option value="${esc(work.exam_id)}">${esc(work.exam_title)}</option>`).join('');
-    $('grader-subject').innerHTML='<option value="VAN">Ngữ văn (VAN)</option>';
+    $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>';
     $('grader-table-body').innerHTML='<tr><td colspan="6" class="empty">Chọn kỳ thi và đầu phách.</td></tr>';
     $('user-email').textContent=state.session?.user?.email||'';
   }
@@ -1902,16 +1902,30 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
       $('grader-prefix').value='';
       const assigned=cache.graderWork.filter(work=>work.exam_id===examId);
-      $('grader-subject').innerHTML='<option value="VAN">Ngữ văn (VAN)</option>';
-      $('grader-subject').value=assigned.some(work=>work.subject_code==='VAN')?'VAN':'';
-      if(!$('grader-subject').value&&examId)message($('grader-message'),'Kỳ thi này chưa có phân công môn Ngữ văn (VAN).','error');
+      $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>'+assigned.map(work=>`<option value="${esc(work.subject_code)}">${esc(work.subject_code)}</option>`).join('');
+      $('grader-subject-wrap').classList.toggle('hidden',!assigned.length);
+      if(assigned.length===1)$('grader-subject').value=assigned[0].subject_code;
       $('grader-subject').onchange();
     };
     $('grader-subject').onchange=()=>{
       $('grader-prefix').value='';
-      loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
+      if($('grader-method').value==='phach')loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
     };
-    $('grader-prefix').onchange=()=>loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
+    const refreshGraderMethod=()=>{
+      const byClass=$('grader-method').value==='class';
+      $('grader-prefix-wrap').classList.toggle('hidden',byClass);
+      $('grader-class-workspace').classList.toggle('hidden',!byClass);
+      $('grader-table-body').closest('.table-wrap').classList.toggle('hidden',byClass);
+      for(const id of ['grader-save-all','grader-edit-bag','grader-use-default']){
+        const el=$(id);if(el)el.closest('button')?.classList.toggle('hidden',byClass);
+      }
+      $('grader-use-default').closest('label')?.classList.toggle('hidden',byClass);
+      if(byClass){++graderQueueRequest;clearInterval(graderWindowTimer);graderWindow=null;cache.graderQueue=[];updateGraderWindow();
+        message($('grader-message'),'Nhập điểm theo lớp chưa được kích hoạt: cần dịch vụ Supabase kiểm tra phân công giảng dạy và lưu điểm theo học sinh. Không dùng quyền chấm phách để nhập điểm lớp.','info');
+      }else loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'));
+    };
+    $('grader-method').onchange=refreshGraderMethod;
+    $('grader-prefix').onchange=()=>{if($('grader-method').value==='phach')loadGraderQueue().catch(error=>message($('grader-message'),error.message,'error'))};
     $('grader-table-body').addEventListener('click',event=>{
       if(event.target.closest('input,select,button'))return;
       const row=event.target.closest('[data-grader-index]');if(!row)return;
