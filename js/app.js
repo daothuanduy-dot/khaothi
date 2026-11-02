@@ -7,7 +7,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.215&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {loadTabModules} from './module-loader.js?v=0.1.216&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.215&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
@@ -22,8 +22,8 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.215';
-const APP_BUILD='2026-11-02-tab-navigation-212';
+const APP_VERSION='v0.1.216';
+const APP_BUILD='2026-11-02-room-group-filter-216';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
 let rosterLoadedExamId=null;
@@ -68,8 +68,10 @@ function hide(el){el.classList.add('hidden')}
 function showScreen(name){for(const id of ['setup-screen','login-screen','app-screen','grader-screen'])$(id).classList.toggle('hidden',id!==name)}
 function setConnection(text,ok=false){$('connection-state').textContent=text;$('connection-state').style.background=ok?'#166534':'transparent';$('connection-state').style.color=ok?'white':'#dce8fb'}
 function startupStep(status,detail,type='info',connected=false){
-  setConnection(status,connected);
-  message($('login-message'),detail,type);
+  // Connection status only; no visible startup progress or step-by-step notices.
+  setConnection(connected?'Đã kết nối':'Không kết nối',connected);
+  if(type==='error')message($('login-message'),detail,'error');
+  else hide($('login-message'));
 }
 const CONNECTION_TIMEOUT_MS=15000;
 async function fetchWithTimeout(url,options,label){
@@ -142,12 +144,12 @@ async function openConnectedApp(){
 function showConnectionFailure(error){
   const detail=error?.message||String(error);
   if(state.client){
-    setConnection('Đã kết nối Supabase',true);
+    setConnection('Đã kết nối',true);
     showScreen('login-screen');
     message($('login-message'),`Đã kết nối Supabase nhưng không khởi tạo được ứng dụng: ${detail}`,'error');
     return;
   }
-  setConnection('Kết nối lỗi');
+  setConnection('Không kết nối');
   showScreen('login-screen');
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
@@ -1370,6 +1372,17 @@ async function previewRooming(){
   if(roundCandidatesError)throw new Error(`Chưa thể nạp thí sinh đợt ${roundNo}: ${roundCandidatesError.message}`);
   state.candidates=candidates;
   if(!candidates?.length)throw new Error('Kỳ thi chưa có danh sách thí sinh.');
+  // v0.1.216: For subject-specific mandatory rooming, retain only configured
+  // room-ranked classes. TOAN/VAN retain their original whole-exam behavior.
+  if(planType==='mandatory'&&!['TOAN','VAN'].includes(subjectCode)){
+    const classConfigs=await selectAllPages(()=>state.client.from('exam_subject_class_configs')
+      .select('class_code,exam_method,is_counted').eq('exam_id',examId).eq('subject_code',subjectCode));
+    const eligibleClasses=new Set(classConfigs.filter(row=>row.exam_method==='room'&&row.is_counted===true)
+      .map(row=>String(row.class_code||'').trim().toUpperCase()));
+    if(!eligibleClasses.size)throw new Error(`Môn ${subjectName(subjectCode)} chưa có lớp cấu hình chia phòng và tính xếp hạng.`);
+    candidates=candidates.filter(candidate=>eligibleClasses.has(String(candidate.class_code||'').trim().toUpperCase()));
+    if(!candidates.length)throw new Error(`Không có thí sinh hợp lệ thuộc nhóm lớp chia phòng của môn ${subjectName(subjectCode)}.`);
+  }
   if(planType==='subject'){
     const registrations=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('candidate_id,subject_code,subject_type').eq('exam_id',examId).eq('subject_code',subjectCode));
     const eligibleIds=new Set((registrations||[]).map(row=>String(row.candidate_id)));
@@ -1412,36 +1425,58 @@ async function previewRooming(){
       if(!result.ok)throw new Error((result.errors||['Không tạo được phương án theo môn thi.']).join('\n'));
       state.preview={examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,options:{capacity:Number($('room-capacity').value),roomPrefix:$('room-prefix').value||'M',firstRoomNumber:Number($('first-room-number').value),sortMode,previousExamId:null},result};
     } else {
+    const groupSubject=!['TOAN','VAN'].includes(subjectCode);
     const otherMandatorySubject=subjectCode==='TOAN'?'VAN':'TOAN';
     const inheritChoice=state.exams.find(e=>e.id===examId)?.exam_mode==='choice';
     const fixedSeatPlan=await findCurrentRoomingFinalization(examId,inheritChoice?'elective':'mandatory',inheritChoice?null:otherMandatorySubject,roundNo);
-    if(inheritChoice&&!fixedSeatPlan)throw new Error('Hãy phân phòng chính thức môn lựa chọn trước. Toán/Văn sẽ kế thừa đúng phòng, Hội trường và vị trí từ đó.');
+    if((inheritChoice||groupSubject)&&!fixedSeatPlan)throw new Error(`Chưa có phương án phân phòng chính thức để kế thừa vị trí SBD cho môn ${subjectName(subjectCode)}. Hãy chốt phân phòng Toán trước.`);
     if(fixedSeatPlan){
-      const restored=inheritChoice?{ok:true,result:inheritElectiveRooms({rooms:fixedSeatPlan.record.rooms,assignments:fixedSeatPlan.assignments},sortedCandidates,subjectCode)}:restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
-        planType,subjectCode,capacity:fixedSeatPlan.record.capacity
-      });
-      if(!restored.ok)throw new Error(`Không thể kế thừa vị trí cố định từ môn ${subjectName(otherMandatorySubject)}: ${restored.errors.join(' ')}`);
+      let restored;
+      if(groupSubject&&!inheritChoice){
+        const allowed=new Map(sortedCandidates.map(candidate=>[String(candidate.id),candidate]));
+        const rawRooms=Array.isArray(fixedSeatPlan.record.rooms)?fixedSeatPlan.record.rooms:[];
+        const sourceAssignments=Array.isArray(fixedSeatPlan.assignments)?fixedSeatPlan.assignments:[];
+        const selectedAssignments=[];
+        const selectedRooms=[];
+        const assigned=new Set();
+        for(const room of rawRooms){
+          const code=String(room.room_code||'').trim();
+          const ids=Array.isArray(room.candidate_ids)?room.candidate_ids.map(String):
+            sourceAssignments.filter(a=>String(a.room_code)===code).map(a=>String(a.candidate_id));
+          const members=[];
+          for(const id of ids){
+            const candidate=allowed.get(id);
+            if(!candidate)continue;
+            if(assigned.has(id))throw new Error(`Thí sinh ${id} bị lặp trong phương án phòng nguồn.`);
+            assigned.add(id);members.push(candidate);
+            selectedAssignments.push({candidate_id:id,room_code:code,sbd:String(candidate.sbd||''),subject_code:subjectCode});
+          }
+          if(members.length)selectedRooms.push({...room,student_count:members.length,candidate_ids:members.map(c=>String(c.id))});
+        }
+        if(assigned.size!==allowed.size)throw new Error(`Phân phòng nguồn thiếu ${allowed.size-assigned.size} thí sinh thuộc nhóm lớp môn ${subjectName(subjectCode)}. Không tự xếp lại hoặc đổi phòng.`);
+        restored=restoreRoomingPlan(selectedRooms,selectedAssignments,sortedCandidates,{
+          planType,subjectCode,capacity:fixedSeatPlan.record.capacity
+        });
+      }else{
+        restored=inheritChoice?{ok:true,result:inheritElectiveRooms({rooms:fixedSeatPlan.record.rooms,assignments:fixedSeatPlan.assignments},sortedCandidates,subjectCode)}:restoreRoomingPlan(fixedSeatPlan.record.rooms,fixedSeatPlan.assignments,sortedCandidates,{
+          planType,subjectCode,capacity:fixedSeatPlan.record.capacity
+        });
+      }
+      if(!restored.ok)throw new Error(`Không thể kế thừa vị trí cố định từ môn ${subjectName(otherMandatorySubject)}: ${(restored.errors||[]).join(' ')}`);
       result=restored.result;
-      result.assignments=result.assignments.map(assignment=>({
-        ...assignment,subject_code:subjectCode,subject_name:subjectName(subjectCode)
-      }));
-      result.rooms=result.rooms.map(room=>({
-        ...room,subject_code:subjectCode,ca1_subject_codes:[subjectCode],
-        ca1_subject_name:subjectName(subjectCode),ca2_subject_codes:[],ca2_subject_name:'—'
-      }));
+      result.assignments=result.assignments.map(assignment=>({...assignment,subject_code:subjectCode,subject_name:subjectName(subjectCode)}));
+      result.rooms=result.rooms.map(room=>({...room,subject_code:subjectCode,ca1_subject_codes:[subjectCode],ca1_subject_name:subjectName(subjectCode),ca2_subject_codes:[],ca2_subject_name:'—'}));
       const firstRoom=[...result.rooms].sort((a,b)=>Number(a.room_number)-Number(b.room_number))[0];
       const roomPrefix=String(firstRoom?.room_code||'').replace(/\d+$/,'')||'M';
       const firstRoomNumber=Number(firstRoom?.room_number)||1;
       $('room-capacity').value=Number(fixedSeatPlan.record.capacity);
       $('room-prefix').value=roomPrefix;
       $('first-room-number').value=firstRoomNumber;
-      state.preview={
-        examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,
+      state.preview={examId,roundNo,planType,subjectCode,adjustmentMode,pool:sortedCandidates,
         options:{capacity:Number(fixedSeatPlan.record.capacity),roomPrefix,firstRoomNumber,sortMode,previousExamId:null,fixedSeats:true},
-        result,assignmentsCreated:true,suggestionValid:true
-      };
+        result,assignmentsCreated:true,suggestionValid:true};
       renderRooming(result,planType);
-      message($('rooming-message'),`Đã kế thừa nguyên vị trí phòng và chỗ ngồi theo SBD từ ${inheritChoice?'phương án môn lựa chọn':'môn '+subjectName(otherMandatorySubject)}. Không thể thay đổi sĩ số hoặc thứ tự chỗ của riêng môn này.`,'success');
+      message($('rooming-message'),`Đã kế thừa đúng ${result.summary.candidate_count} thí sinh tại ${result.rooms.length} phòng thực tế từ ${inheritChoice?'phương án môn lựa chọn':'môn '+subjectName(otherMandatorySubject)}. Giữ nguyên SBD, mã phòng và chỗ ngồi; chỉ lọc nhóm lớp hợp lệ.`,'success');
       return;
     }
     if(!creatingNewPlan){
@@ -3244,7 +3279,7 @@ async function boot(){
     ensureCandidateClassDropdown();
   }catch(error){
     showScreen('login-screen');
-    setConnection('Đã kết nối · lỗi giao diện',true);
+    setConnection('Đã kết nối',true);
     console.error('Không tải được giao diện khi khởi động:',error);
     message($('login-message'),'Đã kết nối Supabase nhưng không tải được giao diện: '+(error.message||String(error)),'error');
     return;
