@@ -87,6 +87,16 @@ export function subjectRoomPlan(plans,subjectCode){
    String(row.ca2_subject_code||'').trim().toUpperCase()===code?(row.ca2_room_code||row.room_code):
    row.room_code
   })).filter(row=>String(row.room_code||'').trim());
+  if(!records.length && Array.isArray(plan.rooms) && !assignments.length && plan.plan_type!=='elective'){
+   for(const room of plan.rooms){
+    const matches=String(room.subject_code||plan.subject_code||'').trim().toUpperCase()===code ||
+      (Array.isArray(room.ca1_subject_codes)&&room.ca1_subject_codes.some(x=>String(x).trim().toUpperCase()===code)) ||
+      (Array.isArray(room.ca2_subject_codes)&&room.ca2_subject_codes.some(x=>String(x).trim().toUpperCase()===code));
+    if(!matches)continue;
+    for(const candidateId of (Array.isArray(room.candidate_ids)?room.candidate_ids:[]))
+      records.push({candidate_id:candidateId,room_code:room.room_code||room.name,subject_code:code});
+   }
+  }
   if(records.length)return {plan,records};
  }
  return null;
@@ -965,7 +975,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     let target=null,records=[];
     if(roundNo){
       const plans=await readPages(()=>state.client.from('exam_effective_rooming_round_plans')
-        .select('id,round_no,plan_type,subject_code,assignments,created_at')
+        .select('id,round_no,plan_type,subject_code,assignments,rooms,created_at')
         .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
       const selected=subjectRoomPlan(plans,code);
       if(selected){target=selected.plan;records=selected.records}
@@ -983,6 +993,27 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(selected){target=selected.plan;records=selected.records}
     }
     if(!target)throw new Error(`Chưa có phân phòng chính thức cho môn ${nameOf(code)}.`);
+    const {data:scriptEssayConfig,error:scriptEssayError}=await state.client.from('exam_subject_assessment_configs')
+      .select('is_essay').eq('exam_id',examId).eq('subject_code',code).maybeSingle();
+    if(scriptEssayError)throw new Error(`Không đọc được cấu hình tự luận: ${scriptEssayError.message}`);
+    if(!scriptEssayConfig?.is_essay)throw new Error(`Môn ${nameOf(code)} chưa được bật tự luận.`);
+    const scriptClassConfigs=await readPages(()=>state.client.from('exam_subject_class_configs')
+      .select('class_code,exam_method,is_counted').eq('exam_id',examId).eq('subject_code',code));
+    const eligibleClasses=new Set(scriptClassConfigs.filter(c=>String(c.exam_method||'').trim().toLowerCase()==='room'&&c.is_counted===true)
+      .map(c=>String(c.class_code||'').trim()));
+    if(!eligibleClasses.size)throw new Error(`Môn ${nameOf(code)} không có lớp nào được chia phòng và tính xếp hạng.`);
+    const candidateIds=[...new Set(records.map(r=>String(r.candidate_id||'')))].filter(Boolean);
+    const candidateClasses=new Map();
+    for(let i=0;i<candidateIds.length;i+=150){
+      const ids=candidateIds.slice(i,i+150);
+      const rows=await readPages(()=>state.client.from('exam_candidates')
+        .select('id,class_code').eq('exam_id',examId).in('id',ids));
+      for(const row of rows)candidateClasses.set(String(row.id),String(row.class_code||'').trim());
+    }
+    records=records.filter(row=>eligibleClasses.has(candidateClasses.get(String(row.candidate_id))));
+    if(!records.length)throw new Error(`Không có bài thi hợp lệ để đánh phách môn ${nameOf(code)}.`);
+    if(new Set(records.map(r=>String(r.candidate_id))).size!==records.length)
+      throw new Error('Phương án phân phòng có học sinh trùng trong cùng môn; không tạo phách.');
     cache.scriptFinalizationId=target.id;
     cache.scriptPlanId=roundNo?target.id:null;
     cache.scriptRoundNo=roundNo;
