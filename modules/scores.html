@@ -1,6 +1,5 @@
 <section class="tab-panel hidden" id="tab-scores">
   <div class="section-heading"><div><h2>Tổng hợp điểm</h2><p>Nhập điểm trắc nghiệm từ Excel theo cột SBD/điểm tùy chọn, ghép với điểm tự luận đã nhập theo phách.</p></div></div>
-  <div class="form-actions"><button id="open-absent-scores" type="button" class="btn btn-light">Nhập điểm học sinh vắng</button></div>
   <section id="score-control" class="panel">
     <h3>Kiểm soát điểm tự luận theo phách</h3>
     <p id="score-control-exam" role="status">Chọn kỳ thi ở tab Kỳ thi.</p>
@@ -9,7 +8,7 @@
       <label>Môn đã có phách<select id="score-control-subject"></select></label>
       <label>Phương án phách đã khóa<select id="score-control-run"></select></label>
       <label>Đầu phách<select id="score-control-head"><option value="">Tất cả đầu phách</option></select></label>
-      <label>Trạng thái<select id="score-control-filter"><option value="all">Tất cả</option><option value="invalid">Sai thang/bước hoặc chưa kiểm tra được</option><option value="absent_scored">Có kết quả nhưng vắng</option><option value="missing">Chưa nhập điểm (không gồm vắng)</option><option value="scored">Có điểm / đã ghi Không bài</option><option value="zero">Điểm 0</option><option value="no_paper">Không bài</option><option value="absent">Vắng</option><option value="violation">Có vi phạm</option></select></label>
+      <label>Trạng thái<select id="score-control-filter"><option value="all">Tất cả</option><option value="missing">Chưa nhập điểm (không gồm vắng)</option><option value="scored">Có điểm / đã ghi Không bài</option><option value="zero">Điểm 0</option><option value="no_paper">Không bài</option><option value="absent">Vắng</option><option value="violation">Có vi phạm</option></select></label>
       <label>Tìm phách / SBD<input id="score-control-search" type="search" placeholder="Mã phách hoặc SBD"></label>
     </div>
     <div class="form-actions"><button id="score-control-refresh" class="btn btn-light" type="button">Tải lại</button><button id="score-control-select-visible" class="btn btn-light" type="button">Chọn các phách có điểm đang hiện</button><button id="score-control-clear-selection" class="btn btn-light" type="button">Bỏ chọn tất cả</button></div>
@@ -39,104 +38,44 @@
     <label>Cột SBD<input id="scores-sbd-column" type="text" value="B" maxlength="3" placeholder="B"></label>
     <label>Cột điểm trắc nghiệm<input id="scores-mcq-column" type="text" value="F" maxlength="3" placeholder="F"></label>
     <label>Dòng dữ liệu đầu tiên<input id="scores-first-row" type="number" min="1" step="1" value="2"></label>
-    <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-check" class="btn btn-primary" type="button">Kiểm tra dữ liệu điểm</button><button id="scores-load" class="btn btn-light" type="button">Tải lại bảng điểm</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
+    <div class="form-actions"><button id="scores-read-file" class="btn btn-light" type="button">Đọc và kiểm tra Excel</button><button id="scores-import" class="btn btn-primary" type="button" disabled>Nhập điểm trắc nghiệm</button><button id="scores-load" class="btn btn-light" type="button">Tải điểm tổng hợp</button><button id="scores-export" class="btn btn-light" type="button" disabled>Xuất Excel</button></div>
   </div>
   <p class="help-text">Chọn môn và đọc hình thức đã lưu; chỉ bấm Lưu nếu cần thay đổi. Tự luận lấy điểm qua phách, trắc nghiệm đối chiếu SBD. Môn kết hợp cộng hai thành phần khi đủ điểm. Ví dụ tệp có SBD ở B, điểm ở F: nhập B và F; dòng dữ liệu thường bắt đầu từ dòng 2.</p>
   <div class="form-grid">
-    <label><input id="scores-include-absent" type="checkbox" disabled> Học sinh vắng luôn bị loại khỏi thống kê, kể cả đã nhập điểm</label>
+    <label><input id="scores-include-absent" type="checkbox"> Tính học sinh vắng (0 điểm môn vắng)</label>
     <label><input id="scores-include-violations" type="checkbox"> Tính học sinh vi phạm (điểm sau xử lý)</label>
   </div>
   <p class="help-text">Bỏ tích để loại trường hợp tương ứng khỏi thống kê môn. Đổi lựa chọn rồi nhấn Tải điểm tổng hợp. Khi vừa vắng vừa vi phạm, chỉ đưa vào thống kê nếu tích cả hai; điểm tính là 0. Điểm gốc được giữ nguyên.</p>
   <div id="scores-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div id="scores-summary" class="metric-grid"></div>
   <div id="scores-preview" class="table-wrap"></div>
-  <section id="scores-result-controls" class="scores-result-controls" hidden aria-label="Lọc danh sách điểm">
-    <label>Lớp<select id="scores-result-class"><option value="">Tất cả lớp</option></select></label>
-    <label>Trạng thái<select id="scores-result-status"><option value="all">Tất cả trạng thái</option><option value="complete">Đủ điểm</option><option value="missing">Thiếu điểm</option><option value="absent">Vắng</option><option value="no-paper">Không bài</option></select></label>
-    <label>Tìm SBD / học sinh<input id="scores-result-search" type="search" placeholder="SBD, họ tên hoặc mã học sinh"></label>
-    <button id="scores-result-clear" class="btn btn-light" type="button">Bỏ lọc</button>
-    <p id="scores-result-count" role="status"></p>
-  </section>
-  <div id="scores-results" class="table-wrap scores-results-scroll"></div>
+  <div id="scores-results" class="table-wrap"></div>
   <div id="scores-class-results" class="table-wrap"></div>
   <section class="panel" id="choice-report-panel">
     <h3>Báo cáo kỳ thi lựa chọn / theo môn</h3>
     <div class="form-grid">
-      <label>Đồng hạng<select id="choice-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
       <label>Khối<select id="choice-report-grade"><option value="">Tất cả khối</option></select></label>
       <label>Lớp<select id="choice-report-class"><option value="">Tất cả lớp</option></select></label>
       <label><input id="choice-report-absent" type="checkbox"> Tính học sinh vắng (0 điểm)</label>
       <label><input id="choice-report-violations" type="checkbox"> Tính học sinh vi phạm (sau xử lý)</label>
     </div>
-    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn giảm dần trong cùng khối, không phân biệt ban; chọn đồng hạng 1, 1, 3 hoặc 1, 1, 2. TB lớp là trung bình ĐTB các lớp có điểm. Hiển thị 3 số lẻ; xếp hạng theo điểm chưa làm tròn. Môn còn thiếu điểm trong khối chưa xếp hạng. Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
+    <p>SL là số học sinh được tính vào ĐTB từng môn. Không đăng ký thì để trống; bỏ tích vắng/vi phạm để loại khỏi mẫu số môn. XH từng môn chỉ trong cùng ban (1, 1, 3). Danh sách lớp chỉ có Tổng/TB khi mọi môn đã đăng ký đều có điểm được tính.</p>
     <div class="form-actions"><button id="choice-report-load" type="button" class="btn btn-primary">Tải báo cáo lựa chọn</button><button id="choice-report-excel" type="button" class="btn btn-light" disabled>Xuất Excel</button><button id="choice-report-summary-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF thống kê</button><button id="choice-report-roster-pdf" type="button" class="btn btn-light" disabled>In / lưu PDF danh sách lớp</button></div>
     <div id="choice-report-message" class="notice hidden" role="status"></div>
-    <fieldset><legend>Môn đưa vào thống kê</legend><p>Bỏ tích môn không cần hiển thị. Áp dụng cho bảng thống kê, Excel và bản in; không thay đổi đăng ký hoặc điểm.</p><div id="choice-report-subjects"></div></fieldset>
     <div id="choice-report-results"></div>
   </section>
-  <section class="panel" id="template-export-panel">
-    <h3>Ghi kết quả vào mẫu Excel CSDL</h3>
-    <p>Ghi trực tiếp vào tệp .xlsx trong thư mục được cấp quyền. Chỉ ghi cột điểm trống hoàn toàn; nếu cột đã có dữ liệu hoặc công thức thì không ghi sheet đó. Không tải ZIP, không tạo bản sao, không sửa CSDL. Đóng Excel trước khi ghi.</p>
-    <div class="form-grid">
-      <button type="button" class="btn btn-light" id="template-export-files">Chọn thư mục có quyền ghi</button>
-      <label>Đợt điểm đích<select id="template-export-period"><option value="mid1">Giữa HKI</option><option value="end1">Cuối HKI</option><option value="mid2">Giữa HKII</option><option value="end2">Cuối HKII</option></select></label>
-      <label>Làm tròn khi ghi<select id="template-export-decimals"><option value="keep">Giữ nguyên giá trị điểm nguồn</option><option value="1">1 chữ số thập phân</option><option value="2">2 chữ số thập phân</option><option value="3">3 chữ số thập phân</option></select></label>
-      <label><input id="template-export-absent" type="checkbox"> Ghi cả điểm bổ sung môn vắng nếu đã có</label>
-    </div>
-    <button type="button" class="btn btn-primary" id="template-export-read">1. Đọc và xác định cột / môn</button>
-    <div id="template-export-mappings"></div>
-    <label><input id="template-export-mapping-confirm" type="checkbox"> Tôi đã kiểm tra và xác nhận môn, cột đích, lớp và vùng học sinh của các sheet được chọn</label>
-    <button type="button" class="btn btn-light" id="template-export-check" disabled>2. Kiểm tra và xem trước dữ liệu</button>
-    <div id="template-export-message" class="notice hidden" role="status"></div>
-    <div id="template-export-preview"></div>
-    <label><input id="template-export-final" type="checkbox"> Tôi xác nhận ghi trực tiếp vào các tệp đã chọn theo bản xem trước, chỉ các cột trống</label>
-    <button type="button" class="btn btn-primary" id="template-export-write" disabled>3. Xác nhận ghi trực tiếp vào thư mục</button>
-  </section>
-  <section class="panel" id="top-students-panel">
-    <h3>Top 3 học sinh theo nhóm lớp</h3>
-    <p>Xếp theo tổng điểm các môn được tính, không theo trung bình. Đồng hạng 1, 1, 3; lấy đầy đủ học sinh có hạng từ 1 đến 3. Môn vắng và chưa có điểm không được cộng; điểm 0 được tính. Kỳ mặc định chỉ cộng môn Tính điểm, kỳ lựa chọn/theo môn cộng các môn dự thi.</p>
-    <button type="button" class="btn btn-primary" id="top-students-load">Tải dữ liệu Top 3</button>
-    <details><summary>Tiêu đề mẫu Top 3</summary><div class="form-grid">
-      <label>Cơ quan chủ quản<input id="top-header-authority" maxlength="300"></label>
-      <label>Tên đơn vị<input id="top-header-institution" maxlength="300"></label>
-      <label>Kỳ kiểm tra<input id="top-header-exam_title" maxlength="300"></label>
-      <label>Năm học<input id="top-header-school_year" maxlength="40"></label>
-      <label>Tiêu đề<input id="top-header-title" maxlength="300"></label>
-      <label>Khối<input id="top-header-grade" maxlength="20"></label>
-    </div><p>Tên nhóm và tiêu đề tự lưu trên trình duyệt theo kỳ thi. Mẫu chỉ có một khối, các nhóm chung một bảng.</p></details>
-    <details open><summary>Cấu hình nhóm lớp Top 3</summary><p>Tạo nhiều nhóm rồi tích lớp; một lớp chỉ thuộc một nhóm. Lưu nhóm trên trình duyệt theo kỳ thi, độc lập với nhóm SBD và nhóm xếp hạng lớp.</p><div id="top-students-groups"></div></details>
-    <div id="top-students-message" class="notice hidden" role="status"></div>
-    <div class="form-actions"><button type="button" class="btn btn-light" id="top-students-excel" disabled>Xuất Excel Top 3</button><button type="button" class="btn btn-light" id="top-students-pdf" disabled>In / lưu PDF Top 3</button></div>
-    <div id="top-students-results" class="table-wrap"></div>
-  </section>
   <section class="panel" id="class-report-panel">
-    <h3>Thống kê các môn theo lớp / tổng hợp khối</h3>
+    <h3>Thống kê các môn theo lớp và ban</h3>
     <div class="form-grid">
       <label>Hiển thị môn<select id="class-report-scope"><option value="counted">Môn tính điểm xếp hạng</option><option value="all">Tất cả môn thi</option></select></label>
       <label>Khối<select id="class-report-grade"><option value="">Tất cả khối</option></select></label>
       <label>Đồng hạng<select id="class-report-ties"><option value="competition">1, 1, 3</option><option value="dense">1, 1, 2</option></select></label>
-      <label><input id="class-report-by-paper" type="checkbox"> Thống kê theo bài thi</label>
-      <label><input id="class-report-incomplete" type="checkbox"> Tính điểm TB khi chưa đủ điểm</label>
-      <label>Phạm vi xếp hạng theo ĐTB<select id="class-report-rank-scope"><option value="groups">Trong từng nhóm lớp</option><option value="all">Tất cả các lớp trong kỳ thi</option></select></label>
-      <label><input id="class-report-extra-max" type="checkbox"> Bổ sung bảng theo môn: số dự thi · điểm cao nhất</label>
       <label><input id="class-report-absent" type="checkbox"> Tính học sinh vắng</label>
       <label><input id="class-report-violations" type="checkbox"> Tính học sinh vi phạm</label>
     </div>
-    <p>Kỳ lựa chọn: SL là số học sinh dự thi từng môn, không tính vắng. ĐTB mỗi môn là ĐTB học sinh được tính của lớp. Dòng TB các lớp lấy trung bình các ĐTB lớp, không tính trọng số sĩ số. TB bài thi của lớp là trung bình các ĐTB môn có điểm hợp lệ; thiếu điểm thì TB và XH TB trống. XH môn và XH TB so trong cùng khối, không phân ban, theo điểm chưa làm tròn. Kỳ mặc định giữ cách tính và xếp trong ban. Điểm hiển thị 3 số lẻ, ô không dữ liệu để trống.</p>
-    <details><summary>Tiêu đề báo cáo — tùy chỉnh theo kỳ thi và đơn vị</summary><p>Tải báo cáo để lấy tiêu đề đã lưu. Các trường sau dùng cho PDF và Excel; có thể để trống dòng không cần. Lưu tiêu đề không thay đổi tên kỳ thi hoặc điểm.</p><div class="form-grid">
-      <label>Cơ quan chủ quản<input id="statistics-header-authority" maxlength="300"></label>
-      <label>Tên đơn vị<input id="statistics-header-institution" maxlength="300"></label>
-      <p>Góc phải hiển thị tên kỳ thi và khối đang lọc. Bỏ quốc hiệu và tiêu ngữ. Tích bổ sung thống kê để in thêm bảng số dự thi/điểm cao nhất phía trên bảng lớp; bỏ tích thì không in phần bổ sung.</p>
-      <label>Tên báo cáo<input id="statistics-header-report_title" maxlength="300"></label>
-      <label>Tên kỳ thi trên báo cáo<input id="statistics-header-exam_title" maxlength="300"></label>
-      <label>Năm học<input id="statistics-header-school_year" maxlength="300"></label>
-    </div><button type="button" class="btn btn-light" id="statistics-header-save">Lưu tiêu đề thống kê theo kỳ</button></details>
+    <p>Tổng và TB luôn dùng các môn tính điểm, dù hiển thị tất cả môn. Chỉ xếp hạng trong từng ban có cùng bộ môn và đủ điểm. Điểm hiển thị 3 số lẻ; thứ hạng dùng giá trị chưa làm tròn. Chưa so sánh tăng/giảm với kỳ khác.</p>
     <div class="form-actions"><button type="button" class="btn btn-primary" id="class-report-load">Tải thống kê lớp</button><button type="button" class="btn btn-light" id="class-report-export" disabled>Xuất Excel thống kê lớp</button></div>
     <div id="class-report-message" class="notice hidden" role="status"></div>
-    <button type="button" class="btn btn-light" id="class-report-pdf" disabled>In / lưu PDF thống kê lớp</button>
-    <details><summary>Chọn môn và thứ tự hiển thị</summary><p>Tích/bỏ tích môn; dùng ↑ ↓ để đổi thứ tự trên bảng, Excel và PDF. Tổng/TB và xếp hạng không thay đổi. Lựa chọn được đặt lại khi tải báo cáo mới.</p><div id="class-report-subjects"></div></details>
     <div id="class-report-results"></div>
-    <details><summary>Cấu hình nhóm lớp xếp hạng</summary><p>Bấm Tạo nhóm rồi tích các lớp. Một lớp chỉ thuộc một nhóm; lớp chưa vào nhóm vẫn hiển thị ĐTB nhưng không có hạng theo nhóm. Cấu hình lưu trên trình duyệt theo kỳ thi, độc lập nhóm đánh SBD; không xuất tên nhóm trên biểu mẫu.</p><div id="class-report-rank-groups"></div></details>
-    <details><summary>Chọn lớp hiển thị</summary><p>Lựa chọn này chỉ lọc hiển thị, không thay đổi thành viên nhóm hoặc phạm vi so sánh.</p><div id="class-report-classes"></div></details>
   </section>
 </section>

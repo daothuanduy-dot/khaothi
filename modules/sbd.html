@@ -1,5 +1,5 @@
 <section class="tab-panel hidden" id="tab-sbd">
-        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p id="sbd-mode-note">Kỳ thi mặc định dùng một SBD chung trong toàn kỳ thi. Kỳ thi theo môn cấp SBD riêng từng môn theo độ dài và tiền tố đã chọn, theo họ và tên.</p></div></div>
+        <div class="section-heading"><div><h2>Quản lý số báo danh</h2><p id="sbd-mode-note">Kỳ thi mặc định dùng một SBD chung trong toàn kỳ thi. Kỳ thi theo môn cấp SBD riêng từ 0001 cho từng môn, theo họ và tên.</p></div></div>
         <div class="panel">
           <div class="form-grid">
             <label>Kỳ thi<select id="sbd-exam-select" required><option value="">-- Chọn kỳ thi --</option></select></label>
@@ -11,12 +11,6 @@
             <label id="previous-exam-wrap" class="hidden">Kỳ thi dùng kết quả trước<select id="room-previous-exam"><option value="">-- Chọn kỳ thi trước --</option></select></label>
             <div class="form-actions"><button id="assign-sbd-rooming" class="btn btn-primary" type="button">Đánh số SBD và lưu CSDL</button><button id="reset-sbd-old" class="btn btn-light" type="button">Xoá SBD cũ / lập lại</button></div>
           </div>
-          <div id="sbd-group-options">
-            <h3>Nhóm lớp theo thứ tự cấp SBD và xếp phòng</h3>
-            <input id="sbd-groups" type="hidden">
-            <div id="sbd-group-editor"></div>
-            <p class="muted">Bấm Tạo nhóm rồi tích chọn lớp. Lớp đã chọn ở nhóm khác sẽ bị khóa. Dùng ↑ ↓ để đổi thứ tự nhóm. Bỏ chọn lớp ở nhóm cũ trước khi chuyển sang nhóm mới. Cần đưa đủ các lớp vào nhóm. SBD nối tiếp qua các nhóm, phòng thi tách riêng từng nhóm. Cấu hình được giữ trên trình duyệt theo kỳ thi.</p>
-          </div>
           <div id="sbd-room-options" class="hidden">
             <p>1. Vào Xếp phòng thi → Môn lựa chọn → Kiểm tra và lưu phân bổ. 2. Chọn đợt thi dưới đây để tải phòng đã lưu. 3. Xem trước và cấp SBD liên tục từ phòng đầu đến phòng cuối, giữ nguyên phòng và vị trí. Sau đó tải lại phương án trong Xếp phòng thi để phân phòng chính thức.</p>
             <div class="form-grid">
@@ -27,16 +21,5 @@
           </div>
           <div id="sbd-message" class="notice hidden"></div>
           <p class="muted">Ví dụ: SBD 6 chữ số, tiền tố 31 sẽ tạo 310001, 310002…; SBD 8 chữ số, tiền tố 31 sẽ tạo 31000001, 31000002…</p>
-        </div>
-        <div class="panel">
-          <h3>Tra cứu học sinh và SBD đã lưu</h3>
-          <p>Danh sách đọc từ CSDL của kỳ thi đang chọn; kỳ theo môn dùng môn đang chọn. Dùng mã học sinh và ngày sinh để phân biệt học sinh trùng tên.</p>
-          <div class="form-grid">
-            <label>Tìm SBD, mã học sinh hoặc họ tên<input id="sbd-roster-search" type="search"></label>
-            <label>Lớp<select id="sbd-roster-class"><option value="">Tất cả lớp</option></select></label>
-            <button id="sbd-roster-load" class="btn btn-light" type="button">Tải / cập nhật danh sách SBD</button>
-          </div>
-          <div id="sbd-roster-status" class="notice notice-info">Bấm tải để xem SBD đã lưu.</div>
-          <div class="table-wrap"><table><thead><tr><th>STT</th><th>SBD</th><th>Mã học sinh</th><th>Họ tên</th><th>Ngày sinh</th><th>Lớp</th></tr></thead><tbody id="sbd-roster-body"><tr><td colspan="6" class="empty">Chưa tải danh sách.</td></tr></tbody></table></div>
         </div>
       </section>
