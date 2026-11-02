@@ -125,11 +125,20 @@
 .roster-dirty{background:#fff7ed!important;border-color:#fdba74!important}.overage-tag{display:inline-block;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;padding:3px 7px;border-radius:99px;font-size:12px;font-weight:700}
 @media(max-width:850px){.roster-filters,.overage-filters{grid-template-columns:1fr 1fr}.roster-summary{grid-template-columns:1fr}.roster-table-wrap{overflow-x:auto}.roster-table-wrap table{min-width:850px}}
 </style>
+<style>
+/* v0.1.220: grading bag allocation overview */
+#script-runs-body tr.script-assignment-complete {background:#e8f7ee;color:#14532d}
+#script-runs-body tr.script-assignment-partial {background:#fff2d6;color:#854d0e}
+#script-runs-body tr.script-assignment-none {background:#ffebeb;color:#991b1b}
+#script-runs-body tr.script-assignment-empty {background:#eef2f7;color:#334155}
+#script-runs-body .script-assignment-count {background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:6px 9px;font-weight:700;cursor:pointer;white-space:nowrap}
+#script-runs-body .script-assignment-count:disabled {opacity:.65;cursor:not-allowed}
+</style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><strong>HỆ THỐNG KHẢO THÍ</strong><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
-    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.219</span><span id="connection-state" class="status-pill">Không kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
+    <div class="top-actions"><span id="app-version" class="status-pill version-pill">Phiên bản v0.1.220</span><span id="connection-state" class="status-pill">Không kết nối</span><span id="user-email"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
     <section id="setup-screen" class="panel setup-panel">
@@ -216,7 +225,7 @@
 .rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.219 · build 2026-11-02-quick-group-bags-219</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · Phiên bản v0.1.220 · build 2026-11-02-bag-assignment-status-220</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <button id="manual-grading-open" type="button" class="btn btn-light">Nhập điểm kỳ tổ chức thủ công</button>
@@ -239,7 +248,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script id="app-entry" type="module" src="./js/app.js?v=0.1.219&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.220&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {

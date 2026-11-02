@@ -945,17 +945,63 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   async function loadScriptRuns(){
     const examId=currentExam('script-exam');if(!examId)return;
-    const{data,error}=await state.client.from('exam_script_runs').select('*')
-      .eq('exam_id',examId).order('created_at',{ascending:false});
-    if(error)throw new Error(`Không tải được bảng quản lý phách: ${error.message}`);
-    $('script-runs-body').innerHTML=(data||[]).map(run=>`<tr>
-      <td>${esc(new Date(run.created_at).toLocaleString('vi-VN'))}</td><td>${esc(nameOf(run.subject_code))}</td>
-      <td>${esc({room:'Theo phòng',bag:'Dồn túi',random:'Ngẫu nhiên'}[run.method]||run.method)}</td>
-      <td>${esc(run.absence_mode==='gap'?'Cách phách':'Dồn phách')}</td><td>${esc(run.id)}</td>
-      <td>${run.record_count}</td><td>${esc(run.status==='locked'?'Đã khóa':'Bản nháp')}</td>
-      <td>${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
-        `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`).join('')||
-      '<tr><td colspan="8" class="empty">Chưa có phương án phách.</td></tr>';
+    const tbody=$('script-runs-body');
+    tbody.innerHTML='<tr><td colspan="8" class="empty">Đang kiểm tra phân công túi bài…</td></tr>';
+    const runs=await readPages(()=>state.client.from('exam_script_runs').select('*')
+      .eq('exam_id',examId).order('created_at',{ascending:false}));
+    const runIds=runs.map(run=>run.id);
+    const counts=new Map(runIds.map(id=>[id,{rooms:new Set(),assigned:new Set()}]));
+    // Read in batches to avoid URL size limits and Supabase's default 1000-row cap.
+    for(let i=0;i<runIds.length;i+=50){
+      const ids=runIds.slice(i,i+50);
+      const records=await readPages(()=>state.client.from('exam_script_records')
+        .select('run_id,room_code').in('run_id',ids).order('run_id'));
+      for(const row of records){
+        const room=String(row.room_code||'').trim();
+        if(room&&counts.has(row.run_id))counts.get(row.run_id).rooms.add(room);
+      }
+      const assignments=await readPages(()=>state.client.from('exam_script_bag_assignments')
+        .select('run_id,room_code,user_id,group_id').in('run_id',ids).order('run_id'));
+      for(const row of assignments){
+        const room=String(row.room_code||'').trim();
+        if(room&&(row.user_id||row.group_id)&&counts.has(row.run_id))counts.get(row.run_id).assigned.add(room);
+      }
+    }
+    const summaries=runs.map(run=>{
+      const count=counts.get(run.id);
+      const total=count.rooms.size;
+      const assigned=[...count.assigned].filter(room=>count.rooms.has(room)).length;
+      const status=total===0?'empty':assigned===0?'none':assigned===total?'complete':'partial';
+      return {run,total,assigned,status};
+    });
+    const filter=$('script-assignment-filter');
+    if(filter){
+      filter.onchange=()=>renderScriptRunRows();
+    }
+    function renderScriptRunRows(){
+      const selected=filter?.value||'all';
+      const visible=summaries.filter(row=>selected==='all'||row.status===selected);
+      tbody.innerHTML=visible.map(({run,total,assigned,status})=>{
+        const title=status==='complete'?'Đã phân công đủ':status==='partial'?`Còn thiếu ${total-assigned} túi`:status==='none'?'Chưa phân công':'Chưa có túi';
+        const css=status==='complete'?'script-assignment-complete':status==='partial'?'script-assignment-partial':status==='none'?'script-assignment-none':'script-assignment-empty';
+        return `<tr class="${css}">
+          <td>${esc(new Date(run.created_at).toLocaleString('vi-VN'))}</td><td>${esc(nameOf(run.subject_code))}</td>
+          <td>${esc({room:'Theo phòng',bag:'Dồn túi',random:'Ngẫu nhiên'}[run.method]||run.method)}</td>
+          <td>${esc(run.absence_mode==='gap'?'Cách phách':'Dồn phách')}</td>
+          <td>${run.record_count}</td><td>${esc(run.status==='locked'?'Đã khóa':'Bản nháp')}</td>
+          <td><button type="button" class="script-assignment-count" data-script-assign-detail="${esc(run.id)}" ${run.status!=='locked'?'disabled title="Chỉ phân công khi đã khóa phách"':''} aria-label="${esc(nameOf(run.subject_code))}: ${assigned}/${total} túi, ${title}">${assigned}/${total} · ${esc(title)}</button></td>
+          <td>${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
+            `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`;
+      }).join('')||'<tr><td colspan="8" class="empty">Không có phương án phách phù hợp bộ lọc.</td></tr>';
+      const summary=$('script-assignment-summary');
+      if(summary){
+        const completed=summaries.filter(x=>x.status==='complete').length;
+        const partial=summaries.filter(x=>x.status==='partial').length;
+        const missing=summaries.filter(x=>x.status==='none').length;
+        summary.textContent=`Đủ: ${completed} · Thiếu: ${partial} · Chưa phân công: ${missing} · Chưa có túi: ${summaries.filter(x=>x.status==='empty').length}`;
+      }
+    }
+    renderScriptRunRows();
   }
   async function loadScriptRounds(examId){
     const roundSelect=$('script-round');
@@ -1313,6 +1359,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         if(error)throw new Error(`Không bốc thăm được phân công: ${error.message}`);
         message($('script-message'),`Đã bốc thăm ${data.assigned_bag_count} túi cho ${data.grader_count} giám khảo; kết quả đã được lưu nhật ký.`,'success');
         await showBagAssignments(runId);
+        await loadScriptRuns();
       }catch(error){message($('script-message'),error?.message||String(error),'error')}
       finally{button.disabled=false}
     };
@@ -1330,6 +1377,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
           ?`Đã phân công ${rows.length} túi cho giám khảo/nhóm. Các túi chưa gán không được nhập điểm.`
           :'Đã bỏ phân công; các túi chưa giao không được nhập điểm.','success');
         panel.classList.add('hidden');
+        await loadScriptRuns();
       }catch(error){message($('script-message'),error?.message||String(error),'error')}
       finally{button.disabled=false}
     };
@@ -1841,9 +1889,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('script-message',saveScriptGradingWindow,$('script-save-grading-window'));
     safeAction('script-message',loadScriptGradingStatus,$('script-load-grading-status'));
     $('script-runs-body').addEventListener('click',event=>{
-      const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),deleteButton=event.target.closest('[data-script-delete]');
-      const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
-      const button=lock||exportButton||assignButton||deleteButton;
+      const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),detailButton=event.target.closest('[data-script-assign-detail]'),deleteButton=event.target.closest('[data-script-delete]');
+      const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):detailButton?()=>showBagAssignments(detailButton.dataset.scriptAssignDetail):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
+      const button=lock||exportButton||assignButton||detailButton||deleteButton;
       if(action&&button){button.disabled=true;action().catch(error=>message($('script-message'),error?.message||String(error),'error')).finally(()=>{button.disabled=false})}
     });
   }
