@@ -1,6 +1,5 @@
-export function displayExamScore(value){return value==null||value===''?'':Number(value).toFixed(2)}
 export function subjectResultStatus(row){
-  if(row.is_absent)return row.total_score==null?'Vắng':'Vắng — có điểm bổ sung (không thống kê)';
+  if(row.is_absent)return 'Vắng';
   if(row.essay_missing&&row.mcq_missing)return 'Thiếu cả hai phần';
   if(row.essay_missing)return 'Thiếu tự luận';
   if(row.mcq_missing)return 'Thiếu trắc nghiệm';
@@ -65,25 +64,18 @@ export function mandatoryListingGroups(assignments){
     .map(group=>({...group,rows:group.rows.sort((a,b)=>String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}))}));
 }
 
-export function effectiveSlotRows(assignments){
- return assignments.flatMap(row=>row.plan_type==='elective'&&row.ca1_room_code&&row.ca2_room_code&&row.ca1_room_code!==row.ca2_room_code
-  ?[{...row,room_code:row.ca1_room_code,ca2_subject_code:null},{...row,room_code:row.ca2_room_code,ca1_subject_code:null}]
-  :[{...row,room_code:row.plan_type==='elective'?(row.ca1_room_code||row.room_code):row.room_code}]);
-}
 export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
-  assignments=effectiveSlotRows(assignments);
   const byId=new Map();
   for(const row of assignments){
     const id=String(row.candidate_id),room=String(row.room_code||'').trim();
     if(!room)continue;
-    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set(),mandatoryRooms:new Map(),mandatoryCodes:new Set(),electiveCodes:new Set()});
+    if(!byId.has(id))byId.set(id,{mandatory:new Set(),elective:new Set(),mandatoryRooms:new Map()});
     const group=byId.get(id);
     const subject=String(row.subject_code||'').toUpperCase();
     const required=row.plan_type==='mandatory'||(row.plan_type==='subject'&&(row.subject_type==='mandatory'||(!row.subject_type&&['TOAN','VAN'].includes(subject))));
     const subjects=row.plan_type==='elective'?[row.ca1_subject_code,row.ca2_subject_code].filter(Boolean):[subject].filter(Boolean);
     const label=subjects.length?subjects.map(code=>nameOf(code)).join(' / ')+': '+room:room;
     group[required?'mandatory':'elective'].add(label);
-    group[required?'mandatoryCodes':'electiveCodes'].add(room);
     if(required){
       if(!group.mandatoryRooms.has(room))group.mandatoryRooms.set(room,new Set());
       if(subject)group.mandatoryRooms.get(room).add(subject);
@@ -98,7 +90,7 @@ export function buildClassRoomRows(candidates,assignments,nameOf=code=>code){
         rooms.mandatory.add('Toán/Ngữ văn: '+room);
       }
     }
-    return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng',mandatory_room_codes:[...(rooms?.mandatoryCodes||[])],elective_room_codes:[...(rooms?.electiveCodes||[])]};
+    return {...row,mandatory_rooms:[...(rooms?.mandatory||[])].join('; ')||'Chưa phân phòng',elective_rooms:[...(rooms?.elective||[])].join('; ')||'Chưa phân phòng'};
   }).sort((a,b)=>String(a.class_code||'').localeCompare(String(b.class_code||''),'vi',{numeric:true})||String(a.sbd||'').localeCompare(String(b.sbd||''),'vi',{numeric:true}));
 }
 
@@ -212,16 +204,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   };
 
   let formRoundRequest=0,formDataRequest=0,formSettingsExamId=null;
-  let defaultForms=null;
-  const isDefaultForms=()=>state.exams.find(e=>e.id===currentExam('forms-exam'))?.exam_mode==='default';
-  async function ensureDefaultForms(){
-    if(!defaultForms){
-      if(!$('forms-default-settings'))throw new Error('Thiếu giao diện mẫu kỳ mặc định. Hãy cập nhật modules/forms.html cùng bộ website.');
-      const {wireDefaultForms}=await import('./default-forms.js?v=163');
-      defaultForms=wireDefaultForms({$,state,message,createPrintFrame});
-    }
-    return defaultForms;
-  }
   async function loadFormRounds(examId){
     const request=++formRoundRequest,roundSelect=$('forms-round');
     cache.forms=null;
@@ -263,8 +245,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       return [key,{title:cleanFormTitle(value.title)||spec[1],header:{...defaultFont(true),...(value.header||raw?.header)},body:{...defaultFont(),...(value.body||raw?.body)},widths:spec[3].map((w,i)=>Number(value.widths?.[i]||raw?.widths?.[key]?.[i])||w)}];
     }));
     settings.margins=normalizeFormMargins(raw?.margins);
-    settings.classrooms.show_mandatory_subjects=raw?.classrooms?.show_mandatory_subjects===true;
-    settings.classrooms.show_elective_subjects=raw?.classrooms?.show_elective_subjects===true;
     return settings;
   };
   const currentFormPrintSettings=()=>{
@@ -288,8 +268,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(!Number.isFinite(value)||value<0||value>30)throw new Error('Lề in phải từ 0 đến 30 mm.');
       return [side,value];
     }));
-    settings.classrooms.show_mandatory_subjects=$('forms-classrooms-show-mandatory-subjects')?.checked===true;
-    settings.classrooms.show_elective_subjects=$('forms-classrooms-show-elective-subjects')?.checked===true;
     return settings;
   };
   const applyFormPrintSettings=settings=>{
@@ -299,22 +277,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       value.widths.forEach((width,i)=>$(`forms-${key}-width-${i}`).value=width);
     }
     const margins=normalizeFormMargins(settings?.margins);
-    const flags=normalizeFormPrintSettings(settings).classrooms;
-    if($('forms-classrooms-show-mandatory-subjects'))$('forms-classrooms-show-mandatory-subjects').checked=flags.show_mandatory_subjects;
-    if($('forms-classrooms-show-elective-subjects'))$('forms-classrooms-show-elective-subjects').checked=flags.show_elective_subjects;
     for(const side of Object.keys(defaultFormMargins))$(`forms-margin-${side}`).value=margins[side];
   };
 
   function showFormSettings(){
-    const common=isDefaultForms();
-    $('forms-choice-note')?.classList.toggle('hidden',common);
-    $('forms-default-settings')?.classList.toggle('hidden',!common);
-    $('forms-print-type').closest('label').classList.toggle('hidden',common);
     const selected=$('forms-print-type').value;
-    for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',common||key!==selected);
-    $('forms-settings-receipt').classList.toggle('hidden',common||!selected.startsWith('receipt_'));
-    $('forms-class-filter-wrap').classList.toggle('hidden',common?!['classrooms','receipt_classrooms'].includes($('forms-default-type')?.value):!['receipt_classrooms','classrooms'].includes(selected));
-    $('forms-receipt-order-wrap').classList.toggle('hidden',common||selected!=='receipt_elective');
+    for(const key of Object.keys(formSpecs))$(`forms-settings-${key}`).classList.toggle('hidden',key!==selected);
+    $('forms-settings-receipt').classList.toggle('hidden',!selected.startsWith('receipt_'));
+    $('forms-class-filter-wrap').classList.toggle('hidden',!['receipt_classrooms','classrooms'].includes(selected));
+    $('forms-receipt-order-wrap').classList.toggle('hidden',selected!=='receipt_elective');
   }
   function classRoomGroups(forms){
     const selected=$('forms-class-filter').value||'';
@@ -324,14 +295,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       .map(code=>[code,rows.filter(row=>(row.class_code||'Chưa xếp lớp')===code)]);
   }
   const shortRoomLabels=value=>String(value??'').replace(/phòng/gi,'P');
-  const classRoomColumn=(row,kind)=>{
-    const value=String(row[kind+'_rooms']||'Chưa phân phòng');
-    if(value==='Chưa phân phòng')return value;
-    if($('forms-classrooms-show-'+kind+'-subjects')?.checked===true)return shortRoomLabels(value);
-    const codes=row[kind+'_room_codes']||value.split(';').map(label=>label.slice(label.lastIndexOf(':')+1).trim()).filter(Boolean);
-    return [...new Set(codes)].map(shortRoomLabels).join('; ')||'Chưa phân phòng';
-  };
-  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',classRoomColumn(row,'mandatory'),classRoomColumn(row,'elective'),''];
+  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',shortRoomLabels(row.mandatory_rooms),shortRoomLabels(row.elective_rooms),''];
   function classReceiptGroups(forms){
     const groups=new Map();
     const selected=$('forms-class-filter').value||'';
@@ -347,9 +311,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   async function loadForms(){
-    showFormSettings();
-    for(const id of ['forms-default-preview-button','forms-default-print'])if($(id))$(id).disabled=true;
-    if($('forms-default-preview'))$('forms-default-preview').innerHTML='';
     const request=++formDataRequest;
     cache.forms=null;
     $('forms-export-xlsx').disabled=true;$('forms-export-pdf').disabled=true;
@@ -391,7 +352,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const assignments=[];
       let officialPlans=[];
       if(roundNo){
-        officialPlans=await readPages(()=>state.client.from('exam_effective_rooming_round_plans')
+        officialPlans=await readPages(()=>state.client.from('exam_rooming_round_plans')
           .select('id,round_no,plan_type,subject_code,rooms,assignments,status,created_at')
           .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
         for(const plan of officialPlans||[]){
@@ -433,14 +394,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         return {...row,sequence:index+1,
           subject_one:row.ca1_subject_code||row.subject_code||registration.one||'',
           subject_two:row.ca2_subject_code||registration.two||'',
-          note:row.amended?`Đã điều chỉnh: ca 1 ${nameOf(row.ca1_subject_code)} tại ${row.ca1_room_code}; ca 2 ${nameOf(row.ca2_subject_code)} tại ${row.ca2_room_code}. Xem thông báo riêng.`:''};
+          note:''};
       }).sort((a,b)=>String(a.room_code).localeCompare(String(b.room_code),'vi',{numeric:true})||
         String(a.sbd).localeCompare(String(b.sbd),'vi',{numeric:true}));
       const receiptRows=[];
       for(const row of expanded){
         if(row.plan_type==='elective'){
-          receiptRows.push({...row,room_code:row.ca1_room_code||row.room_code,subject_code:row.ca1_subject_code,subject_order:1});
-          receiptRows.push({...row,room_code:row.ca2_room_code||row.room_code,subject_code:row.ca2_subject_code,subject_order:2});
+          receiptRows.push({...row,subject_code:row.ca1_subject_code,subject_order:1});
+          receiptRows.push({...row,subject_code:row.ca2_subject_code,subject_order:2});
         }else receiptRows.push({...row,subject_order:null});
       }
       const rosterRows=candidates.map((candidate,index)=>{
@@ -450,21 +411,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
       const classRoomRows=buildClassRoomRows(candidates,expanded,nameOf);
       const classSelect=$('forms-class-filter'),previousClass=classSelect.value;
-      classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set((exam.exam_mode==='default'?allCandidates:classRoomRows).map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
+      classSelect.innerHTML='<option value="">Tất cả các lớp</option>'+[...new Set(classRoomRows.map(row=>row.class_code||'Chưa xếp lớp'))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true})).map(code=>`<option value="${esc(code)}">${esc(code)}</option>`).join('');
       classSelect.value=[...classSelect.options].some(option=>option.value===previousClass)?previousClass:'';
-      cache.forms={exam,examId,roundNo,candidates,allCandidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
-      if(exam.exam_mode==='default'){
-        const renderer=await ensureDefaultForms();
-        if(request!==formDataRequest||currentExam('forms-exam')!==examId||Number($('forms-round').value)!==roundNo)return;
-        renderer.load(cache.forms);
-        for(const id of ['forms-default-preview-button','forms-default-print'])$(id).disabled=false;
-      }
-      $('forms-summary').innerHTML=(exam.exam_mode==='default'?[
-        ['Thí sinh',candidates.length],['Phương án chính thức để chọn nguồn phòng chung',finalizations.length]
-      ]:[
+      cache.forms={exam,examId,roundNo,candidates,finalizations,assignments:expanded,listingRows,receiptRows,rosterRows,classRoomRows,mandatoryGroups:mandatoryListingGroups(expanded)};
+      $('forms-summary').innerHTML=[
         ['Thí sinh',candidates.length],['Danh sách có phòng',listingRows.length],
         ['Lượt thu bài',receiptRows.length],['Môn lựa chọn đã rà soát',rosterRows.length]
-      ]).map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+      ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
       $('forms-export-xlsx').disabled=false;$('forms-export-pdf').disabled=false;
       message($('forms-message'),`Đã tải ${candidates.length} thí sinh${roundNo?` của đợt ${roundNo}`:''}, ${finalizations?.length||0} phương án phòng chính thức.`,'success');
     }finally{if(request===formDataRequest)$('forms-load-data').disabled=false}
@@ -472,11 +425,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function saveFormHeader(){
     const examId=currentExam('forms-exam');setAdminExam(examId);
     const printSettings=currentFormPrintSettings();
-    if(isDefaultForms()){
-      if(!defaultForms||cache.forms?.examId!==examId)throw new Error('Tải dữ liệu biểu mẫu trước khi lưu mẫu kỳ mặc định.');
-      printSettings.default_templates=defaultForms.getSettings();
-      printSettings.default_room_sources={...(cache.forms.exam.form_print_settings?.default_room_sources||{}),[String(cache.forms.roundNo)]:$('forms-default-source').value};
-    }
     const payload={managing_authority:$('forms-authority').value.trim(),
       institution_name:$('forms-institution').value.trim(),form_exam_title:$('forms-title').value.trim(),
       form_print_settings:printSettings};
@@ -943,13 +891,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const roundNo=Number($('script-round')?.value||0)||null;
     let target=null,records=[];
     if(roundNo){
-      const plans=await readPages(()=>state.client.from('exam_effective_rooming_round_plans')
+      const plans=await readPages(()=>state.client.from('exam_rooming_round_plans')
         .select('id,round_no,plan_type,subject_code,assignments,created_at')
         .eq('exam_id',examId).eq('round_no',roundNo).eq('status','official').order('created_at',{ascending:false}));
       for(const plan of plans||[]){
         const rows=(Array.isArray(plan.assignments)?plan.assignments:[]).map(row=>({...row,subject_code:row.subject_code||plan.subject_code||''}));
         const relevant=rows.filter(row=>row.subject_code===code||row.ca1_subject_code===code||row.ca2_subject_code===code);
-        if(relevant.length){target=plan;records=relevant.map(row=>({...row,room_code:row.ca1_subject_code===code?(row.ca1_room_code||row.room_code):row.ca2_subject_code===code?(row.ca2_room_code||row.room_code):row.room_code}));break}
+        if(relevant.length){target=plan;records=relevant;break}
       }
     }else{
       const finals=checkResult(await state.client.from('exam_rooming_finalizations').select('*')
@@ -1293,37 +1241,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     cache.scoreImportRows=[];cache.combinedScores=[];
     cache.subjectStatistics=null;
     for(const id of ['scores-preview','scores-results','scores-summary','scores-class-results'])$(id).innerHTML='';
-    $('scores-result-controls').hidden=true;
     $('scores-import').disabled=true;$('scores-export').disabled=true;
-  }
-
-  function combinedRowFilter(row){
-    const status=$('scores-result-status').value;
-    const text=$('scores-result-search').value.trim().toLocaleLowerCase('vi');
-    if($('scores-result-class').value&&row.class_code!==$('scores-result-class').value)return false;
-    if(status==='complete'&&row.total_score===null)return false;
-    if(status==='missing'&&(row.is_absent||(!row.essay_missing&&!row.mcq_missing)))return false;
-    if(status==='absent'&&!row.is_absent)return false;
-    if(status==='no-paper'&&!row.no_paper)return false;
-    return !text||[row.sbd,row.student_code,row.student_name,row.class_code].some(value=>String(value||'').toLocaleLowerCase('vi').includes(text));
-  }
-
-  function renderCombinedScores(){
-    const rows=cache.combinedScores.filter(combinedRowFilter);
-    $('scores-result-count').textContent=`Hiển thị ${rows.length}/${cache.combinedScores.length} thí sinh trong vùng cuộn bên dưới.`;
-    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${rows.map(row=>{
-      const completeScore=row.total_score!==null;
-      const status=subjectResultStatus(row);
-      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${displayExamScore(row.essay_score)}</td><td>${displayExamScore(row.mcq_score)}</td><td>${completeScore?displayExamScore(row.total_score):''}</td><td>${status}</td><td>${displayExamScore(row.statistics_score)}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
-    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh phù hợp bộ lọc.</td></tr>'}</tbody></table>`;
-  }
-
-  function showCombinedScoreControls(){
-    const select=$('scores-result-class'),selected=select.value;
-    const classes=[...new Set(cache.combinedScores.map(row=>row.class_code).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'vi',{numeric:true}));
-    select.innerHTML='<option value="">Tất cả lớp</option>'+classes.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
-    select.value=classes.includes(selected)?selected:'';
-    $('scores-result-controls').hidden=false;
   }
   async function loadScoreMode(){
     const examId=state.selectedExam,subject=$('scores-subject').value,key=scoreKey();
@@ -1446,8 +1364,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ['Được tính thống kê',data?.summary?.included_count??0],['Loại khỏi thống kê',data?.summary?.excluded_count??0],
       ['Điểm TB thống kê',data?.summary?.average_score==null?'—':Number(data.summary.average_score).toFixed(3)]
     ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
-    showCombinedScoreControls();
-    renderCombinedScores();
+    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${cache.combinedScores.map(row=>{
+      const completeScore=row.total_score!==null;
+      const status=subjectResultStatus(row);
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${row.essay_score??''}</td><td>${row.mcq_score??''}</td><td>${completeScore?esc(row.total_score):''}</td><td>${status}</td><td>${esc(row.statistics_score??'')}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
+    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh thuộc môn này.</td></tr>'}</tbody></table>`;
     $('scores-class-results').innerHTML=`<h3>Thống kê môn theo lớp</h3><table><thead><tr><th>Lớp</th><th>Dự thi</th><th>Được tính</th><th>Loại</th><th>Điểm TB</th></tr></thead><tbody>${(data?.classes||[]).map(row=>`<tr><td>${esc(row.class_code)}</td><td>${row.candidates}</td><td>${row.included_count}</td><td>${row.excluded_count}</td><td>${row.average_score==null?'—':Number(row.average_score).toFixed(3)}</td></tr>`).join('')}</tbody></table>`;
     $('scores-export').disabled=!cache.combinedScores.length;
   }
@@ -1463,11 +1384,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       ])
     ];
     const wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(rows);
-    for(let r=1;r<rows.length;r++)for(const c of [4,5,6,8]){const address=window.XLSX.utils.encode_cell({r,c});if(ws[address]?.t==='n')ws[address].z='0.00'}
     window.XLSX.utils.book_append_sheet(wb,ws,'Tong hop diem');
     const classRows=[['Lớp','Dự thi','Được tính','Loại','Điểm TB'],...(cache.subjectStatistics?.classes||[]).map(r=>[r.class_code,r.candidates,r.included_count,r.excluded_count,r.average_score??''])];
-    const classSheet=window.XLSX.utils.aoa_to_sheet(classRows);for(let r=1;r<classRows.length;r++){const cell=classSheet[window.XLSX.utils.encode_cell({r,c:4})];if(cell?.t==='n')cell.z='0.000'}
-    window.XLSX.utils.book_append_sheet(wb,classSheet,'Thong ke lop');
+    window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet(classRows),'Thong ke lop');
     window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet([
       ['Tính học sinh vắng',!!$('scores-include-absent').checked],['Tính học sinh vi phạm',!!$('scores-include-violations').checked]
     ]),'Lua chon thong ke');
@@ -1708,15 +1627,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('forms-round').onchange=()=>loadForms().catch(error=>message($('forms-message'),error.message,'error'));
     safeAction('forms-message',saveFormHeader,$('forms-save-header'));
     safeAction('forms-message',loadForms,$('forms-load-data'));
-    const exportCurrent=async format=>{
-      try{
-        if(!cache.forms||cache.forms.examId!==currentExam('forms-exam')||Number($('forms-round').value)!==cache.forms.roundNo)throw new Error('Hãy tải dữ liệu biểu mẫu của đúng kỳ/đợt trước khi in.');
-        if(isDefaultForms()){const renderer=await ensureDefaultForms();if(format==='excel')renderer.excel();else renderer.print()}
-        else if(format==='excel')exportFormsExcel();else exportFormsPdf();
-      }catch(error){message($('forms-message'),error.message,'error')}
-    };
-    $('forms-export-xlsx').onclick=()=>exportCurrent('excel');
-    $('forms-export-pdf').onclick=()=>exportCurrent('pdf');
+    $('forms-export-xlsx').onclick=()=>{try{exportFormsExcel()}catch(error){message($('forms-message'),error.message,'error')}};
+    $('forms-export-pdf').onclick=()=>{try{exportFormsPdf()}catch(error){message($('forms-message'),error.message,'error')}};
   }
   function wireAbsences(){
     if(createStudentPicker&&$('absence-student-picker'))absencePicker=createStudentPicker({root:$('absence-student-picker'),input:$('absence-student-input'),list:$('absence-student-options'),toggle:$('absence-student-toggle'),esc,onSelect:id=>{absenceStudentId=id;$('absence-search').value='';applyAbsenceFilters()}});
@@ -1843,7 +1755,6 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const id of ['scores-include-absent','scores-include-violations'])$(id).onchange=()=>{
       ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;
       for(const target of ['scores-results','scores-summary','scores-class-results'])$(target).innerHTML='';
-      $('scores-result-controls').hidden=true;
       $('scores-export').disabled=true;
     };
     $('scores-exam').onchange=refreshScores;
@@ -1858,13 +1769,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     refreshScores();
     safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
     safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
-    safeAction('scores-message',loadCombinedScores,$('scores-check'));
     safeAction('scores-message',loadCombinedScores,$('scores-load'));
-    for(const id of ['scores-result-class','scores-result-status'])$(id).onchange=renderCombinedScores;
-    $('scores-result-search').oninput=renderCombinedScores;
-    $('scores-result-clear').onclick=()=>{
-      $('scores-result-class').value='';$('scores-result-status').value='all';$('scores-result-search').value='';renderCombinedScores();
-    };
     $('scores-export').onclick=()=>{try{exportCombinedScores()}catch(error){message($('scores-message'),error.message,'error')}};
   }
   wireForms();
@@ -1875,17 +1780,10 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     catch(error){message($(notice),`Không khởi tạo được chức năng này. Hãy cập nhật đầy đủ các tệp giao diện. ${error.message}`,'error')}
   }
   return{
-    invalidateAmendmentData:()=>{
-      ++formDataRequest;++scoreRevision;combinedContext=null;cache.forms=null;cache.combinedScores=[];cache.subjectStatistics=null;
-      cache.scriptRooms=[];cache.scriptFinalizationId=null;absenceExamId='';
-      for(const id of ['forms-export-xlsx','forms-export-pdf','scores-export'])if($(id))$(id).disabled=true;
-      $('scores-results').innerHTML='';$('scores-class-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-result-controls').hidden=true;
-      message($('forms-message'),'Đã điều chỉnh môn. Tải lại biểu mẫu để cập nhật phòng thực tế theo ca.','info');
-    },
     refreshExamSelectors:()=>{setExamOptions();refreshScores();},
     refreshScores,
     invalidateCombinedScores:()=>{
-      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;$('scores-class-results').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-result-controls').hidden=true;$('scores-export').disabled=true;
+      ++scoreRevision;combinedContext=null;cache.combinedScores=[];cache.subjectStatistics=null;$('scores-class-results').innerHTML='';$('scores-results').innerHTML='';$('scores-summary').innerHTML='';$('scores-export').disabled=true;
       message($('scores-message'),'Điểm tự luận đã thay đổi. Nhấn Tải điểm tổng hợp để tính lại.','info');
     },
     refreshAbsences:async examId=>{
