@@ -1,5 +1,5 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS,completeMandatorySubjectCodes,normalizeMandatoryRoundSubjects} from './rooming.js?v=0.1.151';
-import {loadTabModules} from './module-loader.js?v=0.1.151';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS,completeMandatorySubjectCodes,normalizeMandatoryRoundSubjects} from './rooming.js?v=0.1.152';
+import {loadTabModules} from './module-loader.js?v=0.1.152';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&absences=150';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -10,7 +10,7 @@ import {wireScoreControl} from './score-control.js?v=0.1.147';
 import {wireClassReport} from './class-report.js?v=0.1.147';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
-const APP_VERSION='v0.1.151';
+const APP_VERSION='v0.1.152';
 const APP_BUILD='2026-11-02-compulsory-registration-pair';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -1676,7 +1676,7 @@ async function saveRooming(){
   const{examId,roundNo,planType,subjectCode,adjustmentMode,options,result}=preview;
   const rooms=result.rooms.filter(room=>room.student_count>0);
   const{data,error}=await state.client.rpc('exam_save_rooming_round_plan',{p_exam_id:examId,p_round_no:roundNo,p_plan_type:planType,p_subject_code:subjectCode||null,p_adjustment_mode:adjustmentMode||'automatic',p_capacity:options.capacity,p_room_prefix:options.roomPrefix,p_first_room_number:options.firstRoomNumber,p_rooms:rooms,p_assignments:result.assignments,p_lock:false});
-  if(error)throw new Error(`Không lưu được phương án đợt ${roundNo}. Hãy chạy lại migration SQL v0.1.91 sau khi cập nhật điều kiện kiểm tra môn lựa chọn. ${error.message}`);
+  if(error)throw new Error(`Không lưu được phương án đợt ${roundNo}. Nếu thông báo môn bắt buộc chưa được cấu hình, hãy chạy migration SQL v0.1.152 để đồng bộ Toán và Ngữ văn trong các đợt thi đã có. ${error.message}`);
   const snapshotId=data?.plan_id;
   if(typeof snapshotId!=='string')throw new Error('RPC không trả về plan_id hợp lệ; chưa thể phân phòng chính thức.');
   if(state.preview!==preview)return;
