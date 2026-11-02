@@ -8,6 +8,25 @@ export const SUBJECTS = [
   {code:'LY', name:'Vật lí'},
   {code:'HOA', name:'Hóa học'},{code:'SINH', name:'Sinh học'},{code:'TIN', name:'Tin học'}
 ];
+export function completeMandatorySubjectCodes(codes) {
+  const normalized=[...new Set((codes||[]).map(code=>String(code||'').trim().toUpperCase()).filter(Boolean))];
+  return ['TOAN','VAN',...normalized.filter(code=>code!=='TOAN'&&code!=='VAN')];
+}
+export function normalizeMandatoryRoundSubjects(rows) {
+  const byCode=new Map();
+  for(const row of rows||[]){
+    const code=String(row.subject_code||'').trim().toUpperCase();
+    const rawType=String(row.subject_type||'').trim().toLowerCase();
+    if(!code||byCode.has(code))continue;
+    byCode.set(code,{
+      subject_code:code,
+      subject_type:['TOAN','VAN'].includes(code)||['required','mandatory'].includes(rawType)?'mandatory':'elective',
+      subject_order:Number(row.subject_order)||1
+    });
+  }
+  return completeMandatorySubjectCodes([...byCode.keys()]).map((code,index)=>
+    byCode.get(code)||{subject_code:code,subject_type:'mandatory',subject_order:index+1});
+}
 export function isValidSbd(value) {
   return /^(?:\d{6}|\d{8})$/.test(String(value ?? ''));
 }

@@ -1,5 +1,5 @@
-import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.147';
-import {loadTabModules} from './module-loader.js?v=0.1.150';
+import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan,isValidSbd,optimizeElectiveRooms,optimizeMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS,completeMandatorySubjectCodes,normalizeMandatoryRoundSubjects} from './rooming.js?v=0.1.151';
+import {loadTabModules} from './module-loader.js?v=0.1.151';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.147&absences=150';
 import {wireAccounts} from './accounts.js?v=0.1.147';
 import {wireTeaching} from './teaching.js?v=0.1.147';
@@ -10,7 +10,7 @@ import {wireScoreControl} from './score-control.js?v=0.1.147';
 import {wireClassReport} from './class-report.js?v=0.1.147';
 import {wireChoiceReports} from './choice-report.js?v=0.1.147';
 import {loadExamRounds} from './rounds.js?v=0.1.147';
-const APP_VERSION='v0.1.150';
+const APP_VERSION='v0.1.151';
 const APP_BUILD='2026-11-02-compulsory-registration-pair';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -1121,22 +1121,14 @@ async function refreshRoomingSubjectOptions(){
   const examId=$('rooming-exam-select')?.value,roundNo=selectedRoomingRound();
   if(!examId||!state.client)return;
   const {data,error}=await state.client.from('exam_round_subjects').select('subject_code,subject_type').eq('exam_id',examId).eq('round_no',roundNo).order('subject_type').order('subject_code');
-  if(error)return;
+  if(error)throw new Error(`Không tải được môn của đợt thi: ${error.message}`);
   const all=[...new Map((data||[]).filter(row=>row.subject_type!=='elective').map(row=>[String(row.subject_code).toUpperCase(),String(row.subject_code).toUpperCase()])).keys()];
-  const fallback=[...new Set((await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code').eq('exam_id',examId))).map(row=>String(row.subject_code||'').toUpperCase()))];
-  const codes=all.length?all:fallback;
+  const fallbackRows=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code,subject_type').eq('exam_id',examId));
+  const fallback=[...new Set(fallbackRows.filter(row=>row.subject_type!=='elective').map(row=>String(row.subject_code||'').toUpperCase()))];
+  const codes=completeMandatorySubjectCodes(all.length?all:fallback);
   const options=codes.map(code=>`<option value="${esc(code)}">${esc(subjectName(code))} (${esc(code)})</option>`).join('');
   $('mandatory-subject').innerHTML=options||'<option value="TOAN">Toán (TOAN)</option>';
   $('rooming-subject').innerHTML=options||'<option value="TOAN">Toán (TOAN)</option>';
-}
-function normalizeRoundSubjectRows(rows){
-  const seen=new Set();
-  return (rows||[]).map(row=>{
-    const code=String(row.subject_code||'').trim().toUpperCase();
-    const rawType=String(row.subject_type||'').trim().toLowerCase();
-    const type=rawType==='required'?'mandatory':rawType==='class'?'class':'elective';
-    return {subject_code:code,subject_type:type,subject_order:Number(row.subject_order)||1};
-  }).filter(row=>row.subject_code).filter(row=>{const key=`${row.subject_code}|${row.subject_type}`;if(seen.has(key))return false;seen.add(key);return true});
 }
 async function configureRoomingRoundFromSelection(selectedIds){
   const examId=$('rooming-exam-select').value,roundNo=selectedRoomingRound();
@@ -1145,9 +1137,8 @@ async function configureRoomingRoundFromSelection(selectedIds){
   if(!ids.length)throw new Error('Chưa chọn học sinh vào đợt.');
   if(roundNo===2){const first=await state.client.from('exam_round_candidates').select('candidate_id').eq('exam_id',examId).eq('round_no',1);const excluded=new Set((first.data||[]).map(row=>String(row.candidate_id)));const overlap=ids.filter(id=>excluded.has(id));if(overlap.length)throw new Error(`${overlap.length} học sinh đã thuộc đợt 1, không thể đưa vào đợt 2.`)}
   const subjectRows=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code,subject_type,subject_order').eq('exam_id',examId));
-  const subjects=normalizeRoundSubjectRows(subjectRows);
-  if(!subjects.length)subjects.push({subject_code:String($('rooming-subject')?.value||$('mandatory-subject')?.value||'TOAN').toUpperCase(),subject_type:'mandatory',subject_order:1});
-  const {data,error}=await state.client.rpc('exam_configure_round',{p_exam_id:examId,p_round_no:roundNo,p_candidate_ids:ids,p_subjects:subjects,p_name:`Đợt ${roundNo}`});
+  const roundSubjects=normalizeMandatoryRoundSubjects(subjectRows);
+  const {data,error}=await state.client.rpc('exam_configure_round',{p_exam_id:examId,p_round_no:roundNo,p_candidate_ids:ids,p_subjects:roundSubjects,p_name:`Đợt ${roundNo}`});
   if(error)throw error;
   message($('rooming-message'),`Đã cấu hình đợt ${roundNo}: ${data.candidate_count} thí sinh, ${data.subject_count} môn. SBD vẫn dùng chung theo kỳ thi.`,'success');
   await loadCandidates();
@@ -1187,7 +1178,8 @@ async function configureRoomingRound(){
   if(!candidates.length){message($('rooming-message'),'Kỳ thi chưa có thí sinh.','error');return}
   const subjectRows=await selectAllPages(()=>state.client.from('exam_candidate_subjects').select('subject_code,subject_type,subject_order').eq('exam_id',examId));
   const planType=$('room-plan-type').value,mandatory=$('mandatory-subject')?.value||'TOAN';
-  const subjects=planType==='mandatory'?[{subject_code:mandatory,subject_type:'mandatory',subject_order:1}]:[...new Map(subjectRows.filter(row=>row.subject_type==='elective').map(row=>[row.subject_code,{subject_code:row.subject_code,subject_type:'elective',subject_order:row.subject_order||1}])).values()];
+  const configuredSubjects=planType==='mandatory'?[{subject_code:mandatory,subject_type:'mandatory',subject_order:1}]:[...new Map(subjectRows.filter(row=>row.subject_type==='elective').map(row=>[row.subject_code,{subject_code:row.subject_code,subject_type:'elective',subject_order:row.subject_order||1}])).values()];
+  const subjects=normalizeMandatoryRoundSubjects(configuredSubjects);
   const ids=candidates.map(row=>row.id);
   if(roundNo===2){const first=await state.client.from('exam_round_candidates').select('candidate_id').eq('exam_id',examId).eq('round_no',1);const excluded=new Set((first.data||[]).map(row=>row.candidate_id));ids.splice(0,ids.length,...ids.filter(id=>!excluded.has(id)));}
   const {data,error}=await state.client.rpc('exam_configure_round',{p_exam_id:examId,p_round_no:roundNo,p_candidate_ids:ids,p_subjects:subjects,p_name:`Đợt ${roundNo}`});
