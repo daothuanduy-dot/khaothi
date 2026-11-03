@@ -154,7 +154,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label=`Phiên bản ${APP_VERSION} · build ${APP_BUILD}`;const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.233';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -227,12 +227,34 @@ async function submitLogin(event){
   }
 }
 
+// Profile display is never derived from the email address. Missing profile data is labelled explicitly.
+async function updateTeacherIdentity(user){
+  const target=$('user-email');if(!target||!user)return;
+  const metadata=user.user_metadata||{};
+  const rawName=[metadata.full_name,metadata.name,metadata.display_name].find(v=>typeof v==='string'&&v.trim());
+  let name=rawName?rawName.trim():'';
+  // Query profile only if the name is not supplied in authenticated user metadata.
+  if(!name){
+    try{const {data,error}=await state.client.from('exam_profiles').select('*').eq('user_id',user.id).maybeSingle();
+      if(!error&&data)name=String(data.full_name||data.display_name||data.teacher_name||data.name||'').trim();
+    }catch(_e){}
+  }
+  const subjects=new Set();
+  try{
+    const {data,error}=await state.client.from('school_teaching_assignments').select('subject_code').eq('teacher_user_id',user.id).limit(1000);
+    if(!error)(data||[]).forEach(a=>{if(a.subject_code)subjects.add(String(a.subject_code).toUpperCase())});
+  }catch(_e){}
+  // Ignore late responses after logout or a different login.
+  if(state.session?.user?.id!==user.id)return;
+  const subjectLabel=[...subjects].sort((a,b)=>a.localeCompare(b,'vi')).map(s=>subjectName(s)).join(', ');
+  target.textContent=`${name||'Chưa cập nhật họ tên'} · Giáo viên ${subjectLabel?`môn ${subjectLabel}`:'(chưa xác định môn)'}`;
+}
 async function enterApp(user){
   state.session={user};
   const{data:role,error:roleError}=await state.client.rpc('exam_current_user_role');
   if(roleError)throw new Error(`Không xác định được quyền tài khoản. Hãy chạy migration v0.1.59. ${roleError.message}`);
   state.role=role;
-  updateVersionDisplay();$('user-email').textContent=user.email||'';
+  updateVersionDisplay();$('user-email').textContent='';void updateTeacherIdentity(user);
   if(role==='grader'){
     $('grader-back-admin').classList.add('hidden');
     $('logout-btn').classList.add('hidden');
@@ -3311,7 +3333,7 @@ function wireRoomingEditor(){
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
  $('apply-rooming-other-subjects').onclick=applyRoomingToOtherSubjects;
- if($('grader-class-scores'))$('grader-class-scores').onclick=async()=>{try{const {openClassScores}=await import('./class-scores.js?v=223');await openClassScores({state,examId:state.selectedExam||''})}catch(e){message($('grader-message'),e.message,'error')}};
+ if($('grader-class-scores'))$('grader-class-scores').onclick=async()=>{try{const {openClassScores}=await import('./class-scores.js?v=233');await openClassScores({state,examId:state.selectedExam||''})}catch(e){message($('grader-message'),e.message,'error')}};
  for(const id of ['open-absent-scores','grader-absent-scores'])if($(id))$(id).onclick=async()=>{try{const {openAbsentScores}=await import('./absent-scores.js?v=191');await openAbsentScores({state,examId:state.selectedExam||'',subjectName})}catch(e){message($(state.role==='admin'?'global-message':'grader-message'),e.message,'error')}};
  if($('reset-official-rooming'))$('reset-official-rooming').onclick=resetOfficialRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
