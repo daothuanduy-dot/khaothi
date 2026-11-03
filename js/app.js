@@ -154,7 +154,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.233';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.234';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -240,14 +240,18 @@ async function updateTeacherIdentity(user){
     }catch(_e){}
   }
   const subjects=new Set();
+  let subjectLookupFailed=false;
   try{
-    const {data,error}=await state.client.from('school_teaching_assignments').select('subject_code').eq('teacher_user_id',user.id).limit(1000);
-    if(!error)(data||[]).forEach(a=>{if(a.subject_code)subjects.add(String(a.subject_code).toUpperCase())});
-  }catch(_e){}
+    const {data,error}=await state.client.rpc('exam_my_teacher_subjects');
+    if(error){subjectLookupFailed=true;console.warn('Không tải được môn giáo viên:',error.message)}
+    else if(Array.isArray(data)){
+      data.forEach(code=>{if(typeof code==='string'&&code.trim())subjects.add(code.trim().toUpperCase())});
+    }else{subjectLookupFailed=true;console.warn('RPC exam_my_teacher_subjects trả về dữ liệu không phải mảng')}
+  }catch(error){subjectLookupFailed=true;console.warn('Không tải được môn giáo viên:',error)}
   // Ignore late responses after logout or a different login.
   if(state.session?.user?.id!==user.id)return;
   const subjectLabel=[...subjects].sort((a,b)=>a.localeCompare(b,'vi')).map(s=>subjectName(s)).join(', ');
-  target.textContent=`${name||'Chưa cập nhật họ tên'} · Giáo viên ${subjectLabel?`môn ${subjectLabel}`:'(chưa xác định môn)'}`;
+  target.textContent=`${name||'Chưa cập nhật họ tên'} · Giáo viên ${subjectLabel?`môn ${subjectLabel}`:(subjectLookupFailed?'(không tải được môn)':'(chưa được phân môn)')}`;
 }
 async function enterApp(user){
   state.session={user};
