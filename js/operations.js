@@ -990,7 +990,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
           <td>${esc(run.absence_mode==='gap'?'Cách phách':'Dồn phách')}</td>
           <td>${run.record_count}</td><td>${esc(run.status==='locked'?'Đã khóa':'Bản nháp')}</td>
           <td><button type="button" class="script-assignment-count" data-script-assign-detail="${esc(run.id)}" ${run.status!=='locked'?'disabled title="Chỉ phân công khi đã khóa phách"':''} aria-label="${esc(nameOf(run.subject_code))}: ${assigned}/${total} túi, ${title}">${assigned}/${total} · ${esc(title)}</button></td>
-          <td>${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
+          <td><button type="button" class="small-btn" data-script-view="${esc(run.id)}">Xem</button> <button type="button" class="small-btn" data-script-match="${esc(run.id)}">Bảng khớp phách</button> ${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
             `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`;
       }).join('')||'<tr><td colspan="8" class="empty">Không có phương án phách phù hợp bộ lọc.</td></tr>';
       const summary=$('script-assignment-summary');
@@ -1138,6 +1138,82 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     window.XLSX.writeFile(wb,`phach-${run.exam_id}-${run.subject_code}.xlsx`,{cellStyles:true});
   }
 
+  // v0.1.237: Read-only, admin-only script review and confidential matching sheet.
+  let scriptReview=null;
+  async function loadScriptReview(runId){
+    const examId=currentExam('script-exam');
+    if(!examId)throw new Error('Hãy chọn kỳ thi.');
+    const {data:run,error:runError}=await state.client.from('exam_script_runs').select('*').eq('id',runId).eq('exam_id',examId).single();
+    if(runError||!run)throw new Error('Không tìm thấy phương án phách thuộc kỳ thi đang chọn. '+(runError?.message||''));
+    // All three reads must pass server-side RLS; never use service-role keys in the browser.
+    const records=await readPages(()=>state.client.from('exam_script_records').select('id,run_id,candidate_id,sbd,room_code,room_order,script_order,phach_code,is_absent').eq('run_id',runId).order('script_order'));
+    const ids=[...new Set(records.map(x=>x.candidate_id).filter(Boolean))];
+    const candidates=[];
+    for(let i=0;i<ids.length;i+=100){
+      const {data,error}=await state.client.from('exam_candidates').select('id,student_code,student_name,class_code').eq('exam_id',examId).in('id',ids.slice(i,i+100));
+      if(error)throw new Error('Không tải được danh tính thí sinh: '+error.message);
+      candidates.push(...(data||[]));
+    }
+    const byId=new Map(candidates.map(c=>[String(c.id),c]));
+    if(candidates.length!==ids.length)throw new Error('Không đủ quyền hoặc thiếu dữ liệu thí sinh; từ chối xuất bảng khớp phách không đầy đủ.');
+    const rows=records.map((r,i)=>({...r,...byId.get(String(r.candidate_id)),ordinal:i+1}));
+    const roomOrder=Array.isArray(run.room_order)?run.room_order:[];
+    const positions=new Map(roomOrder.map((r,i)=>[String(r.room_code),Number(r.position)||i+1]));
+    const groups=new Map();
+    for(const r of rows){const key=String(r.room_code||'');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r)}
+    scriptReview={run,rows,positions,groups};
+    const exam=state.exams.find(x=>x.id===run.exam_id);
+    $('script-review-title').textContent=`${nameOf(run.subject_code)} — ${run.status==='locked'?'Phách đã khóa':'Bản nháp'}`;
+    $('script-review-meta').textContent=`${exam?.name||exam?.form_exam_title||'Kỳ thi'} · ${new Date(run.created_at).toLocaleString('vi-VN')} · ${ {room:'Theo phòng',bag:'Dồn túi',random:'Ngẫu nhiên'}[run.method]||run.method} · ${run.absence_mode==='gap'?'Cách phách':'Dồn phách'} · ${groups.size} phòng/túi`;
+    $('script-review-search').value='';$('script-review-status').value='all';
+    $('script-review-panel').classList.remove('hidden');
+    $('script-review-excel').disabled=run.status!=='locked';
+    $('script-review-pdf').disabled=run.status!=='locked';
+    renderScriptReview();$('script-review-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function reviewRows(){
+    if(!scriptReview)return [];
+    const q=$('script-review-search').value.trim().toLocaleLowerCase('vi');
+    const status=$('script-review-status').value;
+    return scriptReview.rows.filter(r=>(status==='all'||(status==='absent'?r.is_absent:!r.is_absent))&&
+      (!q||[r.sbd,r.student_code,r.student_name,r.class_code,r.room_code,r.phach_code].some(v=>String(v??'').toLocaleLowerCase('vi').includes(q))));
+  }
+  function renderScriptReview(){
+    if(!scriptReview)return;
+    const rows=reviewRows();
+    $('script-review-summary').textContent=`Tổng: ${scriptReview.rows.length} · Vắng: ${scriptReview.rows.filter(r=>r.is_absent).length} · Có bài: ${scriptReview.rows.filter(r=>!r.is_absent).length} · Có mã phách: ${scriptReview.rows.filter(r=>r.phach_code!=null).length} · Đang hiển thị: ${rows.length}`;
+    $('script-review-body').innerHTML=rows.map(r=>`<tr><td>${r.ordinal}</td><td>${esc(r.script_order??'')}</td><td>${esc(r.sbd??'')}</td><td>${esc(r.student_code??'')}</td><td>${esc(r.student_name??'')}</td><td>${esc(r.class_code??'')}</td><td>${esc(r.room_code??'')}</td><td>${esc(r.room_order??'')}</td><td>${esc(r.phach_code??'—')}</td><td>${r.is_absent?'Vắng':'Có bài'}</td></tr>`).join('')||'<tr><td colspan="10">Không có bản ghi phù hợp.</td></tr>';
+  }
+  function matchMatrix(){
+    if(!scriptReview||scriptReview.run.status!=='locked')throw new Error('Chỉ được xuất bảng khớp phách đã khóa.');
+    const {run,rows,positions}=scriptReview;
+    const exam=state.exams.find(x=>x.id===run.exam_id);
+    const head=[['BẢO MẬT — BẢNG KHỚP PHÁCH / THÍ SINH'],['Trường','THPT Lê Hồng Phong — Hải Phòng'],['Kỳ thi',exam?.name||exam?.form_exam_title||run.exam_id],['Môn',nameOf(run.subject_code)],['Ngày lập',new Date(run.created_at).toLocaleString('vi-VN')],['Phương án',({room:'Theo phòng',bag:'Dồn túi',random:'Ngẫu nhiên'}[run.method]||run.method)],['Chế độ vắng',run.absence_mode==='gap'?'Cách phách':'Dồn phách'],['Trạng thái','Đã khóa'],['Tổng thí sinh',rows.length,'Vắng',rows.filter(x=>x.is_absent).length,'Có mã phách',rows.filter(x=>x.phach_code!=null).length],[],['STT','Thứ tự bài','SBD','Mã học sinh','Họ và tên','Lớp','Phòng thi / túi','Vị trí túi','Thứ tự trong phòng','Mã phách','Trạng thái']];
+    return [...head,...rows.map(r=>[r.ordinal,r.script_order??'',String(r.sbd??''),String(r.student_code??''),r.student_name||'',r.class_code||'',r.room_code||'',positions.get(String(r.room_code))||'',r.room_order??'',r.phach_code||'',r.is_absent?'Vắng':'Có bài'])];
+  }
+  function exportScriptMatchingExcel(){
+    if(!window.XLSX)throw new Error('Chưa tải thư viện Excel.');
+    const matrix=matchMatrix(),wb=window.XLSX.utils.book_new(),ws=window.XLSX.utils.aoa_to_sheet(matrix);
+    ws['!cols']=[{wch:7},{wch:13},{wch:17},{wch:19},{wch:28},{wch:13},{wch:20},{wch:12},{wch:17},{wch:15},{wch:14}];
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}}];
+    ws['!autofilter']={ref:`A11:K${matrix.length}`};
+    ws['!rows']=[{hpt:28}];
+    ws['!printOptions']={horizontalCentered:true};
+    ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToWidth:1};
+    for(let c=0;c<11;c++){
+      const cell=ws[window.XLSX.utils.encode_cell({r:10,c})];
+      if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'24527A'}},alignment:{horizontal:'center',wrapText:true}};
+    }
+    window.XLSX.utils.book_append_sheet(wb,ws,'Bang khop phach');
+    window.XLSX.writeFile(wb,`bang-khop-phach-${scriptReview.run.subject_code}-${scriptReview.run.id.slice(0,8)}.xlsx`,{cellStyles:true});
+  }
+  function printScriptMatching(){
+    const matrix=matchMatrix(),safe=v=>esc(String(v??''));
+    const html=`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Bảng khớp phách — ${safe(scriptReview.run.subject_code)}</title><style>
+      @page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#111;font-size:10px}h2{text-align:center;margin:0 0 8px;font-size:16px}p{margin:3px 0}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #555;padding:4px;overflow-wrap:anywhere}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}.sign{display:flex;justify-content:space-between;margin-top:25px;text-align:center}.sign>div{width:30%}.warning{text-align:center;font-weight:bold;color:#8b0000}@media print{body{print-color-adjust:exact}}
+    </style></head><body><h2>BẢNG KHỚP PHÁCH — ${safe(matrix[3][1])}</h2><p class="warning">TÀI LIỆU BẢO MẬT — CHỈ DÀNH CHO NGƯỜI CÓ THẨM QUYỀN</p><p>${safe(matrix[1][1])} · Kỳ thi: ${safe(matrix[2][1])}</p><p>Ngày lập: ${safe(matrix[4][1])} · Phương án: ${safe(matrix[5][1])} · ${safe(matrix[6][1])}</p><p>Tổng: ${matrix[8][1]} · Vắng: ${matrix[8][3]} · Có phách: ${matrix[8][5]}</p><table><thead><tr>${matrix[10].map(x=>`<th>${safe(x)}</th>`).join('')}</tr></thead><tbody>${matrix.slice(11).map(row=>`<tr>${row.map(v=>`<td>${safe(v)}</td>`).join('')}</tr>`).join('')}</tbody></table><div class="sign"><div>NGƯỜI LẬP BẢNG<br><br><br>(Ký, ghi rõ họ tên)</div><div>NGƯỜI ĐỐI CHIẾU<br><br><br>(Ký, ghi rõ họ tên)</div><div>TRƯỞNG BAN KHẢO THÍ<br><br><br>(Ký, ghi rõ họ tên)</div></div></body></html>`;
+    const win=createPrintFrame();win.document.write(html);win.document.close();win.focus();win.print();
+  }
   async function exportScriptHeads(){
     const examId=currentExam('script-exam');setAdminExam(examId);
     if(!examId)throw new Error('Chọn kỳ thi trước khi xuất bảng đầu phách.');
@@ -1888,10 +1964,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('script-message',exportScriptHeads,$('script-export-heads'));
     safeAction('script-message',saveScriptGradingWindow,$('script-save-grading-window'));
     safeAction('script-message',loadScriptGradingStatus,$('script-load-grading-status'));
+    $('script-review-close').onclick=()=>{$('script-review-panel').classList.add('hidden');scriptReview=null;};
+    $('script-review-search').oninput=renderScriptReview;
+    $('script-review-status').onchange=renderScriptReview;
+    safeAction('script-message',exportScriptMatchingExcel,$('script-review-excel'));
+    safeAction('script-message',printScriptMatching,$('script-review-pdf'));
     $('script-runs-body').addEventListener('click',event=>{
-      const lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),detailButton=event.target.closest('[data-script-assign-detail]'),deleteButton=event.target.closest('[data-script-delete]');
-      const action=lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):detailButton?()=>showBagAssignments(detailButton.dataset.scriptAssignDetail):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
-      const button=lock||exportButton||assignButton||detailButton||deleteButton;
+      const viewButton=event.target.closest('[data-script-view]'),matchButton=event.target.closest('[data-script-match]'),lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),detailButton=event.target.closest('[data-script-assign-detail]'),deleteButton=event.target.closest('[data-script-delete]');
+      const action=viewButton?()=>loadScriptReview(viewButton.dataset.scriptView):matchButton?()=>loadScriptReview(matchButton.dataset.scriptMatch):lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):detailButton?()=>showBagAssignments(detailButton.dataset.scriptAssignDetail):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
+      const button=viewButton||matchButton||lock||exportButton||assignButton||detailButton||deleteButton;
       if(action&&button){button.disabled=true;action().catch(error=>message($('script-message'),error?.message||String(error),'error')).finally(()=>{button.disabled=false})}
     });
   }

@@ -28,6 +28,14 @@
   <div id="script-grading-status" class="table-wrap"></div>
   <div class="form-actions"><button id="script-export-heads" class="btn btn-light" type="button">Xuất bảng đầu phách tổng thể</button></div>
   <div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Môn</th><th>Phương án</th><th>Vắng</th><th>Hồ sơ</th><th>Thí sinh</th><th>Trạng thái</th><th></th></tr></thead><tbody id="script-runs-body"><tr><td colspan="8" class="empty">Chọn kỳ thi và tải dữ liệu.</td></tr></tbody></table></div>
+  <section id="script-review-panel" class="section-panel hidden" aria-label="Xem phương án và bảng khớp phách">
+    <div class="section-heading"><div><h3 id="script-review-title">Xem phương án phách</h3><p id="script-review-meta"></p></div><button type="button" class="btn btn-light" id="script-review-close">Đóng</button></div>
+    <div class="form-actions"><label>Tìm SBD, tên, lớp, phòng, phách <input id="script-review-search" type="search" placeholder="Nhập từ khóa..."></label><label>Trạng thái <select id="script-review-status"><option value="all">Tất cả</option><option value="present">Có bài</option><option value="absent">Vắng</option></select></label></div>
+    <div id="script-review-summary" class="help-text"></div>
+    <div class="form-actions"><button id="script-review-excel" type="button" class="btn btn-light">Xuất bảng khớp phách Excel</button><button id="script-review-pdf" type="button" class="btn btn-light">In / Lưu PDF</button></div>
+    <div class="table-wrap" style="max-height:540px;overflow:auto"><table><thead><tr><th>STT</th><th>Thứ tự bài</th><th>SBD</th><th>Mã HS</th><th>Họ và tên</th><th>Lớp</th><th>Phòng thi / túi</th><th>Thứ tự phòng</th><th>Mã phách</th><th>Trạng thái</th></tr></thead><tbody id="script-review-body"></tbody></table></div>
+    <p class="help-text">BẢO MẬT: Bảng khớp phách chứa danh tính và mã phách. Chỉ quản trị viên được phép xem và xuất. Chức năng chỉ đọc, không tạo lại phách.</p>
+  </section>
   <div id="script-bag-assignment" class="section-panel hidden"></div>
   <!-- Compatibility controls for pre-v0.1.124 script code; account/group management is shown in Quản lý tài khoản. -->
   <div class="hidden" aria-hidden="true"><select id="grader-assign-subject"></select><select id="grader-user-id"></select><input id="grader-full-name"><input id="grader-teacher-code"><input id="grader-import-file" type="file"><button id="grader-profile-save" type="button"></button><button id="grader-assign-save" type="button"></button><select id="grader-group-select"></select><input id="grader-group-name"><select id="grader-group-members"></select><button id="grader-group-save" type="button"></button><button id="grader-group-delete" type="button"></button><div id="grader-account-list"></div></div>
