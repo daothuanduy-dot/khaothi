@@ -1701,11 +1701,22 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(error)throw new Error(error.code==='PGRST202'?'Cơ sở dữ liệu chưa cập nhật chức năng nhập điểm. Liên hệ quản trị chạy migration v0.1.119.':`Không tải được danh sách kỳ thi/môn được giao: ${error.message}`);
     cache.graderWork=data||[];
     if(!cache.graderWork.length)message($('grader-message'),state.role==='admin'?'Đang xem giao diện bằng tài khoản Admin. Để nhập điểm, đăng nhập tài khoản giáo viên đã được gán môn và kỳ thi.':'Chưa có bài được giao. Liên hệ quản trị để gán môn, cấp quyền kỳ thi và khóa phương án phách.','info');
+    // The grading RPC may retain an old exam_title after an exam is renamed.
+    // Prefer the current name in exam_sessions; retain the RPC title if SELECT is denied.
+    const examIds=[...new Set(cache.graderWork.map(work=>work.exam_id).filter(Boolean))];
+    let currentExamNames=new Map();
+    if(examIds.length){
+      try{
+        const {data:examRows,error:examError}=await state.client.from('exam_sessions').select('id,name').in('id',examIds);
+        if(!examError)currentExamNames=new Map((examRows||[]).map(row=>[row.id,row.name]));
+      }catch(error){console.warn('Không đọc được tên kỳ thi hiện hành:',error)}
+    }
     $('grader-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+[...new Map(cache.graderWork.map(work=>[work.exam_id,work])).values()]
-      .map(work=>`<option value="${esc(work.exam_id)}">${esc(work.exam_title)}</option>`).join('');
+      .map(work=>`<option value="${esc(work.exam_id)}">${esc(currentExamNames.get(work.exam_id)||work.exam_title||work.exam_id)}</option>`).join('');
     $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>';
     $('grader-table-body').innerHTML='<tr><td colspan="6" class="empty">Chọn kỳ thi và đầu phách.</td></tr>';
-    $('user-email').textContent=state.session?.user?.email||'';
+    // Do not overwrite the authenticated teacher's profile label with an email.
+
   }
   function selectedGraderConfig(){
     return cache.graderWork.find(work=>work.exam_id===$('grader-exam').value&&work.subject_code===$('grader-subject').value);
@@ -2013,7 +2024,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       cache.graderQueue=[];cache.graderIndex=0;renderGraderQueue();
       $('grader-prefix').value='';
       const assigned=cache.graderWork.filter(work=>work.exam_id===examId);
-      $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>'+assigned.map(work=>`<option value="${esc(work.subject_code)}">${esc(work.subject_code)}</option>`).join('');
+      $('grader-subject').innerHTML='<option value="">-- Chọn môn --</option>'+assigned.map(work=>`<option value="${esc(work.subject_code)}">${esc(nameOf(work.subject_code))}</option>`).join('');
       $('grader-subject-wrap').classList.toggle('hidden',!assigned.length);
       if(assigned.length===1)$('grader-subject').value=assigned[0].subject_code;
       $('grader-subject').onchange();
