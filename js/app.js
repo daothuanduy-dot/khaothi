@@ -7,8 +7,8 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.247&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.247&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
+import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.248&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireRanking} from './ranking.js?v=0.1.212';
@@ -22,7 +22,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.247';
+const APP_VERSION='v0.1.248';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -110,25 +110,18 @@ async function connect(url,key){
   else if(!key.startsWith('sb_publishable_'))throw new Error('Khóa không có định dạng publishable/anon được hỗ trợ. Hãy sao chép lại đúng khóa public/publishable hoặc anon của project.');
   // Check Auth and a real database table separately so failures identify the
   // service that prevented startup.
-  const probeErrors=[];
-  let reachable=false;
-  let probeSucceeded=0;
-  for (const endpoint of [`${url}/auth/v1/health`, `${url}/rest/v1/exam_sessions?select=id&limit=0`]) {
-    const isAuth=endpoint.includes('/auth/');
-    startupStep(isAuth?'Bước 3/5 · Supabase Auth':'Bước 4/5 · truy vấn CSDL',isAuth
-      ?'Bước 3/5: Đang xác minh phản hồi của dịch vụ Supabase Auth...'
-      :'Bước 4/5: Đang truy vấn thử bảng exam_sessions bằng khóa public...');
-    try {
+  startupStep('Bước 3–4/5 · Supabase','Đang kiểm tra đồng thời Supabase Auth và cơ sở dữ liệu. Mạng chậm có thể cần thêm thời gian...');
+  const endpoints=[`${url}/auth/v1/health`,`${url}/rest/v1/exam_sessions?select=id&limit=0`];
+  const checks=await Promise.all(endpoints.map(async endpoint=>{
+    try{
       const response=await fetch(endpoint,{method:'GET',headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'},cache:'no-store'});
-      if(response.ok){reachable=true;probeSucceeded++;continue;}
+      if(response.ok)return null;
       let detail='';try{detail=(await response.text()).slice(0,180)}catch{}
-      probeErrors.push(`${new URL(endpoint).pathname}: HTTP ${response.status}${detail?` — ${detail}`:''}`);
-      // An Auth health route may be unsupported by an intermediary. Continue to REST.
-    } catch(e) {
-      probeErrors.push(`${new URL(endpoint).pathname}: ${e?.message||'NetworkError'}`);
-    }
-  }
-  if(!reachable||probeErrors.length||probeSucceeded!==2)throw new Error('Không hoàn tất kiểm tra Supabase. '+probeErrors.join(' | '));
+      return `${new URL(endpoint).pathname}: HTTP ${response.status}${detail?` — ${detail}`:''}`;
+    }catch(error){return `${new URL(endpoint).pathname}: ${error?.message||'NetworkError'}`}
+  }));
+  const probeErrors=checks.filter(Boolean);
+  if(probeErrors.length)throw new Error('Không hoàn tất kiểm tra Supabase. '+probeErrors.join(' | '));
   startupStep('Bước 5/5 · phiên đăng nhập','Bước 5/5: Auth và CSDL phản hồi thành công. Đang khởi tạo phiên đăng nhập...','info',true);
   const client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   state.client=client;
@@ -154,7 +147,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.247';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.248';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -323,7 +316,7 @@ function wireExamTableSelection(){
   });
 }
 function wireTabNavigation(){
-  document.querySelectorAll('.tab').forEach(button=>{
+  document.querySelectorAll('#app-screen [data-tab]').forEach(button=>{
     button.onclick=()=>switchTab(button.dataset.tab);
   });
 }
@@ -410,9 +403,10 @@ async function deleteDefaultSubjectClassConfig(subjectCode){
  message($('default-config-message'),`Đã xóa cấu hình môn ${name}.`,'success');
 }
 let activeSettingsSection='settings';
-function activateSettingsSection(section='settings'){
+let settingsRefreshAt=new Map();
+function activateSettingsSection(section='settings', {force=false}={}){
   activeSettingsSection=['settings','accounts','teaching'].includes(section)?section:'settings';
-  document.querySelectorAll('[data-settings-section]').forEach(button=>{
+  document.querySelectorAll('#settings-sections [data-settings-section]').forEach(button=>{
     const selected=button.dataset.settingsSection===activeSettingsSection;
     button.classList.toggle('active',selected);
     button.setAttribute('aria-selected',String(selected));
@@ -421,39 +415,52 @@ function activateSettingsSection(section='settings'){
     const panel=document.getElementById(`tab-${name}`);
     if(panel)panel.classList.toggle('hidden',name!==activeSettingsSection);
   });
-  if(activeSettingsSection==='settings'){
-    ranking?.refresh();
-    loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
-  } else if(activeSettingsSection==='accounts')accounts?.refresh();
-  else if(teaching)teaching.refresh();
-  else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy.','error');
+  // Display the selected panel immediately. Refresh in the background and
+  // avoid duplicate RPCs when users switch between sections rapidly.
+  const now=Date.now(), last=settingsRefreshAt.get(activeSettingsSection)||0;
+  if(!force&&now-last<30000)return;
+  settingsRefreshAt.set(activeSettingsSection,now);
+  const sectionName=activeSettingsSection;
+  const task=sectionName==='settings'
+    ?Promise.resolve().then(()=>{ranking?.refresh();return loadDefaultSubjectClassConfig()})
+    :sectionName==='accounts'?Promise.resolve().then(()=>accounts?.refresh())
+    :Promise.resolve().then(()=>teaching?.refresh());
+  task.catch(error=>{
+    settingsRefreshAt.delete(sectionName);
+    const target=sectionName==='accounts'?'accounts-message':sectionName==='teaching'?'teaching-message':'default-config-message';
+    message($(target)||$('global-message'),`Không tải được dữ liệu: ${error.message}. Có thể chọn lại tab để thử lại.`,'error');
+  });
 }
 function organizeAdminModules(){
   const settings=document.getElementById('tab-settings');
-  if(!settings)throw new Error('Không tìm thấy tab Cấu hình.');
+  const host=document.getElementById('module-settings');
+  if(!settings||!host)throw new Error('Không tìm thấy tab Cấu hình.');
   const container=document.createElement('div');
   container.id='settings-sections';
   const tabs=document.createElement('nav');
   tabs.className='tabs settings-subtabs';
   tabs.setAttribute('aria-label','Chức năng cấu hình');
-  tabs.innerHTML='<button type="button" class="tab active" data-settings-section="settings">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching">Phân công giảng dạy</button>';
-  settings.parentElement.insertBefore(tabs,settings);
-  settings.parentElement.insertBefore(container,settings);
+  tabs.innerHTML='<button type="button" class="tab active" data-settings-section="settings" aria-selected="true">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts" aria-selected="false">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching" aria-selected="false">Phân công giảng dạy</button>';
+  host.insertBefore(tabs,settings);
+  host.insertBefore(container,settings);
   container.appendChild(settings);
   for(const name of ['accounts','teaching']){
     const panel=document.getElementById(`tab-${name}`);
     if(!panel)throw new Error(`Không tìm thấy giao diện ${name}.`);
     container.appendChild(panel);
+    panel.classList.add('hidden');
   }
-  tabs.querySelectorAll('[data-settings-section]').forEach(button=>button.addEventListener('click',()=>activateSettingsSection(button.dataset.settingsSection)));
-  ['accounts','teaching'].forEach(name=>document.getElementById(`tab-${name}`).classList.add('hidden'));
+  tabs.addEventListener('click',event=>{
+    const button=event.target.closest('[data-settings-section]');
+    if(button)activateSettingsSection(button.dataset.settingsSection);
+  });
 }
 function switchTab(tab){
   if(tab==='accounts'||tab==='teaching'){activeSettingsSection=tab;tab='settings';}
   if(isManualExam(state.selectedExam)&&['subjects','sbd','rooming','forms','scripts','scores','absences','settings'].includes(tab)){
     openManualExamWorkspace(state.selectedExam).catch(error=>message($('global-message'),error.message,'error'));return;
   }
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('#app-screen [data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('#app-screen > .tab-module').forEach(m=>{
     const selected=m.id===`module-${tab}`;
     m.classList.toggle('hidden',!selected);
@@ -3282,7 +3289,7 @@ async function renderRosterStats(){
 }
 function syncRosterStatsClass(){const g=$('roster-stats-grade').value;fillSelect('roster-stats-class',rosterClassCodes(g),'Tất cả lớp trong khối',$('roster-stats-class').value)}
 
-function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=async()=>{try{const{openManualGrading}=await import('./manual-exam.js?v=179');await openManualGrading({state})}catch(error){message($('grader-message'),error.message,'error')}}; $('accounts-open-grading').onclick=async()=>{if(state.role!=='admin')return;showScreen('grader-screen');$('grader-back-admin').classList.remove('hidden');try{await operations.enterAsGrader()}catch(e){message($('grader-message'),e.message,'error')}};$('grader-back-admin').onclick=()=>{if(state.role!=='admin')return;showScreen('app-screen');switchTab('accounts')}; $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
+function wire(){ if($('manual-grading-open'))$('manual-grading-open').onclick=async()=>{try{const{openManualGrading}=await import('./manual-exam.js?v=179');await openManualGrading({state})}catch(error){message($('grader-message'),error.message,'error')}}; $('accounts-open-grading').onclick=async()=>{if(state.role!=='admin')return;showScreen('grader-screen');$('grader-back-admin').classList.remove('hidden');try{await operations.enterAsGrader()}catch(e){message($('grader-message'),e.message,'error')}};$('grader-back-admin').onclick=()=>{if(state.role!=='admin')return;showScreen('app-screen');switchTab('accounts')}; $('google-login').onclick=async()=>{const button=$('google-login');button.disabled=true;try{const{error}=await state.client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error}catch(error){message($('login-message'),`Không đăng nhập được bằng Google: ${error?.message||String(error)}`,'error');button.disabled=false}};$('setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('setup-form').querySelector('button[type=submit]');const url=$('supabase-url').value.trim().replace(/\/$/,''),key=$('supabase-key').value.trim();hide($('setup-message'));hide($('login-message'));btn.disabled=true;const old=btn.textContent;btn.textContent='Đang kiểm tra kết nối...';try{await connect(url,key);saveConfig(url,key);await openConnectedApp()}catch(err){showConnectionFailure(err)}finally{btn.disabled=false;btn.textContent=old}});$('clear-config').onclick=()=>{localStorage.removeItem('exam_supabase_url');localStorage.removeItem('exam_supabase_key');$('supabase-url').value='';$('supabase-key').value=''};$('change-config').onclick=()=>{showScreen('setup-screen');const c=readConfig();$('supabase-url').value=c.url;$('supabase-key').value=c.key};$('login-toggle-password').onclick=()=>{const shown=$('login-password').type==='password';$('login-password').type=shown?'text':'password';$('login-toggle-password').textContent=shown?'Ẩn':'Hiện';$('login-toggle-password').setAttribute('aria-pressed',String(shown));$('login-toggle-password').setAttribute('aria-label',shown?'Ẩn mật khẩu':'Hiện mật khẩu')};$('login-form').addEventListener('submit',submitLogin);$('logout-btn').onclick=signOut;document.querySelectorAll('#app-screen [data-tab]').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));$('create-exam-form').addEventListener('submit',createExam);$('reload-exams').onclick=loadExams;$('exam-table-body').addEventListener('click',async e=>{
   const manualBtn=e.target.closest('[data-manual-exam]');
   if(manualBtn){try{await openManualExamWorkspace(manualBtn.dataset.manualExam)}catch(error){message($('global-message'),error.message,'error')}return;}
   const editBtn=e.target.closest('[data-edit-exam]');
@@ -3451,7 +3458,7 @@ async function boot(){
   startupStep('Bước 6/6 · giao diện','Bước 6/6: Kết nối CSDL thành công. Chuẩn bị tải 13 module giao diện...','info',true);
   try{
     const moduleVersion=await loadTabModules({onProgress:({name,index,total})=>{
-      startupStep(`Bước 6/6 · module ${index}/${total}`,`Đã kết nối Supabase. Đang tải module giao diện ${index}/${total}: ${name}. Nếu bước này không đổi trong 15 giây, module sẽ báo lỗi tại đây.`,'info',true);
+      startupStep(`Bước 6/6 · module ${index}/${total}`,`Đã kết nối Supabase. Đã tải ${index}/${total} module (mới nhất: ${name}). Đang tiếp tục tải các phần còn lại; mạng chậm có thể mất thêm thời gian.`,'info',true);
     }});
     if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
     organizeAdminModules();
