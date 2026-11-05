@@ -11,7 +11,7 @@ import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&fo
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.248&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
-import {wireScoreAssignments} from './score-assignments.js?v=0.1.250';
+import {wireScoreAssignments} from './score-assignments.js?v=0.1.251';
 import {wireRanking} from './ranking.js?v=0.1.212';
 import {wireViolations} from './violations.js?v=0.1.212';
 import {createStudentPicker} from './student-picker.js?v=0.1.212';
@@ -23,7 +23,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.250';
+const APP_VERSION='v0.1.251';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -149,7 +149,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.250';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.251';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -3499,7 +3499,7 @@ async function boot(){
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
   try{scoreAssignments=wireScoreAssignments({state,esc,message})}
   catch(error){console.error('Không khởi tạo được phân công nhập điểm:',error)}
-  $('grader-assigned-scores')?.addEventListener('click',()=>{const panel=$('tab-score-assignments');if(!panel)return;panel.classList.remove('hidden');panel.hidden=false;$('grader-assigned-host').appendChild(panel);scoreAssignments?.refresh()});
+  $('grader-assigned-scores')?.addEventListener('click',()=>{switchTab('settings');activateSettingsSection('score-assignments',{force:true})});
   try{teaching=wireTeaching({state,$,esc,message,subjects:SUBJECTS})}
   catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
   try{ranking=wireRanking({state,$,esc,message})}
