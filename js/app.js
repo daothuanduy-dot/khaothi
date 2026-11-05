@@ -22,7 +22,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.248';
+const APP_VERSION='v0.1.249';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -147,7 +147,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.248';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.249';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -404,43 +404,55 @@ async function deleteDefaultSubjectClassConfig(subjectCode){
 }
 let activeSettingsSection='settings';
 let settingsRefreshAt=new Map();
+let settingsRefreshPending=new Map();
 function activateSettingsSection(section='settings', {force=false}={}){
-  activeSettingsSection=['settings','accounts','teaching'].includes(section)?section:'settings';
-  document.querySelectorAll('#settings-sections [data-settings-section]').forEach(button=>{
-    const selected=button.dataset.settingsSection===activeSettingsSection;
-    button.classList.toggle('active',selected);
-    button.setAttribute('aria-selected',String(selected));
+  const valid=['settings','accounts','teaching'];
+  const selected=valid.includes(section)?section:'settings';
+  activeSettingsSection=selected;
+  const host=document.getElementById('module-settings');
+  if(!host)return;
+  // One state transition controls both the highlighted button and its panel.
+  // Only search inside the settings host: nested navigation must not be
+  // mistaken for a top-level tab or overwritten by another tab handler.
+  host.querySelectorAll('#settings-sections-nav [data-settings-section]').forEach(button=>{
+    const active=button.dataset.settingsSection===selected;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;
   });
-  ['settings','accounts','teaching'].forEach(name=>{
+  valid.forEach(name=>{
     const panel=document.getElementById(`tab-${name}`);
-    if(panel)panel.classList.toggle('hidden',name!==activeSettingsSection);
+    if(!panel)return;
+    const active=name===selected;
+    panel.classList.toggle('hidden',!active);
+    panel.hidden=!active;
+    panel.setAttribute('aria-hidden',String(!active));
   });
-  // Display the selected panel immediately. Refresh in the background and
-  // avoid duplicate RPCs when users switch between sections rapidly.
-  const now=Date.now(), last=settingsRefreshAt.get(activeSettingsSection)||0;
-  if(!force&&now-last<30000)return;
-  settingsRefreshAt.set(activeSettingsSection,now);
-  const sectionName=activeSettingsSection;
-  const task=sectionName==='settings'
-    ?Promise.resolve().then(()=>{ranking?.refresh();return loadDefaultSubjectClassConfig()})
-    :sectionName==='accounts'?Promise.resolve().then(()=>accounts?.refresh())
-    :Promise.resolve().then(()=>teaching?.refresh());
-  task.catch(error=>{
-    settingsRefreshAt.delete(sectionName);
-    const target=sectionName==='accounts'?'accounts-message':sectionName==='teaching'?'teaching-message':'default-config-message';
-    message($(target)||$('global-message'),`Không tải được dữ liệu: ${error.message}. Có thể chọn lại tab để thử lại.`,'error');
-  });
+  const now=Date.now(),last=settingsRefreshAt.get(selected)||0;
+  if(!force&&(now-last<30000||settingsRefreshPending.has(selected)))return;
+  const task=Promise.resolve().then(()=>selected==='settings'
+    ?Promise.resolve(ranking?.refresh()).then(()=>loadDefaultSubjectClassConfig())
+    :selected==='accounts'?accounts?.refresh():teaching?.refresh());
+  settingsRefreshPending.set(selected,task);
+  task.then(()=>settingsRefreshAt.set(selected,Date.now())).catch(error=>{
+    settingsRefreshAt.delete(selected);
+    const target=selected==='accounts'?'accounts-message':selected==='teaching'?'teaching-message':'default-config-message';
+    message($(target)||$('global-message'),`Không tải được dữ liệu: ${error.message}. Hãy chọn lại tab để thử lại.`,'error');
+  }).finally(()=>settingsRefreshPending.delete(selected));
 }
 function organizeAdminModules(){
   const settings=document.getElementById('tab-settings');
   const host=document.getElementById('module-settings');
   if(!settings||!host)throw new Error('Không tìm thấy tab Cấu hình.');
+  // Idempotent initialization, including when modules are loaded again.
+  if(document.getElementById('settings-sections-nav'))return;
   const container=document.createElement('div');
   container.id='settings-sections';
   const tabs=document.createElement('nav');
+  tabs.id='settings-sections-nav';
   tabs.className='tabs settings-subtabs';
   tabs.setAttribute('aria-label','Chức năng cấu hình');
-  tabs.innerHTML='<button type="button" class="tab active" data-settings-section="settings" aria-selected="true">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts" aria-selected="false">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching" aria-selected="false">Phân công giảng dạy</button>';
+  tabs.innerHTML='<button type="button" class="tab" data-settings-section="settings">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching">Phân công giảng dạy</button>';
   host.insertBefore(tabs,settings);
   host.insertBefore(container,settings);
   container.appendChild(settings);
@@ -448,12 +460,17 @@ function organizeAdminModules(){
     const panel=document.getElementById(`tab-${name}`);
     if(!panel)throw new Error(`Không tìm thấy giao diện ${name}.`);
     container.appendChild(panel);
-    panel.classList.add('hidden');
   }
+  // Stop the click before any generic tab handler can run. Never call
+  // switchTab('settings') here: that can reset the selected subtab.
   tabs.addEventListener('click',event=>{
-    const button=event.target.closest('[data-settings-section]');
-    if(button)activateSettingsSection(button.dataset.settingsSection);
-  });
+    const button=event.target.closest('button[data-settings-section]');
+    if(!button||!tabs.contains(button))return;
+    event.preventDefault();event.stopPropagation();
+    activateSettingsSection(button.dataset.settingsSection);
+  },true);
+  // Initial panel visibility only; data refresh starts when settings is opened.
+  activateSettingsSection('settings');
 }
 function switchTab(tab){
   if(tab==='accounts'||tab==='teaching'){activeSettingsSection=tab;tab='settings';}
