@@ -11,7 +11,7 @@ import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&fo
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.248&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
-import {wireScoreAssignments} from './score-assignments.js?v=0.1.251';
+import {wireScoreAssignments} from './score-assignments.js?v=0.1.252';
 import {wireRanking} from './ranking.js?v=0.1.212';
 import {wireViolations} from './violations.js?v=0.1.212';
 import {createStudentPicker} from './student-picker.js?v=0.1.212';
@@ -23,7 +23,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.251';
+const APP_VERSION='v0.1.252';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -149,7 +149,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.251';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.252';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -267,7 +267,7 @@ async function enterApp(user){
     $('user-email').textContent='';$('logout-btn').classList.add('hidden');
     message($('login-message'),'Tài khoản chưa được cấp quyền. Vui lòng liên hệ quản trị để được phân công môn nhập điểm.','error');return;
   }
-  $('logout-btn').classList.remove('hidden');showScreen('app-screen');await loadExams();renderSubjects();
+  $('logout-btn').classList.remove('hidden');showScreen('app-screen');switchTab('exams');await loadExams();renderSubjects();
 }
 async function signOut(){await state.client?.auth.signOut();state.session=null;state.role=null;state.selectedExam=null;state.preview=null;state.formData=null;updateSelectedExamTitle();$('user-email').textContent='';$('logout-btn').classList.add('hidden');showScreen('login-screen')}
 async function loadExams(){
@@ -472,8 +472,10 @@ function organizeAdminModules(){
     event.preventDefault();event.stopPropagation();
     activateSettingsSection(button.dataset.settingsSection);
   },true);
-  // Initial panel visibility only; data refresh starts when settings is opened.
-  activateSettingsSection('settings');
+  // Initial panel visibility only; do not fetch configuration while on Kỳ thi.
+  activeSettingsSection='settings';
+  host.querySelectorAll('#settings-sections-nav [data-settings-section]').forEach(button=>{const active=button.dataset.settingsSection==='settings';button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});
+  for(const name of ['settings','accounts','teaching','score-assignments']){const panel=document.getElementById(`tab-${name}`);if(panel){panel.classList.toggle('hidden',name!=='settings');panel.hidden=name!=='settings';}}
 }
 function switchTab(tab){
   if(tab==='accounts'||tab==='teaching'||tab==='score-assignments'){activeSettingsSection=tab;tab='settings';}
