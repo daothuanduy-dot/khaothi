@@ -2094,6 +2094,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(id!=='scores-file')$(id).addEventListener('input',resetScores);
     }
     setSubjectOptions('scores-subject',allSubjectOptions());
+    // v0.1.239: Only the score-entry subject selector shows Vietnamese names; option values remain subject codes.
+    for(const option of $('scores-subject').options){
+      if(option.value){
+        const localized={LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',SU:'Lịch sử',DIA:'Địa lý',TIN:'Tin học',N1:'Tiếng Anh',KTPL:'Giáo dục kinh tế và pháp luật',GDKTPL:'Giáo dục kinh tế và pháp luật',TOAN:'Toán',VAN:'Ngữ văn'};
+        option.textContent=localized[option.value]||nameOf(option.value);
+      }
+    }
     refreshScores();
     safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
     safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
