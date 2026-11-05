@@ -49,6 +49,9 @@
   <p class="help-text">Bỏ tích để loại trường hợp tương ứng khỏi thống kê môn. Đổi lựa chọn rồi nhấn Tải điểm tổng hợp. Khi vừa vắng vừa vi phạm, chỉ đưa vào thống kê nếu tích cả hai; điểm tính là 0. Điểm gốc được giữ nguyên.</p>
   <div id="scores-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div id="scores-summary" class="metric-grid"></div>
+  <div class="form-grid"><label>Xử lý SBD đã có điểm
+    <select id="scores-overwrite-mode"><option value="skip" selected>Không ghi đè (mặc định)</option><option value="overwrite">Ghi đè điểm đã có (cần xác nhận)</option></select>
+  </label></div><p class="help-text">Khi cùng môn có hai lần chấm, hãy kiểm tra kỹ SBD trùng, lớp và điểm cũ. File điểm chỉ có SBD và điểm không thể tự phát hiện mọi trường hợp tô nhầm SBD của học sinh chưa có điểm.</p>
   <div id="scores-preview" class="table-wrap"></div>
   <section id="scores-result-controls" class="scores-result-controls" hidden aria-label="Lọc danh sách điểm">
     <label>Lớp<select id="scores-result-class"><option value="">Tất cả lớp</option></select></label>

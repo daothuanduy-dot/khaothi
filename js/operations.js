@@ -1544,12 +1544,30 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   function renderScorePreview(){
-    const rows=cache.scoreImportRows.slice(0,25);
-    $('scores-preview').innerHTML=rows.length
-      ?`<h3>Xem trước ${Math.min(25,cache.scoreImportRows.length)}/${cache.scoreImportRows.length} dòng trắc nghiệm</h3><table><thead><tr><th>SBD</th><th>Điểm trắc nghiệm</th></tr></thead><tbody>${rows.map(row=>
-        `<tr><td>${esc(row.sbd)}</td><td>${esc(row.score)}</td></tr>`).join('')}</tbody></table>`
-      :'';
-    $('scores-import').disabled=!cache.scoreImportRows.length;
+    const rows=cache.scoreImportRows.slice(0,100);
+    const preview=scoreImportContext?.preview;
+    const bySbd=new Map((preview?.collisions||[]).map(r=>[r.sbd,r]));
+    const invalid=new Map((preview?.invalid||[]).map(r=>[r.sbd,r]));
+    $('scores-preview').innerHTML=preview
+      ?`<h3>Kiểm tra trước khi nhập: ${preview.new_count} mới, ${preview.collision_count} đã có điểm, ${preview.invalid_count} không hợp lệ</h3>
+        ${preview.collision_count?'<p style="color:#9a3412;font-weight:700">CẢNH BÁO: SBD đã có điểm. Có thể học sinh tô nhầm SBD hoặc nạp nhầm danh sách.</p>':''}
+        <table><thead><tr><th>SBD</th><th>Học sinh / lớp</th><th>Điểm cũ</th><th>Điểm file</th><th>Trạng thái</th></tr></thead><tbody>${rows.map(row=>{
+          const collision=bySbd.get(row.sbd),bad=invalid.get(row.sbd);
+          const info=collision||bad||{};
+          return `<tr><td>${esc(row.sbd)}</td><td>${esc(info.student_name||'')} ${esc(info.class_code||'')}</td><td>${collision?esc(collision.old_score):'—'}</td><td>${esc(row.score)}</td><td>${bad?'KHÔNG HỢP LỆ: '+esc(bad.reason):collision?'ĐÃ CÓ ĐIỂM':'Nhập mới'}</td></tr>`;
+        }).join('')}</tbody></table>
+        ${cache.scoreImportRows.length>100?'<p>Chỉ hiển thị 100 dòng đầu; thống kê áp dụng toàn bộ tệp.</p>':''}`
+      :'<p>Đang chờ kết quả kiểm tra từ máy chủ.</p>';
+    $('scores-import').disabled=!preview||preview.invalid_count>0;
+  }
+
+  async function mcqPreview(examId,subjectCode,file,rows){
+    const {data,error}=await state.client.rpc('exam_mcq_import_guard_v238',{
+      p_exam_id:examId,p_subject_code:subjectCode,p_source_file:file.name,
+      p_rows:rows,p_mode:'preview',p_expected:null
+    });
+    if(error)throw new Error('Không kiểm tra được file điểm: '+error.message+' (cần chạy SQL v0.1.238).');
+    return data;
   }
 
   async function readMultipleChoiceFile(){
@@ -1589,26 +1607,38 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const outOfRange=rows.find(row=>row.score>Number(config.mcq_maximum_score));
     if(outOfRange)throw new Error(`Điểm ${outOfRange.score} của SBD ${outOfRange.sbd} vượt mức tối đa ${config.mcq_maximum_score}.`);
     if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
-    scoreImportContext={key,file};
+    const preview=await mcqPreview(examId,subjectCode,file,rows);
+    if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
+    scoreImportContext={key,file,preview};
     cache.scoreImportRows=rows;
     renderScorePreview();
-    message($('scores-message'),`Đã kiểm tra ${rows.length} dòng. Khi nhập, điểm hiện có của các SBD này sẽ được cập nhật theo tệp mới.`,'success');
+    message($('scores-message'),`Đã kiểm tra ${rows.length} dòng: ${preview.new_count} mới, ${preview.collision_count} đã có điểm, ${preview.invalid_count} không hợp lệ. Mặc định KHÔNG GHI ĐÈ.`,preview.collision_count||preview.invalid_count?'warning':'success');
   }
 
   async function importMultipleChoiceScores(){
     const examId=(state.selectedExam||''),subjectCode=$('scores-subject').value,file=$('scores-file').files?.[0];
     setAdminExam(examId);
-    if(!scoreImportContext||scoreImportContext.key!==importKey()||scoreImportContext.file!==file||!cache.scoreImportRows.length||!file)throw new Error('Hãy đọc và kiểm tra tệp trước khi nhập điểm.');
-    if(!confirm(`Nhập ${cache.scoreImportRows.length} điểm trắc nghiệm môn ${nameOf(subjectCode)}? Điểm đã nhập của các SBD này sẽ bị thay bằng dữ liệu mới.`))return;
+    const ctx=scoreImportContext;
+    if(!ctx||ctx.key!==importKey()||ctx.file!==file||!cache.scoreImportRows.length||!ctx.preview||!file)
+      throw new Error('Hãy đọc và kiểm tra tệp trước khi nhập điểm.');
+    if(ctx.preview.invalid_count)throw new Error('Có SBD không hợp lệ hoặc không thuộc môn; hãy sửa file và kiểm tra lại.');
+    const mode=$('scores-overwrite-mode')?.value||'skip';
+    if(!['skip','overwrite'].includes(mode))throw new Error('Lựa chọn xử lý điểm trùng không hợp lệ.');
+    const text=mode==='skip'
+      ?`Nhập ${ctx.preview.new_count} điểm mới, GIỮ NGUYÊN ${ctx.preview.collision_count} điểm đã có?`
+      :`CẢNH BÁO: Bạn chọn GHI ĐÈ ${ctx.preview.collision_count} điểm đã có. Hãy kiểm tra học sinh tô nhầm SBD. Xác nhận tiếp tục?`;
+    if(!confirm(text))return;
+    if(mode==='overwrite'&&ctx.preview.collision_count&&!confirm('XÁC NHẬN LẦN 2: Thay thế điểm đã lưu bằng điểm trong file mới?'))return;
     const key=scoreKey(),revision=scoreRevision;
-    const{data,error}=await state.client.rpc('exam_import_mcq_scores',{
+    const{data,error}=await state.client.rpc('exam_mcq_import_guard_v238',{
       p_exam_id:examId,p_subject_code:subjectCode,p_source_file:file.name,
-      p_rows:cache.scoreImportRows
+      p_rows:cache.scoreImportRows,p_mode:mode,p_expected:ctx.preview.fingerprint
     });
-    if(error)throw new Error(`Không nhập được điểm trắc nghiệm: ${error.message}`);
+    if(error)throw new Error(`Không nhập được điểm trắc nghiệm: ${error.message}. Hãy đọc lại tệp để kiểm tra dữ liệu mới nhất.`);
     state.statisticsRevision=(state.statisticsRevision||0)+1;
     if(key!==scoreKey()||revision!==scoreRevision)return;
-    message($('scores-message'),`Đã nhập ${data.imported_count} điểm trắc nghiệm môn ${nameOf(subjectCode)}.`,'success');
+    message($('scores-message'),`Đã nhập mới ${data.inserted_count}; ${mode==='overwrite'?'ghi đè '+data.overwritten_count:'bỏ qua '+data.skipped_count} điểm đã có.`, 'success');
+    resetScores();
     await loadCombinedScores();
   }
 
