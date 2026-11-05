@@ -1,7 +1,7 @@
 // v0.1.250 - scoped teacher score entry. Supabase RPC enforces authorization.
 export function wireScoreAssignments({state,esc,message}){
  const $=id=>document.getElementById(id);
- const host=$('score-assignments-host');if(!host)return {refresh:async()=>{}};
+ const host=$('score-assignments-host'),teacherHost=$('grader-assigned-host');if(!host||!teacherHost)return {refresh:async()=>{},refreshTeacher:async()=>{}};
  const admin=()=>state.role==='admin';let assignments=[],rows=[],workspace=null,busy=false,teacherProfiles=[],teachingRows=[],availableClasses=[],availableRooms=[],teacherLoadError="";
  const notice=(s,type='info')=>message($('score-assignment-message'),s,type);
  const rpc=async(name,args={})=>{const {data,error}=await state.client.rpc(name,args);if(error)throw Error(error.message);return data};
@@ -9,8 +9,11 @@ export function wireScoreAssignments({state,esc,message}){
  const subjects=[['TOAN','Toán'],['VAN','Ngữ văn'],['LY','Vật lý'],['HOA','Hóa học'],['SINH','Sinh học'],['SU','Lịch sử'],['DIA','Địa lý'],['GDKTPL','KTPL'],['TIN','Tin học'],['N1','Ngoại ngữ']];
  host.innerHTML=`<section class="panel"><h2>Phân công nhập điểm</h2><p>Giao đúng môn, khối, lớp hoặc phòng. Theo phách không hiển thị danh tính thí sinh.</p><div id="score-assignment-message" class="notice hidden" role="status"></div>
  <div id="score-assignment-admin"><div class="form-grid"><label>Kỳ thi<select id="sa-exam"></select></label><label>Môn thi<select id="sa-subject">${subjects.map(x=>option(...x)).join('')}</select></label><label>Giáo viên<select id="sa-teacher"></select></label><label>Khối<select id="sa-grade">${['10','11','12'].map(x=>option(x,'Khối '+x)).join('')}</select></label><label>Phạm vi<select id="sa-scope"><option value="class">Theo lớp / SBD</option><option value="room">Theo phòng / phách</option><option value="grade">Toàn khối (theo lớp)</option></select></label><div class="sa-picker"><strong id="sa-picker-label">Chọn lớp được phân công</strong><div id="sa-picker-status" class="muted" role="status"></div><div id="sa-checks" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;padding:12px 0"></div></div></div><p>Với phạm vi toàn khối, không cần nhập danh sách. Với phòng thi, chỉ sử dụng khi môn đã đánh phách và khóa.</p><div class="form-actions"><button type="button" id="sa-save" class="btn btn-primary">Lưu phân công</button><button type="button" id="sa-disable" class="btn btn-light">Thu hồi phân công đang chọn</button></div></div>
- <h3>Danh sách phân công</h3><div id="sa-list" class="table-wrap"></div><h3>Nhập điểm theo phân công</h3><label>Chọn phân công<select id="sa-current"></select></label><div class="form-actions"><button type="button" id="sa-load" class="btn btn-primary">Tải bài thi</button><button type="button" id="sa-submit" class="btn btn-light" disabled>Lưu điểm đã thay đổi</button></div><p id="sa-progress" role="status"></p><div id="sa-rows" class="table-wrap"></div></section>`;
- async function run(fn){if(busy)return;busy=true;try{notice('Đang xử lý dữ liệu, vui lòng chờ...');await fn()}catch(e){notice(e.message||String(e),'error')}finally{busy=false}}
+ <h3>Danh sách phân công</h3><p class="muted">Quản trị viên chỉ giao nhiệm vụ và theo dõi; nhập điểm được thực hiện tại cổng giáo viên.</p><div id="sa-list" class="table-wrap"></div></section>`;
+
+ teacherHost.innerHTML=`<section class="panel" id="sa-teacher-workspace"><h2>Danh sách bài thi được phân công</h2><p>Chỉ hiển thị nhiệm vụ của tài khoản đang đăng nhập. Theo phách không hiển thị tên hoặc SBD.</p><div id="sa-teacher-message" class="notice notice-info" role="status" aria-live="polite">Nhấn Tải phân công để kiểm tra nhiệm vụ được giao.</div><div class="form-grid"><label>Phân công của tôi<select id="sa-current"><option value="">-- Chưa tải phân công --</option></select></label></div><div class="form-actions"><button type="button" id="sa-teacher-refresh" class="btn btn-light">Tải lại phân công</button><button type="button" id="sa-load" class="btn btn-primary">Tải bài thi</button><button type="button" id="sa-submit" class="btn btn-primary" disabled>Lưu điểm đã thay đổi</button></div><p id="sa-progress" role="status"></p><div id="sa-rows" class="table-wrap"></div></section>`;
+ const teacherNotice=(s,type='info')=>{const el=$('sa-teacher-message');el.textContent=s;el.className='notice notice-'+(type==='error'?'error':type==='success'?'success':'info')};
+ async function run(fn){if(busy)return;busy=true;try{if(state.role!=='admin')teacherNotice('Đang xử lý, vui lòng chờ...');else notice('Đang xử lý dữ liệu, vui lòng chờ...');await fn()}catch(e){if(state.role!=='admin')teacherNotice(e.message||String(e),'error');else notice(e.message||String(e),'error')}finally{busy=false}}
  async function loadTeacherProfiles(){
   const {data,error}=await state.client.from('exam_user_profiles').select('user_id,full_name,email,report_name').limit(1000);
   if(error)throw Error('Không tải được tên giáo viên: '+error.message);
@@ -66,7 +69,8 @@ export function wireScoreAssignments({state,esc,message}){
   renderChecks();
  }
  async function refresh(){if(!state.client||!state.session)return;await run(async()=>{
-  $('score-assignment-admin').hidden=!admin();
+  if(!admin())return;
+  $('score-assignment-admin').hidden=false;
   if(admin()){
    const exams=state.exams||[];$('sa-exam').innerHTML=exams.map(e=>option(e.id,e.name||e.title||e.id)).join('');
    if(state.selectedExam&&exams.some(e=>e.id===state.selectedExam))$('sa-exam').value=state.selectedExam;
@@ -75,10 +79,22 @@ export function wireScoreAssignments({state,esc,message}){
    await refreshPickers();
   }
   assignments=await rpc('exam_score_assignment_list',{});
-  $('sa-list').innerHTML=`<table><thead><tr><th>Môn</th><th>Khối</th><th>Phạm vi</th><th>Danh sách</th><th>Trạng thái</th></tr></thead><tbody>${assignments.map(a=>`<tr><td>${esc(a.subject_code)}</td><td>${esc(a.grade_code)}</td><td>${esc(a.scope_type)}</td><td>${esc((a.scope_values||[]).join(', '))}</td><td>${a.is_active?'Đang giao':'Đã thu hồi'}</td></tr>`).join('')}</tbody></table>`;
-  $('sa-current').innerHTML=assignments.filter(a=>a.is_active).map(a=>option(a.id,`${a.subject_code} · Khối ${a.grade_code} · ${a.scope_type} · ${(a.scope_values||[]).join(', ')}`)).join('');
+  const profileMap=new Map(teacherProfiles.map(p=>[p.user_id,p]));
+  $('sa-list').innerHTML=`<table><thead><tr><th>Giáo viên</th><th>Kỳ thi</th><th>Môn</th><th>Khối</th><th>Phạm vi</th><th>Danh sách</th><th>Trạng thái</th></tr></thead><tbody>${assignments.map(a=>`<tr><td>${esc(profileMap.get(a.teacher_id)?.full_name||profileMap.get(a.teacher_id)?.email||a.teacher_id)}</td><td>${esc((state.exams||[]).find(e=>e.id===a.exam_id)?.name||a.exam_id)}</td><td>${esc(a.subject_code)}</td><td>${esc(a.grade_code)}</td><td>${esc(a.scope_type)}</td><td>${esc((a.scope_values||[]).join(', '))}</td><td>${a.is_active?'Đang giao':'Đã thu hồi'}</td></tr>`).join('')}</tbody></table>`;
   notice(`Đã tải ${assignments.length} phân công.`,'success');
  })}
+ async function refreshTeacher(){
+  if(!state.client||!state.session||!['grader','teacher'].includes(state.role))return;
+  teacherNotice('Đang tải phân công từ Supabase...');
+  $('sa-current').innerHTML='<option value="">-- Đang tải --</option>';
+  $('sa-rows').innerHTML='';$('sa-submit').disabled=true;workspace=null;rows=[];
+  try{
+   const all=await rpc('exam_score_assignment_list',{});
+   assignments=(Array.isArray(all)?all:[]).filter(a=>a.is_active&&a.teacher_id===state.session.user.id);
+   $('sa-current').innerHTML='<option value="">-- Chọn nhiệm vụ --</option>'+assignments.map(a=>option(a.id,`${a.subject_code} · Khối ${a.grade_code} · ${a.scope_type==='room'?'Theo phách':a.scope_type==='grade'?'Toàn khối':'Theo lớp'} · ${(a.scope_values||[]).join(', ')}`)).join('');
+   teacherNotice(assignments.length?`Đã nhận ${assignments.length} phân công. Chọn nhiệm vụ và nhấn Tải bài thi.`:'Tài khoản này chưa có phân công nhập điểm đang hoạt động. Hãy liên hệ quản trị viên để kiểm tra đúng tài khoản và môn thi.',assignments.length?'success':'info');
+  }catch(e){teacherNotice('Không tải được phân công: '+(e.message||e),'error');}
+ }
  async function save(active){await run(async()=>{
   const vals=[...$('sa-checks').querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);
   if($('sa-scope').value!=='grade'&&!vals.length)throw Error('Hãy chọn ít nhất một lớp hoặc phòng.');
@@ -92,7 +108,7 @@ export function wireScoreAssignments({state,esc,message}){
   $('sa-rows').innerHTML=`<table><thead><tr>${phach?'<th>Phòng</th><th>Mã phách</th>':'<th>SBD</th><th>Họ tên</th><th>Lớp</th>'}<th>Điểm tự luận</th></tr></thead><tbody>${rows.map((r,i)=>`<tr>${phach?`<td>${esc(r.room_code)}</td><td>${esc(r.phach_code)}</td>`:`<td>${esc(r.sbd)}</td><td>${esc(r.student_name)}</td><td>${esc(r.class_code)}</td>`}<td><input type="number" data-sa-score="${i}" min="0" max="${esc(workspace.maximum_score)}" step="any" value="${r.score??''}" style="width:110px"></td></tr>`).join('')}</tbody></table>`;
   $('sa-submit').disabled=!rows.length;
   $('sa-progress').textContent=`${rows.length} bài · ${rows.filter(r=>r.score!==null).length} đã có điểm · thang 0–${workspace.maximum_score}`;
-  notice('Đã tải bài thi. Điểm chỉ được lưu khi nhấn Lưu điểm đã thay đổi.','success');
+  teacherNotice('Đã tải bài thi. Điểm chỉ được lưu khi nhấn Lưu điểm đã thay đổi.','success');
  })}
  async function submit(){await run(async()=>{
   if(!workspace)throw Error('Cần tải bài thi trước.');const items=[];
@@ -109,10 +125,10 @@ export function wireScoreAssignments({state,esc,message}){
   workspace=null;rows=[];$('sa-submit').disabled=true;$('sa-progress').textContent='Đã lưu. Nhấn Tải bài thi để xem dữ liệu mới nhất.';notice(`Đã lưu ${result.saved} bài thi.`,'success');
  })}
  $('sa-save').onclick=()=>save(true);$('sa-disable').onclick=()=>{if(confirm('Thu hồi phân công này?'))save(false)};
- $('sa-load').onclick=load;$('sa-submit').onclick=submit;
+ $('sa-load').onclick=load;$('sa-submit').onclick=submit;$('sa-teacher-refresh').onclick=refreshTeacher;
  $('sa-exam').addEventListener('change',()=>refreshPickers().catch(e=>notice(e.message,'error')));
  $('sa-subject').addEventListener('change',()=>refreshPickers().catch(e=>notice(e.message,'error')));
  $('sa-grade').addEventListener('change',()=>refreshPickers().catch(e=>notice(e.message,'error')));
  $('sa-scope').addEventListener('change',()=>renderChecks());
- return {refresh};
+ return {refresh,refreshTeacher};
 }
