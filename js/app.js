@@ -11,6 +11,7 @@ import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&fo
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.248&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
+import {wireScoreAssignments} from './score-assignments.js?v=0.1.250';
 import {wireRanking} from './ranking.js?v=0.1.212';
 import {wireViolations} from './violations.js?v=0.1.212';
 import {createStudentPicker} from './student-picker.js?v=0.1.212';
@@ -22,7 +23,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.249';
+const APP_VERSION='v0.1.250';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -30,6 +31,7 @@ let rosterLoadedExamId=null;
 let operations=null;
 let accounts=null;
 let teaching=null;
+let scoreAssignments=null;
 let ranking=null;
 let violations=null;
 let scoreControl=null;
@@ -147,7 +149,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.249';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.250';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -406,7 +408,7 @@ let activeSettingsSection='settings';
 let settingsRefreshAt=new Map();
 let settingsRefreshPending=new Map();
 function activateSettingsSection(section='settings', {force=false}={}){
-  const valid=['settings','accounts','teaching'];
+  const valid=['settings','accounts','teaching','score-assignments'];
   const selected=valid.includes(section)?section:'settings';
   activeSettingsSection=selected;
   const host=document.getElementById('module-settings');
@@ -432,11 +434,11 @@ function activateSettingsSection(section='settings', {force=false}={}){
   if(!force&&(now-last<30000||settingsRefreshPending.has(selected)))return;
   const task=Promise.resolve().then(()=>selected==='settings'
     ?Promise.resolve(ranking?.refresh()).then(()=>loadDefaultSubjectClassConfig())
-    :selected==='accounts'?accounts?.refresh():teaching?.refresh());
+    :selected==='accounts'?accounts?.refresh():selected==='teaching'?teaching?.refresh():scoreAssignments?.refresh());
   settingsRefreshPending.set(selected,task);
   task.then(()=>settingsRefreshAt.set(selected,Date.now())).catch(error=>{
     settingsRefreshAt.delete(selected);
-    const target=selected==='accounts'?'accounts-message':selected==='teaching'?'teaching-message':'default-config-message';
+    const target=selected==='accounts'?'accounts-message':selected==='teaching'?'teaching-message':selected==='score-assignments'?'score-assignment-message':'default-config-message';
     message($(target)||$('global-message'),`Không tải được dữ liệu: ${error.message}. Hãy chọn lại tab để thử lại.`,'error');
   }).finally(()=>settingsRefreshPending.delete(selected));
 }
@@ -446,17 +448,18 @@ function organizeAdminModules(){
   if(!settings||!host)throw new Error('Không tìm thấy tab Cấu hình.');
   // Idempotent initialization, including when modules are loaded again.
   if(document.getElementById('settings-sections-nav'))return;
+  if(!document.getElementById('tab-score-assignments')){const panel=document.createElement('section');panel.id='tab-score-assignments';panel.className='tab-panel hidden';panel.innerHTML='<div id="score-assignments-host"></div>';host.appendChild(panel);}
   const container=document.createElement('div');
   container.id='settings-sections';
   const tabs=document.createElement('nav');
   tabs.id='settings-sections-nav';
   tabs.className='tabs settings-subtabs';
   tabs.setAttribute('aria-label','Chức năng cấu hình');
-  tabs.innerHTML='<button type="button" class="tab" data-settings-section="settings">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching">Phân công giảng dạy</button>';
+  tabs.innerHTML='<button type="button" class="tab" data-settings-section="settings">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching">Phân công giảng dạy</button><button type="button" class="tab" data-settings-section="score-assignments">Phân công nhập điểm</button>';
   host.insertBefore(tabs,settings);
   host.insertBefore(container,settings);
   container.appendChild(settings);
-  for(const name of ['accounts','teaching']){
+  for(const name of ['accounts','teaching','score-assignments']){
     const panel=document.getElementById(`tab-${name}`);
     if(!panel)throw new Error(`Không tìm thấy giao diện ${name}.`);
     container.appendChild(panel);
@@ -473,7 +476,7 @@ function organizeAdminModules(){
   activateSettingsSection('settings');
 }
 function switchTab(tab){
-  if(tab==='accounts'||tab==='teaching'){activeSettingsSection=tab;tab='settings';}
+  if(tab==='accounts'||tab==='teaching'||tab==='score-assignments'){activeSettingsSection=tab;tab='settings';}
   if(isManualExam(state.selectedExam)&&['subjects','sbd','rooming','forms','scripts','scores','absences','settings'].includes(tab)){
     openManualExamWorkspace(state.selectedExam).catch(error=>message($('global-message'),error.message,'error'));return;
   }
@@ -3494,6 +3497,9 @@ async function boot(){
   startupStep('Hoàn tất','Kết nối Supabase và tải toàn bộ giao diện thành công. Có thể đăng nhập.','success',true);
   try{accounts=wireAccounts({state,$,esc,message})}
   catch(error){console.error('Không khởi tạo được quản lý tài khoản:',error)}
+  try{scoreAssignments=wireScoreAssignments({state,esc,message})}
+  catch(error){console.error('Không khởi tạo được phân công nhập điểm:',error)}
+  $('grader-assigned-scores')?.addEventListener('click',()=>{const panel=$('tab-score-assignments');if(!panel)return;panel.classList.remove('hidden');panel.hidden=false;$('grader-assigned-host').appendChild(panel);scoreAssignments?.refresh()});
   try{teaching=wireTeaching({state,$,esc,message,subjects:SUBJECTS})}
   catch(error){console.error('Không khởi tạo được phân công giảng dạy:',error);message($('teaching-message'),`Không khởi tạo được phân công: ${error.message}`,'error')}
   try{ranking=wireRanking({state,$,esc,message})}
