@@ -7,8 +7,8 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.246&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.246&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
+import {loadTabModules} from './module-loader.js?v=0.1.247&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.247&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireRanking} from './ranking.js?v=0.1.212';
@@ -22,7 +22,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.246';
+const APP_VERSION='v0.1.247';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -154,7 +154,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.246';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.247';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -409,12 +409,58 @@ async function deleteDefaultSubjectClassConfig(subjectCode){
  if(error)throw new Error(error.message);resetDefaultSubjectClassConfig();await loadDefaultSubjectClassConfig();
  message($('default-config-message'),`Đã xóa cấu hình môn ${name}.`,'success');
 }
+let activeSettingsSection='settings';
+function activateSettingsSection(section='settings'){
+  activeSettingsSection=['settings','accounts','teaching'].includes(section)?section:'settings';
+  document.querySelectorAll('[data-settings-section]').forEach(button=>{
+    const selected=button.dataset.settingsSection===activeSettingsSection;
+    button.classList.toggle('active',selected);
+    button.setAttribute('aria-selected',String(selected));
+  });
+  ['settings','accounts','teaching'].forEach(name=>{
+    const panel=document.getElementById(`tab-${name}`);
+    if(panel)panel.classList.toggle('hidden',name!==activeSettingsSection);
+  });
+  if(activeSettingsSection==='settings'){
+    ranking?.refresh();
+    loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'));
+  } else if(activeSettingsSection==='accounts')accounts?.refresh();
+  else if(teaching)teaching.refresh();
+  else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy.','error');
+}
+function organizeAdminModules(){
+  const settings=document.getElementById('tab-settings');
+  if(!settings)throw new Error('Không tìm thấy tab Cấu hình.');
+  const container=document.createElement('div');
+  container.id='settings-sections';
+  const tabs=document.createElement('nav');
+  tabs.className='tabs settings-subtabs';
+  tabs.setAttribute('aria-label','Chức năng cấu hình');
+  tabs.innerHTML='<button type="button" class="tab active" data-settings-section="settings">Cấu hình kỳ thi</button><button type="button" class="tab" data-settings-section="accounts">Quản lý tài khoản</button><button type="button" class="tab" data-settings-section="teaching">Phân công giảng dạy</button>';
+  settings.parentElement.insertBefore(tabs,settings);
+  settings.parentElement.insertBefore(container,settings);
+  container.appendChild(settings);
+  for(const name of ['accounts','teaching']){
+    const panel=document.getElementById(`tab-${name}`);
+    if(!panel)throw new Error(`Không tìm thấy giao diện ${name}.`);
+    container.appendChild(panel);
+  }
+  tabs.querySelectorAll('[data-settings-section]').forEach(button=>button.addEventListener('click',()=>activateSettingsSection(button.dataset.settingsSection)));
+  ['accounts','teaching'].forEach(name=>document.getElementById(`tab-${name}`).classList.add('hidden'));
+}
 function switchTab(tab){
+  if(tab==='accounts'||tab==='teaching'){activeSettingsSection=tab;tab='settings';}
   if(isManualExam(state.selectedExam)&&['subjects','sbd','rooming','forms','scripts','scores','absences','settings'].includes(tab)){
     openManualExamWorkspace(state.selectedExam).catch(error=>message($('global-message'),error.message,'error'));return;
   }
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('hidden',p.id!==`tab-${tab}`));
+  document.querySelectorAll('#app-screen > .tab-module').forEach(m=>{
+    const selected=m.id===`module-${tab}`;
+    m.classList.toggle('hidden',!selected);
+    const panel=m.querySelector(':scope > .tab-panel');
+    if(panel)panel.classList.toggle('hidden',!selected);
+  });
+  if(tab==='settings')activateSettingsSection(activeSettingsSection);
   if(tab==='school-students'){
     if(!schoolStudentsLoaded)loadSchoolStudents();
     else renderSchoolStudents();
@@ -426,17 +472,12 @@ function switchTab(tab){
     .catch(error=>message($('forms-message'),error.message,'error'));
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
-  if(tab==='accounts')accounts?.refresh();
-  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();classReport?.refresh();choiceReports?.refresh();topStudents?.refresh();templateExport?.refresh();}
+  if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();templateExport?.refresh();}
+  if(tab==='forms'){classReport?.refresh();choiceReports?.refresh();topStudents?.refresh();}
   if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
     .then(ready=>{if(ready)return violations?.refresh()})
     .catch(error=>message($('absence-message'),error.message,'error'));
-  if(tab==='teaching'){
-    if(teaching)teaching.refresh();
-    else message($('teaching-message')||$('global-message'),'Chưa khởi tạo được phân công giảng dạy. Hãy cập nhật đồng bộ index.html, js/app.js, js/module-loader.js, js/teaching.js và modules/teaching.html, sau đó tải lại bằng Ctrl+F5.','error');
-  }
   if(tab==='sbd')refreshSbdRoomControls().catch(error=>message($('sbd-message'),error.message,'error'));
-  if(tab==='settings'){ranking?.refresh();loadDefaultSubjectClassConfig().catch(error=>message($('default-config-message'),error.message,'error'))}
 }
 function renderSubjects(){
   // The current subjects panel no longer includes the legacy catalog cards.
@@ -3413,6 +3454,7 @@ async function boot(){
       startupStep(`Bước 6/6 · module ${index}/${total}`,`Đã kết nối Supabase. Đang tải module giao diện ${index}/${total}: ${name}. Nếu bước này không đổi trong 15 giây, module sẽ báo lỗi tại đây.`,'info',true);
     }});
     if(`v${moduleVersion}`!==APP_VERSION)throw new Error(`Bộ tải giao diện v${moduleVersion} khác ứng dụng ${APP_VERSION}. Hãy cập nhật đồng bộ các tệp và tải lại bằng Ctrl+F5.`);
+    organizeAdminModules();
     ensureCandidateClassDropdown();
   }catch(error){
     showScreen('login-screen');
