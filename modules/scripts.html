@@ -38,14 +38,14 @@
   </section>
   <section id="script-repair-panel" class="section-panel hidden" aria-label="Đính chính phách sau báo vắng">
     <div class="section-heading"><div><h3>Đính chính phách sau báo vắng</h3><p id="script-repair-context"></p></div><button type="button" class="btn btn-light" id="script-repair-close">Đóng</button></div>
-    <p class="help-text">Chỉ áp dụng phương án <b>Theo phòng + Dồn phách</b>. Cập nhật báo vắng trước; giữ nguyên đầu phách, SBD và thứ tự bài. Phòng có điểm tự luận đã nhập sẽ bị chặn để bảo vệ kết quả.</p>
+    <p class="help-text">Chỉ áp dụng phương án <b>Theo phòng + Dồn phách</b>. Cập nhật báo vắng trước; giữ nguyên đầu phách, SBD và thứ tự bài. Phòng đã có điểm vẫn được xem trước, nhưng không được lưu trực tiếp để bảo vệ kết quả.</p>
     <div class="form-actions"><label>Phòng thi <select id="script-repair-room"></select></label><label>Phương án <select id="script-repair-method"><option value="manual">Bổ sung phách thủ công cho một học sinh</option><option value="rebuild">Đánh lại phách toàn phòng</option></select></label></div>
     <div id="script-repair-manual" class="form-actions"><label>Học sinh <select id="script-repair-candidate"></select></label><label>Mã phách bổ sung <input id="script-repair-code" type="text" placeholder="Nhập mã phách"></label></div>
     <label>Lý do đính chính <input id="script-repair-reason" type="text" placeholder="Ví dụ: Học sinh đã dự thi, báo vắng nhầm"></label>
     <div class="form-actions"><button id="script-repair-unlock" class="btn btn-light" type="button">Mở khóa chỉnh sửa phách</button><button id="script-repair-preview" class="btn btn-light" type="button">Xem trước thay đổi</button><button id="script-repair-apply" class="btn btn-primary" type="button" disabled>Xác nhận cập nhật phách</button><button id="script-repair-relock" class="btn btn-light" type="button">Khóa lại</button></div>
     <div id="script-repair-message" class="notice hidden" role="status" aria-live="polite"></div>
     <div id="script-repair-summary" class="help-text"></div>
-    <div class="table-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>Thứ tự bài</th><th>SBD</th><th>Trạng thái</th><th>Phách cũ</th><th>Phách mới</th></tr></thead><tbody id="script-repair-body"></tbody></table></div>
+    <div class="table-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>Thứ tự bài</th><th>SBD</th><th>Trạng thái</th><th>Phách cũ</th><th>Phách mới (đối chiếu)</th></tr></thead><tbody id="script-repair-body"></tbody></table></div>
   </section>
   <div id="script-bag-assignment" class="section-panel hidden"></div>
   <!-- Compatibility controls for pre-v0.1.124 script code; account/group management is shown in Quản lý tài khoản. -->
