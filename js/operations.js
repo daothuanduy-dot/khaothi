@@ -1475,6 +1475,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
 
   let scoresExamId='',scoreRevision=0,scoreImportContext=null,combinedContext=null;
+  let regradeConfig=null,regradeCurrent=new Map(),regradeDraft=[],regradeSource='manual',regradeFilename='',regradeContext='';
   const scoreKey=()=>JSON.stringify([state.selectedExam||'',$('scores-subject').value]);
   const statisticsKey=()=>JSON.stringify([scoreKey(),!!$('scores-include-absent').checked,!!$('scores-include-violations').checked]);
   const importKey=()=>JSON.stringify([scoreKey(),$('scores-sbd-column').value,$('scores-mcq-column').value,$('scores-first-row').value]);
@@ -1482,6 +1483,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     ++scoreRevision;scoreImportContext=null;combinedContext=null;
     cache.scoreImportRows=[];cache.combinedScores=[];
     cache.subjectStatistics=null;
+    regradeConfig=null;regradeCurrent=new Map();regradeDraft=[];regradeContext='';
+    if($('scores-regrade-editor'))$('scores-regrade-editor').innerHTML='';
+    if($('scores-regrade-review'))$('scores-regrade-review').innerHTML='';
+    if($('scores-regrade-config'))$('scores-regrade-config').innerHTML='';
+    if($('scores-regrade-commit'))$('scores-regrade-commit').disabled=true;
     for(const id of ['scores-preview','scores-results','scores-summary','scores-class-results'])$(id).innerHTML='';
     $('scores-result-controls').hidden=true;
     $('scores-import').disabled=true;$('scores-export').disabled=true;
@@ -1501,11 +1507,115 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   function renderCombinedScores(){
     const rows=cache.combinedScores.filter(combinedRowFilter);
     $('scores-result-count').textContent=`Hiển thị ${rows.length}/${cache.combinedScores.length} thí sinh trong vùng cuộn bên dưới.`;
-    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th></tr></thead><tbody>${rows.map(row=>{
+    $('scores-results').innerHTML=`<table><thead><tr><th>SBD</th><th>Họ và tên</th><th>Lớp</th><th>Tự luận</th><th>Trắc nghiệm</th><th>Tổng gốc</th><th>Trạng thái</th><th>Điểm thống kê</th><th>Xử lý thống kê</th><th>Phúc khảo</th></tr></thead><tbody>${rows.map(row=>{
       const completeScore=row.total_score!==null;
       const status=subjectResultStatus(row);
-      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${displayExamScore(row.essay_score)}</td><td>${displayExamScore(row.mcq_score)}</td><td>${completeScore?displayExamScore(row.total_score):''}</td><td>${status}</td><td>${displayExamScore(row.statistics_score)}</td><td>${esc(subjectStatisticsReason(row))}</td></tr>`;
-    }).join('')||'<tr><td colspan="9" class="empty">Không có thí sinh phù hợp bộ lọc.</td></tr>'}</tbody></table>`;
+      return `<tr><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.class_code)}</td><td>${displayExamScore(row.essay_score)}</td><td>${displayExamScore(row.mcq_score)}</td><td>${completeScore?displayExamScore(row.total_score):''}</td><td>${status}</td><td>${displayExamScore(row.statistics_score)}</td><td>${esc(subjectStatisticsReason(row))}</td><td>${!row.is_absent&&!row.no_paper&&row.total_score!==null?`<button type="button" class="btn btn-light" data-regrade-sbd="${esc(row.sbd)}">Sửa điểm</button>`:"—"}</td></tr>`;
+    }).join('')||'<tr><td colspan="10" class="empty">Không có thí sinh phù hợp bộ lọc.</td></tr>'}</tbody></table>`;
+  }
+
+
+  const regradeMsg=(txt,type='error')=>message($('scores-regrade-message'),txt,type);
+  const regradeKey=()=>JSON.stringify([scoreKey(),scoreRevision]);
+  async function loadRegradeData(){
+    const key=regradeKey(),examId=state.selectedExam,subject=$('scores-subject').value;
+    const [cfg,cur]=await Promise.all([
+      state.client.rpc('exam_regrade_get_config',{p_exam_id:examId,p_subject_code:subject}),
+      state.client.rpc('exam_regrade_get_current',{p_exam_id:examId,p_subject_code:subject})
+    ]);
+    if(cfg.error||cur.error)throw new Error(`Chưa triển khai SQL v0.1.246 hoặc cấu hình lỗi: ${cfg.error?.message||cur.error?.message}`);
+    if(key!==regradeKey())return;
+    regradeConfig=cfg.data;regradeCurrent=new Map((cur.data||[]).map(x=>[x.candidate_id,x]));
+    regradeDraft=[];regradeContext=key;
+    $('scores-regrade-config').textContent=`Môn ${subject}: ${regradeConfig.count} thành phần — ${regradeConfig.components.map(x=>`${x.name} (tối đa ${x.maximum})`).join('; ')}`;
+    $('scores-regrade-editor').innerHTML='';$('scores-regrade-review').innerHTML='';$('scores-regrade-commit').disabled=true;
+  }
+  function regradeBaseline(row){
+    const old=regradeCurrent.get(row.candidate_id);
+    if(old)return old.scores.map(Number);
+    const parts=regradeConfig.components;
+    if(parts.length>2)return parts.map(()=>null); // 3 thành phần phải nhập đủ, không tự suy đoán điểm gốc.
+    return parts.map(p=>p.type==='mcq'?(row.mcq_score??null):p.type==='essay'?(row.essay_score??null):null);
+  }
+  function regradeShowEditor(row){
+    if(!regradeConfig||regradeContext!==regradeKey())throw new Error('Hãy tải lại điểm tổng hợp và cấu hình phúc khảo.');
+    if(row.is_absent||row.no_paper||row.total_score===null)throw new Error('Chỉ phúc khảo bài đã có đủ điểm và không vắng/không bài.');
+    const baseline=regradeBaseline(row);
+    $('scores-regrade-editor').innerHTML=`<h4>Nhập điểm phúc khảo: ${esc(row.sbd)} — ${esc(row.student_name)}</h4><div class="form-grid">${regradeConfig.components.map((p,i)=>`<label>${esc(p.name)} (0–${p.maximum})<input data-regrade-part="${i}" type="number" min="0" max="${p.maximum}" step="any" value="${baseline[i]??''}"></label>`).join('')}</div><button type="button" class="btn btn-light" id="scores-regrade-check-single">Xem trước điểm mới</button>`;
+    $('scores-regrade-review').innerHTML='';$('scores-regrade-commit').disabled=true;
+    $('scores-regrade-check-single').onclick=()=>{
+      try{const values=[...$('scores-regrade-editor').querySelectorAll('[data-regrade-part]')].map(x=>x.value.trim());
+        regradePrepare([{row,values}], 'manual','');
+      }catch(e){regradeMsg(e.message)}
+    };
+    $('scores-regrade-editor').scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+  function regradePrepare(items,source,filename){
+    if(regradeContext!==regradeKey())throw new Error('Dữ liệu đã thay đổi, tải lại điểm tổng hợp.');
+    if(!items.length)throw new Error('Không có thí sinh để phúc khảo.');
+    const seen=new Set(),draft=[];
+    for(const {row,values} of items){
+      if(!row||row.is_absent||row.no_paper||row.total_score===null)throw new Error(`SBD ${row?.sbd||'?'} không có điểm gốc hợp lệ.`);
+      if(seen.has(row.candidate_id))throw new Error(`SBD ${row.sbd} trùng trong tệp.`);
+      seen.add(row.candidate_id);
+      if(values.length!==regradeConfig.count)throw new Error(`SBD ${row.sbd}: phải có ${regradeConfig.count} điểm.`);
+      const scores=values.map((value,i)=>{
+        const p=regradeConfig.components[i],v=String(value??'').trim().replace(',','.');
+        if(!v||!/^(?:\d+)(?:\.\d+)?$/.test(v))throw new Error(`SBD ${row.sbd}: thiếu/sai ${p.name}.`);
+        const n=Number(v);
+        if(!Number.isFinite(n)||n<0||n>Number(p.maximum)||Math.abs(n-Number(n.toFixed(p.decimals)))>1e-9)throw new Error(`SBD ${row.sbd}: ${p.name} phải trong 0–${p.maximum}, tối đa ${p.decimals} chữ số lẻ.`);
+        return n;
+      });
+      const previous=regradeCurrent.get(row.candidate_id);
+      draft.push({candidate_id:row.candidate_id,sbd:row.sbd,name:row.student_name,old_total:row.total_score,
+        expected_revision:previous?.revision||0,scores,total:scores.reduce((a,b)=>a+b,0)});
+    }
+    regradeDraft=draft;regradeSource=source;regradeFilename=filename;
+    $('scores-regrade-review').innerHTML=`<h4>Xem trước ${draft.length} kết quả</h4><table><thead><tr><th>SBD</th><th>Họ tên</th><th>Điểm cũ</th>${regradeConfig.components.map(p=>`<th>${esc(p.name)}</th>`).join('')}<th>Tổng mới</th><th>Chênh lệch</th></tr></thead><tbody>${draft.map(d=>`<tr><td>${esc(d.sbd)}</td><td>${esc(d.name)}</td><td>${displayExamScore(d.old_total)}</td>${d.scores.map(v=>`<td>${displayExamScore(v)}</td>`).join('')}<td>${displayExamScore(d.total)}</td><td>${(d.total-Number(d.old_total)).toFixed(2)}</td></tr>`).join('')}</tbody></table>`;
+    $('scores-regrade-commit').disabled=false;
+    regradeMsg(`Đã kiểm tra ${draft.length} thí sinh; chưa ghi dữ liệu.`, 'success');
+  }
+  function regradeTemplate(){
+    if(!regradeConfig)throw new Error('Tải điểm tổng hợp trước khi xuất mẫu.');
+    if(!window.XLSX)throw new Error('Chưa tải thư viện Excel XLSX.');
+    const header=['SBD',...regradeConfig.components.map(p=>p.name)];
+    const rows=cache.combinedScores.filter(r=>!r.is_absent&&!r.no_paper&&r.total_score!==null).map(r=>[String(r.sbd),...regradeBaseline(r).map(x=>x??'')]);
+    const wb=window.XLSX.utils.book_new(),sheet=window.XLSX.utils.aoa_to_sheet([header,...rows]);
+    sheet['!cols']=[{wch:15},...regradeConfig.components.map(()=>({wch:24}))];
+    window.XLSX.utils.book_append_sheet(wb,sheet,'Phuc khao');
+    window.XLSX.writeFile(wb,`mau-phuc-khao-${$('scores-subject').value}.xlsx`);
+  }
+  async function regradeReadExcel(){
+    if(!regradeConfig||regradeContext!==regradeKey())throw new Error('Tải điểm tổng hợp trước khi nhập Excel.');
+    const file=$('scores-regrade-file').files?.[0];if(!file)throw new Error('Chọn tệp Excel.');
+    if(!window.XLSX)throw new Error('Chưa tải thư viện Excel XLSX.');
+    const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});
+    const matrix=window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',raw:false});
+    if(matrix.length<2)throw new Error('Excel không có dữ liệu.');
+    if(matrix[0].length!==regradeConfig.count+1)throw new Error(`Excel phải có đúng ${regradeConfig.count+1} cột: SBD và ${regradeConfig.count} thành phần.`);
+    const lookup=new Map(cache.combinedScores.map(r=>[String(r.sbd).trim(),r]));
+    const items=matrix.slice(1).filter(line=>line.some(x=>String(x??'').trim())).map((line,i)=>{
+      const sbd=String(line[0]??'').trim(),row=lookup.get(sbd);
+      if(!row)throw new Error(`Dòng ${i+2}: SBD ${sbd} không có trong bảng điểm môn.`);
+      return {row,values:line.slice(1,regradeConfig.count+1)};
+    });
+    regradePrepare(items,'excel',file.name);
+  }
+  async function regradeCommit(){
+    if(!regradeDraft.length||regradeContext!==regradeKey())throw new Error('Xem trước lại dữ liệu trước khi xác nhận.');
+    const reason=$('scores-regrade-reason').value.trim();if(reason.length<5)throw new Error('Nhập lý do phúc khảo ít nhất 5 ký tự.');
+    if(!confirm(`Xác nhận cập nhật ${regradeDraft.length} học sinh môn ${$('scores-subject').value}? Điểm tổng và xếp hạng sẽ thay đổi.`))return;
+    $('scores-regrade-commit').disabled=true;
+    const {data,error}=await state.client.rpc('exam_regrade_apply',{
+      p_exam_id:state.selectedExam,p_subject_code:$('scores-subject').value,
+      p_rows:regradeDraft.map(d=>({candidate_id:d.candidate_id,scores:d.scores,expected_revision:d.expected_revision})),
+      p_reason:reason,p_source_type:regradeSource,p_source_file:regradeFilename
+    });
+    if(error)throw new Error(error.message);
+    state.statisticsRevision=(state.statisticsRevision||0)+1;
+    ++scoreRevision;regradeDraft=[];regradeContext='';
+    await loadCombinedScores();
+    regradeMsg(`Đã lưu ${data.updated_count} kết quả phúc khảo; vui lòng tải lại các báo cáo/xếp hạng.`, 'success');
   }
 
   function showCombinedScoreControls(){
@@ -1668,6 +1778,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
     showCombinedScoreControls();
     renderCombinedScores();
+    try{await loadRegradeData()}catch(e){regradeMsg(e.message)}
     $('scores-class-results').innerHTML=`<h3>Thống kê môn theo lớp</h3><table><thead><tr><th>Lớp</th><th>Dự thi</th><th>Được tính</th><th>Loại</th><th>Điểm TB</th></tr></thead><tbody>${(data?.classes||[]).map(row=>`<tr><td>${esc(row.class_code)}</td><td>${row.candidates}</td><td>${row.included_count}</td><td>${row.excluded_count}</td><td>${row.average_score==null?'—':Number(row.average_score).toFixed(3)}</td></tr>`).join('')}</tbody></table>`;
     $('scores-export').disabled=!cache.combinedScores.length;
   }
@@ -2188,6 +2299,14 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       }
     }
     refreshScores();
+    $('scores-results').addEventListener('click',event=>{
+      const button=event.target.closest('[data-regrade-sbd]');if(!button)return;
+      try{const row=cache.combinedScores.find(r=>String(r.sbd)===button.dataset.regradeSbd);regradeShowEditor(row)}catch(e){regradeMsg(e.message)}
+    });
+    safeAction('scores-regrade-message',regradeTemplate,$('scores-regrade-template'));
+    safeAction('scores-regrade-message',regradeReadExcel,$('scores-regrade-preview'));
+    safeAction('scores-regrade-message',regradeCommit,$('scores-regrade-commit'));
+    $('scores-regrade-file').addEventListener('change',()=>{regradeDraft=[];$('scores-regrade-commit').disabled=true;$('scores-regrade-review').innerHTML=''});
     safeAction('scores-message',readMultipleChoiceFile,$('scores-read-file'));
     safeAction('scores-message',importMultipleChoiceScores,$('scores-import'));
     safeAction('scores-message',loadCombinedScores,$('scores-check'));
