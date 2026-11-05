@@ -990,7 +990,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
           <td>${esc(run.absence_mode==='gap'?'Cách phách':'Dồn phách')}</td>
           <td>${run.record_count}</td><td>${esc(run.status==='locked'?'Đã khóa':'Bản nháp')}</td>
           <td><button type="button" class="script-assignment-count" data-script-assign-detail="${esc(run.id)}" ${run.status!=='locked'?'disabled title="Chỉ phân công khi đã khóa phách"':''} aria-label="${esc(nameOf(run.subject_code))}: ${assigned}/${total} túi, ${title}">${assigned}/${total} · ${esc(title)}</button></td>
-          <td><button type="button" class="small-btn" data-script-view="${esc(run.id)}">Xem</button> <button type="button" class="small-btn" data-script-match="${esc(run.id)}">Bảng khớp phách</button> ${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
+          <td><button type="button" class="small-btn" data-script-repair="${esc(run.id)}">Đính chính phách</button> <button type="button" class="small-btn" data-script-view="${esc(run.id)}">Xem</button> <button type="button" class="small-btn" data-script-match="${esc(run.id)}">Bảng khớp phách</button> ${run.status==='locked'?`<button type="button" class="small-btn" data-script-export="${esc(run.id)}">Xuất phách</button> <button type="button" class="small-btn" data-script-assign="${esc(run.id)}">Phân công túi</button>`:
             `<button type="button" class="small-btn" data-script-lock="${esc(run.id)}">Khóa đánh phách</button>`} <button type="button" class="small-btn danger-btn" data-script-delete="${esc(run.subject_code)}">Xóa toàn bộ phách môn</button></td></tr>`;
       }).join('')||'<tr><td colspan="8" class="empty">Không có phương án phách phù hợp bộ lọc.</td></tr>';
       const summary=$('script-assignment-summary');
@@ -1982,6 +1982,57 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     });
     safeAction('absence-message',saveAbsences,$('absence-save'));
   }
+  let repairRun=null,repairPreview=null,repairRoomRows=[];
+  async function openScriptRepair(runId){
+    repairPreview=null;repairRun=null;
+    const {data:run,error}=await state.client.from('exam_script_runs').select('*').eq('id',runId).single();
+    if(error)throw new Error(error.message);
+    if(run.method!=='room'||run.absence_mode!=='compact'||run.status!=='locked')throw new Error('Chỉ hỗ trợ lượt đã khóa: Theo phòng + Dồn phách.');
+    repairRun=run;
+    const records=await readPages(()=>state.client.from('exam_script_records').select('id,candidate_id,sbd,room_code,room_order,script_order,phach_code,is_absent').eq('run_id',runId).order('script_order'));
+    repairRoomRows=records;
+    const rooms=[...new Set(records.map(r=>r.room_code))].sort((a,b)=>String(a).localeCompare(String(b),'vi',{numeric:true}));
+    $('script-repair-room').innerHTML=rooms.map(room=>`<option value="${esc(room)}">${esc(room)}</option>`).join('');
+    $('script-repair-context').textContent=`${nameOf(run.subject_code)} · ${runId} · ${rooms.length} phòng`;
+    $('script-repair-panel').classList.remove('hidden');
+    $('script-repair-apply').disabled=true;
+    updateRepairCandidates();
+    $('script-repair-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function updateRepairCandidates(){
+    repairPreview=null;$('script-repair-apply').disabled=true;
+    const room=$('script-repair-room').value;
+    const rows=repairRoomRows.filter(r=>r.room_code===room);
+    $('script-repair-candidate').innerHTML=rows.filter(r=>!r.is_absent&&!r.phach_code).map(r=>`<option value="${esc(r.candidate_id)}">${esc(r.sbd)} · STT ${esc(r.script_order)}</option>`).join('');
+    $('script-repair-manual').classList.toggle('hidden',$('script-repair-method').value!=='manual');
+    $('script-repair-summary').textContent=`${rows.length} học sinh · ${rows.filter(r=>r.is_absent).length} đang đánh dấu vắng trong hồ sơ phách. Cần lưu báo vắng mới trước khi xem trước.`;
+    $('script-repair-body').innerHTML='';
+  }
+  async function callRepair(apply=false){
+    if(!repairRun)throw new Error('Chưa chọn lượt đánh phách.');
+    const mode=$('script-repair-method').value;
+    const args={p_run_id:repairRun.id,p_room_code:$('script-repair-room').value,p_method:mode,
+      p_candidate_id:mode==='manual'?$('script-repair-candidate').value||null:null,
+      p_phach_code:mode==='manual'?$('script-repair-code').value.trim()||null:null,
+      p_reason:$('script-repair-reason').value.trim(),p_apply:apply,
+      p_expected:apply?repairPreview:null};
+    if(args.p_reason.length<8)throw new Error('Nhập lý do ít nhất 8 ký tự.');
+    const {data,error}=await state.client.rpc('exam_repair_script_room',args);
+    if(error)throw new Error(error.message);
+    return data;
+  }
+  function showRepairPreview(data){
+    $('script-repair-summary').textContent=`${data.changes?.length||0} bản ghi thay đổi · Đầu phách ${data.prefix||'—'} · Phòng ${data.room_code}. ${data.score_count?'CÓ ĐIỂM - BỊ CHẶN':''}`;
+    $('script-repair-body').innerHTML=(data.rows||[]).map(r=>`<tr><td>${esc(r.script_order)}</td><td>${esc(r.sbd)}</td><td>${r.is_absent?'Vắng':'Có mặt'}</td><td>${esc(r.old_code||'—')}</td><td>${esc(r.new_code||'—')}</td></tr>`).join('');
+  }
+  async function toggleRepairLock(open){
+    if(!repairRun)throw new Error('Chưa chọn lượt đánh phách.');
+    if(!confirm(open?'Mở khóa CHỈNH SỬA phách cho lượt này? Không xóa hoặc tạo lại lượt phách.':'Khóa lại chức năng đính chính phách?'))return;
+    const {error}=await state.client.rpc('exam_set_script_repair_lock',{p_run_id:repairRun.id,p_unlocked:open});
+    if(error)throw new Error(error.message);
+    repairPreview=null;$('script-repair-apply').disabled=true;
+    message($('script-repair-message'),open?'Đã mở khóa chỉnh sửa. Hãy xem trước trước khi lưu.':'Đã khóa lại chức năng chỉnh sửa.','success');
+  }
   function wireScripts(){
     setSubjectOptions('script-subject',allSubjectOptions());
     $('script-score-mode').onchange=()=>$('script-score-step-wrap').classList.toggle('hidden',$('script-score-mode').value!=='step');
@@ -2010,10 +2061,25 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('script-review-status').onchange=renderScriptReview;
     safeAction('script-message',exportScriptMatchingExcel,$('script-review-excel'));
     safeAction('script-message',printScriptMatching,$('script-review-pdf'));
+    $('script-repair-close').onclick=()=>{$('script-repair-panel').classList.add('hidden');repairRun=null;repairPreview=null;};
+    $('script-repair-room').onchange=updateRepairCandidates;
+    $('script-repair-method').onchange=updateRepairCandidates;
+    $('script-repair-candidate').onchange=()=>{$('script-repair-apply').disabled=true;repairPreview=null;};
+    $('script-repair-code').oninput=()=>{$('script-repair-apply').disabled=true;repairPreview=null;};
+    $('script-repair-reason').oninput=()=>{$('script-repair-apply').disabled=true;repairPreview=null;};
+    safeAction('script-repair-message',()=>toggleRepairLock(true),$('script-repair-unlock'));
+    safeAction('script-repair-message',()=>toggleRepairLock(false),$('script-repair-relock'));
+    safeAction('script-repair-message',async()=>{repairPreview=await callRepair(false);showRepairPreview(repairPreview);$('script-repair-apply').disabled=!repairPreview.changes?.length;},$('script-repair-preview'));
+    safeAction('script-repair-message',async()=>{
+      if(!repairPreview)throw new Error('Cần xem trước lại.');
+      if(!confirm(`Xác nhận sửa ${repairPreview.changes.length} bản ghi phách trong phòng ${repairPreview.room_code}? Hành động sẽ được ghi nhật ký.`))return;
+      const result=await callRepair(true);message($('script-repair-message'),`Đã cập nhật ${result.updated_count} bản ghi. Hãy khóa lại.`, 'success');
+      await openScriptRepair(repairRun.id);await loadScriptRuns();
+    },$('script-repair-apply'));
     $('script-runs-body').addEventListener('click',event=>{
-      const viewButton=event.target.closest('[data-script-view]'),matchButton=event.target.closest('[data-script-match]'),lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),detailButton=event.target.closest('[data-script-assign-detail]'),deleteButton=event.target.closest('[data-script-delete]');
-      const action=viewButton?()=>loadScriptReview(viewButton.dataset.scriptView):matchButton?()=>loadScriptReview(matchButton.dataset.scriptMatch):lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):detailButton?()=>showBagAssignments(detailButton.dataset.scriptAssignDetail):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
-      const button=viewButton||matchButton||lock||exportButton||assignButton||detailButton||deleteButton;
+      const repairButton=event.target.closest('[data-script-repair]'),viewButton=event.target.closest('[data-script-view]'),matchButton=event.target.closest('[data-script-match]'),lock=event.target.closest('[data-script-lock]'),exportButton=event.target.closest('[data-script-export]'),assignButton=event.target.closest('[data-script-assign]'),detailButton=event.target.closest('[data-script-assign-detail]'),deleteButton=event.target.closest('[data-script-delete]');
+      const action=repairButton?()=>openScriptRepair(repairButton.dataset.scriptRepair):viewButton?()=>loadScriptReview(viewButton.dataset.scriptView):matchButton?()=>loadScriptReview(matchButton.dataset.scriptMatch):lock?()=>lockScriptRun(lock.dataset.scriptLock):exportButton?()=>exportScriptRun(exportButton.dataset.scriptExport):assignButton?()=>showBagAssignments(assignButton.dataset.scriptAssign):detailButton?()=>showBagAssignments(detailButton.dataset.scriptAssignDetail):deleteButton?()=>deleteSubjectScriptRuns(deleteButton.dataset.scriptDelete):null;
+      const button=repairButton||viewButton||matchButton||lock||exportButton||assignButton||detailButton||deleteButton;
       if(action&&button){button.disabled=true;action().catch(error=>message($('script-message'),error?.message||String(error),'error')).finally(()=>{button.disabled=false})}
     });
   }
