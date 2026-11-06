@@ -1,4 +1,4 @@
-import {inspectSheet,buildTemplatePlan,colIndex,normalized} from './template-export-core.js?v=201';
+import {inspectSheet,buildTemplatePlan,colIndex,normalized} from './template-export-core.js?v=263';
 import {saveDirectFiles} from './template-direct-write.js?v=201';
 const codes=['TOAN','VAN','LY','HOA','SINH','SU','DIA','KTPL','N1','N2','N3','N4','N5','N6','N7','ANH','TIN','CN','CONGNGHE','GDKT','GDDP','GDQP','GDKTPL'];
 export function wireTemplateExport({state,$,esc,message,subjectName}){
@@ -48,7 +48,11 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   if(!mappings.some(m=>m.enabled))throw new Error('Chọn ít nhất một sheet.');
   for(const m of mappings.filter(m=>m.enabled)){
    for(const field of ['target','idColumn','classColumn']){m[field]=String(m[field]||'').trim().toUpperCase();if(m[field])colIndex(m[field]);}
-   if(Number(m.firstRow)<2||Number(m.firstRow)>m.lastRow)throw new Error(`${m.sheetName}: dòng bắt đầu ngoài vùng học sinh.`);
+   const start=Number(m.firstRow);
+   if(!Number.isInteger(start)||start<2||start>m.lastRow){
+    throw new Error(`${m.sheetName}: dòng bắt đầu ${m.firstRow} không nằm trong vùng học sinh (đến dòng ${m.lastRow}). Hãy sửa cột “Dòng bắt đầu” theo dòng có mã định danh học sinh đầu tiên trong Excel rồi kiểm tra lại.`);
+   }
+   if(m.detectedStudentRows===0)throw new Error(`${m.sheetName}: chưa xác định được dòng học sinh theo cột mã ${m.idColumn||'(trống)'}. Hãy kiểm tra cột mã và tệp mẫu.`);
   }
   const captured=context(),sources=await getSources();if(captured!==context())return;
   plan=buildTemplatePlan(mappings,sources,settings());previewContext=captured;previewSources=JSON.stringify(sources);

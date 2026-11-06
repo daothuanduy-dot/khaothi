@@ -5,6 +5,8 @@ export function colIndex(value){const letters=String(value||'').trim().toUpperCa
 export function colName(n){let s='';for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s;}
 export function inspectSheet(ws,XLSX,period){
  const range=XLSX.utils.decode_range(ws['!ref']||'A1'),cells=Object.entries(ws).filter(([a])=>/^[A-Z]+\d+$/.test(a));
+ // Some exported templates have a stale !ref. Determine the actual used rows from real cells.
+ const physicalLastRow=cells.reduce((max,[address])=>Math.max(max,XLSX.utils.decode_cell(address).r+1),1);
  const top=cells.filter(([a])=>XLSX.utils.decode_cell(a).r<60);
  const labels=top.map(([address,c])=>({address,text:String(c.v??''),key:normalized(c.v),...XLSX.utils.decode_cell(address)}));
  const id=labels.find(c=>/MADINHDANH|MAHOCSINH/.test(c.key));
@@ -17,7 +19,15 @@ export function inspectSheet(ws,XLSX,period){
  for(const m of ws['!merges']||[])if(m.s.r<=headerEnd&&m.e.r>=headerEnd&&[id?.c,name?.c,cls?.c].includes(m.s.c))headerEnd=Math.max(headerEnd,m.e.r);
  const target=(period.startsWith('mid')?mid:end);
  const classLine=labels.find(c=>c.key.startsWith('LOP')&&c.text.includes(':'));
- return {enabled:!!id,idColumn:id?colName(id.c):'',nameColumn:name?colName(name.c):'',classColumn:cls?colName(cls.c):'',classCode:classLine?classLine.text.replace(/^\s*Lớp\s*:\s*/i,'').trim():'',subject:identifySubject(subjectCell?.text),target:target.length===1?colName(target[0].c):'',firstRow:headerEnd+2,lastRow:range.e.r+1,metadata,subjectText:subjectCell?.text||'',headers:labels.filter(c=>c.r===id?.r).map(c=>`${colName(c.c)}: ${c.text}`).join('; ')};
+ // Find student rows from the identifier column rather than trusting the worksheet dimension.
+ const idColumn=id?colName(id.c):'';
+ const studentRows=idColumn?cells.filter(([address,cell])=>{
+  const pos=XLSX.utils.decode_cell(address);
+  return pos.c===id.c&&pos.r>headerEnd&&cell?.v!=null&&String(cell.v).trim()!=='';
+ }).map(([address])=>XLSX.utils.decode_cell(address).r+1).sort((a,b)=>a-b):[];
+ const firstStudentRow=studentRows[0]||null;
+ const lastStudentRow=studentRows.at(-1)||null;
+ return {enabled:!!id,idColumn,nameColumn:name?colName(name.c):'',classColumn:cls?colName(cls.c):'',classCode:classLine?classLine.text.replace(/^\s*Lớp\s*:\s*/i,'').trim():'',subject:identifySubject(subjectCell?.text),target:target.length===1?colName(target[0].c):'',firstRow:firstStudentRow||headerEnd+2,lastRow:lastStudentRow||Math.max(range.e.r+1,physicalLastRow),detectedStudentRows:studentRows.length,metadata,subjectText:subjectCell?.text||'',headers:labels.filter(c=>c.r===id?.r).map(c=>`${colName(c.c)}: ${c.text}`).join('; ')};
 }
 export function buildTemplatePlan(mappings,sources,{includeAbsent=false,decimals='keep'}={}){
  const writes=[],issues=[],summary=[],destinations=new Set(),covered=new Set(),sourceMaps=new Map();
