@@ -1710,10 +1710,18 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     if(!rows.length)throw new Error('Không tìm thấy dòng điểm nào trong vùng đã chọn.');
     const uniqueSbd=new Set(rows.map(row=>row.sbd));
     if(uniqueSbd.size!==rows.length)throw new Error('Tệp có SBD bị lặp; hãy sửa tệp trước khi nhập.');
-    const{data:config,error}=await state.client.from('exam_subject_assessment_configs')
-      .select('mcq_maximum_score,score_mode').eq('exam_id',examId).eq('subject_code',subjectCode).single();
-    if(error)throw new Error(`Không tải được điểm tối đa trắc nghiệm. Hãy lưu cấu hình môn trước. ${error.message}`);
+    // Do not use .single(): PostgREST PGRST116 hides the distinction between
+    // missing and duplicated configuration rows.
+    const{data:configs,error}=await state.client.from('exam_subject_assessment_configs')
+      .select('mcq_maximum_score,score_mode,is_essay,maximum_score')
+      .eq('exam_id',examId).eq('subject_code',subjectCode).limit(2);
+    if(error)throw new Error(`Không đọc được cấu hình môn ${subjectCode}: ${error.message}. Kiểm tra quyền truy cập Supabase.`);
+    if(!configs?.length)throw new Error(`Kỳ thi đang chọn chưa có cấu hình điểm môn ${nameOf(subjectCode)} (${subjectCode}). Vào Cấu hình kỳ thi hoặc cấu hình thang điểm để lưu môn này, sau đó thử lại. Không có điểm nào được nhập.`);
+    if(configs.length>1)throw new Error(`Có nhiều cấu hình điểm môn ${subjectCode} trong cùng kỳ thi. Cần kiểm tra bản ghi trùng trong Supabase trước khi nhập điểm.`);
+    const config=configs[0];
     if(config.score_mode==='essay')throw new Error('Môn chỉ tự luận lấy điểm qua phách, không nhập trắc nghiệm tại đây.');
+    if(!Number.isFinite(Number(config.mcq_maximum_score))||Number(config.mcq_maximum_score)<=0)
+      throw new Error(`Điểm tối đa trắc nghiệm môn ${subjectCode} chưa hợp lệ. Hãy lưu lại thang điểm trước khi nhập.`);
     const outOfRange=rows.find(row=>row.score>Number(config.mcq_maximum_score));
     if(outOfRange)throw new Error(`Điểm ${outOfRange.score} của SBD ${outOfRange.sbd} vượt mức tối đa ${config.mcq_maximum_score}.`);
     if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
