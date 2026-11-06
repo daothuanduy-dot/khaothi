@@ -1628,11 +1628,17 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function loadScoreMode(){
     const examId=state.selectedExam,subject=$('scores-subject').value,key=scoreKey();
     setAdminExam(examId);if(!subject)throw new Error('Chọn môn thi.');
-    const{data,error}=await state.client.from('exam_subject_assessment_configs')
-      .select('score_mode,is_essay').eq('exam_id',examId).eq('subject_code',subject).single();
-    if(error)throw new Error(`Chưa đọc được hình thức tính điểm. Kiểm tra SQL 143 và cấu hình môn. ${error.message}`);
+    const{data:configs,error}=await state.client.from('exam_subject_assessment_configs')
+      .select('score_mode,is_essay').eq('exam_id',examId).eq('subject_code',subject).limit(2);
+    if(error)throw new Error(`Không đọc được cấu hình điểm môn ${nameOf(subject)}: ${error.message}. Kiểm tra quyền truy cập Supabase.`);
     if(key!==scoreKey())return;
-    $('scores-mode').value=data.score_mode||(data.is_essay?'combined':'mcq');
+    if(!configs?.length){
+      $('scores-mode').value='';
+      throw new Error(`Kỳ thi đang chọn chưa có cấu hình điểm môn ${nameOf(subject)} (${subject}). Hãy kiểm tra cấu hình môn trong Cấu hình kỳ thi. Chưa có điểm nào được nhập.`);
+    }
+    if(configs.length>1){$('scores-mode').value='';throw new Error(`Có nhiều cấu hình điểm môn ${subject} trong kỳ thi. Cần xử lý dữ liệu trùng trước khi nhập.`);}
+    const config=configs[0];
+    $('scores-mode').value=config.score_mode||(config.is_essay?'combined':'mcq');
   }
   async function saveScoreMode(){
     const examId=state.selectedExam,subject=$('scores-subject').value,mode=$('scores-mode').value,key=scoreKey();
