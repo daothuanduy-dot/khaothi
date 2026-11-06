@@ -11,7 +11,7 @@
   <script src="./js/jszip.min.js?v=3.10.1"></script>
 
   <style>
-    /* v0.1.256: teacher portal visual refresh, scoped to header and grading screen */
+    /* v0.1.259: teacher portal visual refresh, scoped to header and grading screen */
     .topbar{background:linear-gradient(110deg,#0d4079,#087c99)!important;box-shadow:0 5px 22px #0c477d22}
     .brand-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
     .version-inline{display:inline-flex;padding:3px 10px;border-radius:999px;background:#e0f7fa;color:#075985;font-size:12px;font-weight:800;letter-spacing:.02em}
@@ -102,11 +102,11 @@
   .roster-import-box{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:12px;padding:14px;margin:14px 0;display:flex;flex-direction:column;gap:8px}
 .roster-import-box label{display:flex;flex-direction:column;gap:4px}.roster-import-box label span,.roster-import-box .help-text{font-size:13px;color:#64748b;margin:0}
 .roster-import-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.roster-import-controls input{max-width:100%;flex:1;min-width:240px}
-/* v0.1.256: confine the grader's phach roster to its own scroll area. */
+/* v0.1.259: confine the grader's phach roster to its own scroll area. */
 .grader-phach-scroll {max-height:460px;overflow:auto;overscroll-behavior:contain;border:1px solid #dce5ef;border-radius:10px}
 .grader-phach-scroll table {margin:0;width:100%}
 .grader-phach-scroll thead th {position:sticky;top:0;z-index:2;background:#edf3fa;box-shadow:0 1px 0 #dce5ef}
-/* v0.1.256: independent scrolling for assigned scores */
+/* v0.1.259: independent scrolling for assigned scores */
 .sa-scroll-rows{max-height:min(62vh,620px);overflow:auto;overscroll-behavior:contain;border:1px solid #dce5f1;border-radius:10px}
 .sa-scroll-rows table{width:100%;border-collapse:separate;border-spacing:0}
 .sa-scroll-rows thead th{position:sticky;top:0;z-index:2;background:#f2f5fa;box-shadow:0 1px 0 #dce5f1}
@@ -158,7 +158,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><div class="brand-mark">KT</div><div><div class="brand-heading"><strong>HỆ THỐNG KHẢO THÍ</strong><span id="app-version" class="version-inline">v0.1.256</span></div><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
+    <div class="brand"><div class="brand-mark">KT</div><div><div class="brand-heading"><strong>HỆ THỐNG KHẢO THÍ</strong><span id="app-version" class="version-inline">v0.1.259</span></div><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
     <div class="top-actions"><span id="connection-state" class="status-pill">Không kết nối</span><span id="user-email" class="teacher-identity" aria-label="Thông tin người đăng nhập"></span><button id="logout-btn" class="btn btn-light hidden">Đăng xuất</button></div>
   </header>
   <main class="container">
@@ -246,7 +246,7 @@
 .rooming-drag-handle{display:inline-block;margin-right:6px;color:#64748b;cursor:grab;font-size:16px;user-select:none}.rooming-dragging{opacity:.45}.rooming-dragging td{background:#e0f2fe}
 @media(max-width:700px){.room-editor-columns{grid-template-columns:1fr}.room-editor-columns select{min-height:180px}}
 </style>
-    <footer><span><span id="footer-version">Khảo thí trực tuyến · v0.1.256</span></span><span>GitHub Pages + Supabase</span></footer>
+    <footer><span><span id="footer-version">Khảo thí trực tuyến · v0.1.259</span></span><span>GitHub Pages + Supabase</span></footer>
   </main>
   <section id="grader-screen" class="panel hidden" style="max-width:1100px;margin:32px auto">
     <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
@@ -273,7 +273,7 @@
   </section>
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script id="app-entry" type="module" src="./js/app.js?v=0.1.256&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.259&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {

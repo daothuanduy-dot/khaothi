@@ -1,5 +1,21 @@
 <section class="tab-panel hidden" id="tab-forms">
   <div class="section-heading"><div><h2>Biểu mẫu và Thống kê</h2><p>Tiêu đề được khai báo riêng theo từng kỳ thi, dùng cho biểu mẫu xuất và in.</p></div></div>
+  <nav id="forms-subtabs" class="tabs" aria-label="Phân mục Biểu mẫu và Thống kê" style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 22px;padding:8px;background:#e8edf6;border-radius:14px">
+    <button type="button" class="btn btn-light active" data-forms-section="forms" aria-selected="true">Biểu mẫu</button>
+    <button type="button" class="btn btn-light" data-forms-section="statistics" aria-selected="false">Thống kê</button>
+  </nav>
+  <section class="panel" id="class-results-export-panel" style="margin-bottom:16px">
+    <h3>Trả kết quả về lớp</h3>
+    <p>Chọn mẫu gộp hoặc mẫu chi tiết. Tùy chỉnh môn và thứ tự cột chỉ ảnh hưởng tệp xuất, không thay đổi điểm trên Supabase.</p>
+    <div class="form-grid">
+      <label>Kiểu mẫu<select id="class-results-layout"><option value="detail">Mẫu chi tiết — mỗi môn một cột</option><option value="merged">Mẫu gộp — dùng mẫu trả lớp hiện có</option></select></label>
+      <label>Lớp<select id="class-results-class"><option value="">Tất cả lớp</option></select></label>
+    </div>
+    <fieldset><legend>Môn hiển thị và thứ tự cột</legend><div id="class-results-subjects"></div></fieldset>
+    <div class="form-actions"><button class="btn btn-light" id="class-results-read" type="button">Đọc dữ liệu kỳ thi</button><button class="btn btn-primary" id="class-results-xlsx" type="button" disabled>Xuất Excel</button><button class="btn btn-light" id="class-results-pdf" type="button" disabled>In / lưu PDF</button></div>
+    <div id="class-results-message" class="notice hidden" role="status"></div>
+    <div id="class-results-preview" class="table-wrap" style="max-height:340px;overflow:auto"></div>
+  </section>
   <div id="forms-message" class="notice hidden" role="status" aria-live="polite"></div>
   <div class="form-grid">
     <label>Kỳ thi<select id="forms-exam"><option value="">-- Chọn kỳ thi --</option></select></label>

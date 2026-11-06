@@ -3570,6 +3570,22 @@ async function boot(){
   }catch(error){
     console.error('Không khởi tạo được trình chỉnh sửa phòng thi:',error);
   }
+  // v0.1.259: keep original forms/statistics nodes and event handlers intact.
+  try {
+    const root=document.getElementById('tab-forms'), nav=document.getElementById('forms-subtabs');
+    if(root&&nav){
+      const statistics=new Set(['choice-report-panel','top-students-panel','class-report-panel']);
+      for(const child of [...root.children]){
+        if(child===nav||child.classList.contains('section-heading'))continue;
+        child.dataset.formsPane=statistics.has(child.id)?'statistics':'forms';
+      }
+      function activate(section){for(const child of root.querySelectorAll(':scope > [data-forms-pane]'))child.classList.toggle('hidden',child.dataset.formsPane!==section);
+        nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
+      nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
+    }
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.259');
+    wireClassResultsExport({state,$,esc,message});
+  }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();
   $('setup-form').dataset.connectionHandler='ready';
   $('setup-form').addEventListener('submit',()=>{
