@@ -142,7 +142,11 @@ export function absenceSubjectValues(row){
 export function absenceAllowedSubjects(exam,candidate,registrations,configs){
   const registered=registrations.filter(row=>String(row.candidate_id)===String(candidate.id)),classSubjects=configs.filter(row=>row.class_code===candidate.class_code);
   const rows=exam?.exam_mode==='subject'?registered:exam?.exam_mode==='choice'?[...classSubjects,...registered]:classSubjects;
-  return [...new Set(rows.map(row=>String(row.subject_code||'').trim().toUpperCase()).filter(code=>code&&code!=='*'))].sort();
+  // TOAN and VAN are compulsory in default/choice exams even when their
+  // registration rows are absent or a class configuration is incomplete.
+  // Do not inject them into subject-specific or manually organized exams.
+  const compulsory=['default','choice'].includes(String(exam?.exam_mode||'').toLowerCase())?['TOAN','VAN']:[];
+  return [...new Set([...compulsory,...rows.map(row=>String(row.subject_code||'').trim().toUpperCase())].filter(code=>code&&code!=='*'))].sort();
 }
 
 export function excelColumnIndex(value){
