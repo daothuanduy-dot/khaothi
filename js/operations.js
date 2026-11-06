@@ -1,3 +1,13 @@
+// Format DOB only at presentation/export boundaries. Preserve ISO dates in Supabase.
+function displayDOB(value){
+ if(value==null||value==='')return '';
+ const s=String(value).trim();
+ const iso=/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/.exec(s);
+ if(iso)return `${iso[3].padStart(2,'0')}/${iso[2].padStart(2,'0')}/${iso[1]}`;
+ const local=/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
+ if(local)return `${local[1].padStart(2,'0')}/${local[2].padStart(2,'0')}/${local[3]}`;
+ return s;
+}
 export function displayExamScore(value){return value==null||value===''?'':Number(value).toFixed(2)}
 export function subjectResultStatus(row){
   if(row.is_absent)return row.total_score==null?'Vắng':'Vắng — có điểm bổ sung (không thống kê)';
@@ -366,7 +376,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const codes=row[kind+'_room_codes']||value.split(';').map(label=>label.slice(label.lastIndexOf(':')+1).trim()).filter(Boolean);
     return [...new Set(codes)].map(shortRoomLabels).join('; ')||'Chưa phân phòng';
   };
-  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.gender||'',classRoomColumn(row,'mandatory'),classRoomColumn(row,'elective'),''];
+  const classRoomValues=(row,index)=>[index+1,row.sbd||'',row.student_name||'',displayDOB(row.date_of_birth),row.gender||'',classRoomColumn(row,'mandatory'),classRoomColumn(row,'elective'),''];
   function classReceiptGroups(forms){
     const groups=new Map();
     const selected=$('forms-class-filter').value||'';
@@ -537,7 +547,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const roomRows=forms.listingRows.filter(row=>row.room_code===room);
       listings.push(...[header,[settings.listing.title],[`Phòng thi: ${room}`],
         ['STT','SBD','Họ và tên','Ngày sinh','Lớp','Môn 1','Môn 2','Ghi chú'],
-        ...roomRows.map((row,index)=>[index+1,row.sbd,row.student_name,row.date_of_birth||'',row.class_code||'',
+        ...roomRows.map((row,index)=>[index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),row.class_code||'',
           nameOf(row.subject_one),nameOf(row.subject_two),row.note]),[`Tổng số thí sinh: ${roomRows.length}`],[]]);
       listingBreaks.push({id:listings.length-1,max:16383,man:1});
     }
@@ -555,8 +565,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const heading=isClassReceipt?[`Lớp: ${classCode}`,'Môn thi: ................................']: [`Phòng: ${String(room||'').replace(/^phòng\s*/i,'')}`,order?`Môn ${order}`:subject?`Môn thi: ${nameOf(subject)}`:''];
       receipts.push(...[header,[settings.receipt.title],heading,columns,
         ...roomRows.map((row,index)=>isMandatory?
-          [index+1,row.sbd,row.student_name,row.date_of_birth||'','','','','']:
-          [index+1,row.sbd,row.student_name,row.date_of_birth||'',row.class_code||'',nameOf(row.subject_code)||nameOf(row.subject_one)||'', '', '', '', '']),
+          [index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),'','','','']:
+          [index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),row.class_code||'',nameOf(row.subject_code)||nameOf(row.subject_one)||'', '', '', '', '']),
         ['Tổng số thí sinh',roomRows.length,'Số thí sinh vắng','','','','','','','']]);
       const footerStart=receipts.length;
       if(false&& !order&&['TOAN','VAN'].includes(subject)){
@@ -586,7 +596,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const sheetSpecs=[
       ...(printType==='mandatory_listing'?(forms.mandatoryGroups||[]).map(({room,subject,rows},i)=>[
         `Bat buoc ${i+1}`,[header,[settings.mandatory_listing.title],[`Phòng: ${room}`],
-          formSpecs.mandatory_listing[2],...rows.map((row,index)=>[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''])],[],'mandatory_listing'
+          formSpecs.mandatory_listing[2],...rows.map((row,index)=>[index+1,row.sbd||'',row.student_name||'',displayDOB(row.date_of_birth),row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''])],[],'mandatory_listing'
       ]):[]),
       ['Danh sach niem yet',listings,[8,15,30,15,12,25,25,25]],
       ['Phieu thu bai',receipts,[7,14,26,15,11,24,10,9,14,24]],
@@ -673,11 +683,11 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const displayRoom=room=>String(room??'').replace(/^phòng\s*/i,'').trim();
     const header=`<header><b>${esc($('forms-authority').value)}</b><br><b>${esc($('forms-institution').value)}</b><br><b>${esc(String($('forms-title').value||'').replace(/[·.]+/g,' ').replace(/\s+/g,' ').trim())}</b></header>`;
     if(printType==='mandatory_listing')for(const {room,subject,rows} of forms.mandatoryGroups||[]){
-      pages.push(`<section class="page mandatory_listing">${header}<h3>${esc(settings.mandatory_listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr>${formSpecs.mandatory_listing[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr>${[index+1,row.sbd||'',row.student_name||'',row.date_of_birth||'',row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''].map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
+      pages.push(`<section class="page mandatory_listing">${header}<h3>${esc(settings.mandatory_listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr>${formSpecs.mandatory_listing[2].map(label=>`<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr>${[index+1,row.sbd||'',row.student_name||'',displayDOB(row.date_of_birth),row.class_code||'',(row.subject_codes||[subject]).map(nameOf).filter(Boolean).join('/')||'Bắt buộc',row.note||''].map(value=>`<td>${esc(value)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     if(printType==='all'||printType==='listing')for(const room of [...new Set(forms.listingRows.map(row=>row.room_code))]){
       const rows=forms.listingRows.filter(row=>row.room_code===room);
-      pages.push(`<section class="page listing">${header}<h3>${esc(settings.listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr><th>STT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
+      pages.push(`<section class="page listing">${header}<h3>${esc(settings.listing.title)}<br>PHÒNG ${esc(displayRoom(room))}</h3><table><thead><tr><th>STT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn 1</th><th>Môn 2</th><th>Ghi chú</th></tr></thead><tbody>${rows.map((row,index)=>`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_one))}</td><td>${esc(nameOf(row.subject_two))}</td><td></td></tr>`).join('')}</tbody></table><p>Tổng số thí sinh: ${rows.length}</p></section>`);
     }
     const pdfReceiptGroups=receiptMode==='classrooms'?classReceiptGroups(forms):
       receiptMode==='mandatory'?groupReceiptRows((forms.receiptRows||[]).filter(row=>row.subject_order===null||row.subject_order===undefined),1):
@@ -688,7 +698,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const isMandatory=receiptMode==='mandatory'||isClassReceipt||(!order&&['TOAN','VAN'].includes(subject));
       const heading=isClassReceipt?`LỚP ${esc(classCode)}<br>MÔN THI: ................................`:`PHÒNG ${esc(displayRoom(room))}${order?`<br>MÔN ${order}`:subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}`;
       const columns=isMandatory?'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>':'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>';
-      const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(row.date_of_birth||'')}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
+      const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
       const receiptFooter=isClassReceipt?'':`<div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div>`;
       const receiptHeading=isClassReceipt
         ? `${esc(settings.receipt.title)} LỚP ${esc(classCode)}<br>MÔN THI: ................................`

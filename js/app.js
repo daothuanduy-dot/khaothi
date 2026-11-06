@@ -8,7 +8,7 @@ import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSeq
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
 import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
-import {wireOperations,createPrintFrame} from './operations.js?v=0.1.263&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
+import {wireOperations,createPrintFrame} from './operations.js?v=0.1.264&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireScoreAssignments} from './score-assignments.js?v=0.1.256';
@@ -23,7 +23,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.263';
+const APP_VERSION='v0.1.264';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -149,7 +149,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.263';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.264';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -696,7 +696,7 @@ function renderSchoolStudents(){
   }
   body.innerHTML=rows.map(student=>`<tr>
     <td><input type="checkbox" data-school-student-check="${esc(schoolStudentSelectionKey(student.student_code))}" aria-label="Chọn ${esc(student.student_name)}" ${selectedSchoolStudentCodes.has(schoolStudentSelectionKey(student.student_code))?'checked':''}></td>
-    <td>${esc(student.student_code)}</td><td>${esc(student.student_name)}</td><td>${esc(student.date_of_birth||'—')}</td>
+    <td>${esc(student.student_code)}</td><td>${esc(student.student_name)}</td><td>${esc(normalizedDOB(student.date_of_birth)||'—')}</td>
     <td>${esc(student.gender||'—')}</td><td>${esc(student.ethnicity||'—')}</td><td>${esc(student.grade_code)}</td><td>${esc(student.class_code)}</td>
     <td><button class="small-btn" type="button" data-school-student-edit="${esc(student.id)}">Sửa</button> <button class="small-btn danger-btn" type="button" data-school-student-delete="${esc(student.id)}">Xóa</button></td>
   </tr>`).join('');
@@ -1069,7 +1069,7 @@ function renderCandidateTable(){
   body.innerHTML='';
   for(const c of rows){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td><input type="checkbox" class="candidate-row-check" data-candidate-check="${esc(c.id)}" ${selected.has(c.id)?'checked':''} aria-label="Chọn ${esc(c.student_name)}"></td><td>${esc(c.student_code)}</td><td>${esc(c.student_name)}</td><td>${esc(c.date_of_birth||'—')}</td><td>${esc(c.gender||'—')}</td><td>${esc(c.ethnicity||'—')}</td><td>${esc(c.grade_code||'—')}</td><td>${esc(c.class_code)}</td><td class="candidate-actions"><button type="button" class="small-btn" data-candidate-edit="${esc(c.id)}">Sửa</button></td>`;
+    tr.innerHTML=`<td><input type="checkbox" class="candidate-row-check" data-candidate-check="${esc(c.id)}" ${selected.has(c.id)?'checked':''} aria-label="Chọn ${esc(c.student_name)}"></td><td>${esc(c.student_code)}</td><td>${esc(c.student_name)}</td><td>${esc(normalizedDOB(c.date_of_birth)||'—')}</td><td>${esc(c.gender||'—')}</td><td>${esc(c.ethnicity||'—')}</td><td>${esc(c.grade_code||'—')}</td><td>${esc(c.class_code)}</td><td class="candidate-actions"><button type="button" class="small-btn" data-candidate-edit="${esc(c.id)}">Sửa</button></td>`;
     body.append(tr);
   }
   if(!rows.length)body.innerHTML='<tr><td colspan="9" class="empty">Không có thí sinh phù hợp.</td></tr>';
@@ -2251,8 +2251,10 @@ function roomingRows(){
 }
 function normalizedDOB(v){
  if(!v)return '';
- const s=String(v);
+ const s=String(v).trim();
  if(/^\d{4}-\d{2}-\d{2}/.test(s)){const [y,m,d]=s.slice(0,10).split('-');return `${d}/${m}/${y}`}
+ const match=/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
+ if(match)return `${match[1].padStart(2,'0')}/${match[2].padStart(2,'0')}/${match[3]}`;
  return s;
 }
 function roomSubjectsFor(a){
@@ -3583,7 +3585,7 @@ async function boot(){
         nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
       nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
     }
-    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.263');
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.264');
     wireClassResultsExport({state,$,esc,message});
   }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();
