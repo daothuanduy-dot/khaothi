@@ -560,12 +560,12 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const isClassReceipt=receiptMode==='classrooms';
       const isMandatory=receiptMode==='mandatory'||isClassReceipt||(!order&&['TOAN','VAN'].includes(subject));
       const pageStart=receipts.length;
-      const columns=isMandatory?['TT','SBD','Họ và tên','Ngày sinh','Mã đề','Số tờ','Ký nộp','Ghi chú']:
+      const columns=isMandatory?['TT','SBD','Họ và tên','Ngày sinh','Lớp','Mã đề','Số tờ','Ký nộp','Ghi chú']:
         ['TT','SBD','Họ và tên','Ngày sinh','Lớp','Môn thi','Mã đề','Số tờ','Ký nộp','Ghi chú'];
       const heading=isClassReceipt?[`Lớp: ${classCode}`,'Môn thi: ................................']: [`Phòng: ${String(room||'').replace(/^phòng\s*/i,'')}`,order?`Môn ${order}`:subject?`Môn thi: ${nameOf(subject)}`:''];
       receipts.push(...[header,[settings.receipt.title],heading,columns,
         ...roomRows.map((row,index)=>isMandatory?
-          [index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),'','','','']:
+          [index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),row.class_code||'','','','','']:
           [index+1,row.sbd,row.student_name,displayDOB(row.date_of_birth),row.class_code||'',nameOf(row.subject_code)||nameOf(row.subject_one)||'', '', '', '', '']),
         ['Tổng số thí sinh',roomRows.length,'Số thí sinh vắng','','','','','','','']]);
       const footerStart=receipts.length;
@@ -574,13 +574,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       }
       receipts[pageStart+2]=[`Phòng: ${String(room).replace(/^phòng\s*/i,'')} · ${order?`Môn ${order}`:`Môn: ${nameOf(subject)}`}`];
       receipts[pageStart+2]=heading;
-      receiptMerges.push({s:{r:pageStart+2,c:0},e:{r:pageStart+2,c:isMandatory?7:9}});
+      receiptMerges.push({s:{r:pageStart+2,c:0},e:{r:pageStart+2,c:isMandatory?8:9}});
       receipts.push(['Tổng số bài: ................','','','','','Tổng số tờ: ................'],
         ['SBD thí sinh vắng: ................................................................................'],[],
         ['Cán bộ coi thi 1','','','','','Cán bộ coi thi 2'],
         ['(Ký, ghi rõ họ tên)','','','','','(Ký, ghi rõ họ tên)'],[],[],[]);
       for(const offset of [0,3,4])for(const col of [0,isMandatory?4:5])receiptMerges.push({s:{r:footerStart+offset,c:col},e:{r:footerStart+offset,c:isMandatory?col+3:col+4}});
-      receiptMerges.push({s:{r:footerStart+1,c:0},e:{r:footerStart+1,c:isMandatory?7:9}});
+      receiptMerges.push({s:{r:footerStart+1,c:0},e:{r:footerStart+1,c:isMandatory?8:9}});
       receiptBreaks.push({id:receipts.length-1,max:16383,man:1});
     }
     if(!listings.length)listings.push(header,[settings.listing.title],['Chưa có phân phòng chính thức.']);
@@ -611,7 +611,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const key=type|| (sheetName==='Danh sach niem yet'?'listing':sheetName==='Phieu thu bai'?'receipt':'roster');
       const config=settings[key];
       const ws=window.XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols']=config.widths.map(wch=>({wch}));
+      ws['!cols']=(key==='receipt'&&receiptMode!=='elective'?config.widths.filter((_,i)=>i!==5):config.widths).map(wch=>({wch}));
       if(key==='receipt')ws['!merges']=receiptMerges;
       const marginInches=side=>settings.margins[side]/25.4;
       ws['!margins']={left:marginInches('left'),right:marginInches('right'),top:marginInches('top'),bottom:marginInches('bottom'),header:0,footer:0};
@@ -638,7 +638,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         if(key==='receipt'&&!tableRows.has(rowIndex))delete cell.s.border;
       }
       // Two centered heading blocks, with the form title below the exam title.
-      const split=Math.floor(config.widths.length/2),last=config.widths.length-1;
+      const effectiveWidths=(key==='receipt'&&receiptMode!=='elective'?config.widths.filter((_,i)=>i!==5):config.widths);
+      const split=Math.floor(effectiveWidths.length/2),last=effectiveWidths.length-1;
       rows.forEach((row,i)=>{
         if(row!==header)return;
         for(let r=i;r<=i+1;r++)for(let c=0;c<=last;c++)delete ws[window.XLSX.utils.encode_cell({r,c})];
@@ -697,8 +698,8 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const isClassReceipt=receiptMode==='classrooms';
       const isMandatory=receiptMode==='mandatory'||isClassReceipt||(!order&&['TOAN','VAN'].includes(subject));
       const heading=isClassReceipt?`LỚP ${esc(classCode)}<br>MÔN THI: ................................`:`PHÒNG ${esc(displayRoom(room))}${order?`<br>MÔN ${order}`:subject?`<br>MÔN: ${esc(nameOf(subject))}`:''}`;
-      const columns=isMandatory?'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>':'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>';
-      const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
+      const columns=isMandatory?'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>':'<th>TT</th><th>SBD</th><th>Họ và tên</th><th>Ngày sinh</th><th>Lớp</th><th>Môn thi</th><th>Mã đề</th><th>Số tờ</th><th>Ký nộp</th><th>Ghi chú</th>';
+      const body=rows.map((row,index)=>isMandatory?`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td>${esc(row.class_code||'')}</td><td></td><td></td><td></td><td></td></tr>`:`<tr><td>${index+1}</td><td>${esc(row.sbd)}</td><td>${esc(row.student_name)}</td><td>${esc(displayDOB(row.date_of_birth))}</td><td>${esc(row.class_code||'')}</td><td>${esc(nameOf(row.subject_code)||nameOf(row.subject_one)||'')}</td><td></td><td></td><td></td><td></td></tr>`).join('');
       const receiptFooter=isClassReceipt?'':`<div class="receipt-footer"><p>Tổng số thí sinh: ${rows.length} · Số thí sinh vắng: ............</p><p>SBD thí sinh vắng: ................................................................................</p><p>Tổng số bài: ................ · Tổng số tờ: ................</p><div class="receipt-signatures"><div><b>Cán bộ coi thi 1</b><br><i>(Ký, ghi rõ họ tên)</i></div><div><b>Cán bộ coi thi 2</b><br><i>(Ký, ghi rõ họ tên)</i></div></div></div>`;
       const receiptHeading=isClassReceipt
         ? `${esc(settings.receipt.title)} LỚP ${esc(classCode)}<br>MÔN THI: ................................`
@@ -733,7 +734,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       @media screen{body{max-width:1100px;margin:20px auto}.page{width:100%;margin-bottom:20px}}
       .receipt-footer{break-inside:avoid;page-break-inside:avoid}.receipt-footer p{margin:3mm 0}.receipt-signatures{display:flex;justify-content:space-around;text-align:center;margin-top:5mm;min-height:25mm}${customCss}
       .page header.form-heading{display:grid;grid-template-columns:1fr 1fr;gap:5mm;align-items:start;text-align:center;margin-bottom:2mm;white-space:normal}.page header.form-heading b,.page header.form-heading h3{font-weight:700}.page header.form-heading h3{margin:0}.page.class-receipt h3{white-space:nowrap;margin:0 0 1mm}.page table thead th{font-weight:700 !important}
-      .page.mandatory-receipt table th:nth-child(n){width:auto}.page.mandatory-receipt table th:nth-child(1){width:5%}.page.mandatory-receipt table th:nth-child(2){width:13%}.page.mandatory-receipt table th:nth-child(3){width:25%}.page.mandatory-receipt table th:nth-child(4){width:14%}
+      .page.mandatory-receipt table th:nth-child(n){width:auto}.page.mandatory-receipt table th:nth-child(1){width:5%}.page.mandatory-receipt table th:nth-child(2){width:13%}.page.mandatory-receipt table th:nth-child(3){width:25%}.page.mandatory-receipt table th:nth-child(4){width:14%}.page.mandatory-receipt table th:nth-child(5){width:9%}.page.mandatory-receipt table th:nth-child(6){width:7%}.page.mandatory-receipt table th:nth-child(7){width:7%}.page.mandatory-receipt table th:nth-child(8){width:12%}.page.mandatory-receipt table th:nth-child(9){width:8%}
       </style></head><body>${printablePages.join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     win.document.close();
   }
