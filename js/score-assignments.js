@@ -84,13 +84,18 @@ export function wireScoreAssignments({state,esc,message}){
   notice(`Đã tải ${assignments.length} phân công.`,'success');
  })}
  async function refreshTeacher(){
+  const area=$('grader-assigned-area');
+  if(area){area.hidden=true;area.classList.add('hidden')}
   if(!state.client||!state.session||!['grader','teacher'].includes(state.role))return;
+  const expectedUser=state.session.user.id;
   teacherNotice('Đang tải phân công từ Supabase...');
   $('sa-current').innerHTML='<option value="">-- Đang tải --</option>';
   $('sa-rows').innerHTML='';$('sa-submit').disabled=true;workspace=null;rows=[];scoreDrafts.clear();$('sa-class-filter-wrap').hidden=true;$('sa-default-controls').hidden=true;
   try{
    const all=await rpc('exam_score_assignment_list',{});
-   assignments=(Array.isArray(all)?all:[]).filter(a=>a.is_active&&a.teacher_id===state.session.user.id);
+   if(state.session?.user?.id!==expectedUser)return;
+   assignments=(Array.isArray(all)?all:[]).filter(a=>a.is_active&&a.teacher_id===expectedUser);
+   if(area){area.hidden=!assignments.length;area.classList.toggle('hidden',!assignments.length)}
    $('sa-current').innerHTML='<option value="">-- Chọn nhiệm vụ --</option>'+assignments.map(a=>option(a.id,`${a.subject_code} · Khối ${a.grade_code} · ${a.scope_type==='room'?'Theo phách':a.scope_type==='grade'?'Toàn khối':'Theo lớp'} · ${(a.scope_values||[]).join(', ')}`)).join('');
    teacherNotice(assignments.length?`Đã nhận ${assignments.length} phân công. Chọn nhiệm vụ và nhấn Tải bài thi.`:'Tài khoản này chưa có phân công nhập điểm đang hoạt động. Hãy liên hệ quản trị viên để kiểm tra đúng tài khoản và môn thi.',assignments.length?'success':'info');
   }catch(e){teacherNotice('Không tải được phân công: '+(e.message||e),'error');}

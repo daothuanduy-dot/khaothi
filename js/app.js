@@ -11,7 +11,7 @@ import {loadTabModules} from './module-loader.js?v=0.1.248&choice=152&sbd=161&fo
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.265&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
-import {wireScoreAssignments} from './score-assignments.js?v=0.1.256';
+import {wireScoreAssignments} from './score-assignments.js?v=0.1.266';
 import {wireRanking} from './ranking.js?v=0.1.212';
 import {wireViolations} from './violations.js?v=0.1.212';
 import {createStudentPicker} from './student-picker.js?v=0.1.212';
@@ -256,7 +256,7 @@ async function enterApp(user){
   updateVersionDisplay();$('user-email').textContent='';void updateTeacherIdentity(user);
   if(role==='grader'||role==='teacher'){
     $('grader-back-admin').classList.add('hidden');
-    $('logout-btn').classList.add('hidden');
+    $('logout-btn').classList.remove('hidden');
     showScreen('grader-screen');
     try{await operations?.enterAsGrader()}
     catch(error){message($('grader-message'),error?.message||String(error),'error')}
@@ -270,7 +270,7 @@ async function enterApp(user){
   }
   $('logout-btn').classList.remove('hidden');showScreen('app-screen');switchTab('exams');await loadExams();renderSubjects();
 }
-async function signOut(){await state.client?.auth.signOut();state.session=null;state.role=null;state.selectedExam=null;state.preview=null;state.formData=null;updateSelectedExamTitle();$('user-email').textContent='';$('logout-btn').classList.add('hidden');showScreen('login-screen')}
+async function signOut(){const area=$('grader-assigned-area');if(area){area.hidden=true;area.classList.add('hidden')}await state.client?.auth.signOut();state.session=null;state.role=null;state.selectedExam=null;state.preview=null;state.formData=null;updateSelectedExamTitle();$('user-email').textContent='';$('logout-btn').classList.add('hidden');showScreen('login-screen')}
 async function loadExams(){
   const body=$('exam-table-body');
   body.innerHTML='<tr><td colspan="6" class="empty">Đang tải...</td></tr>';

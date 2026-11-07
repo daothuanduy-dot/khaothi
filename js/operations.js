@@ -1847,9 +1847,15 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     let currentExamNames=new Map();
     if(examIds.length){
       try{
-        const {data:examRows,error:examError}=await state.client.from('exam_sessions').select('id,name').in('id',examIds);
-        if(!examError)currentExamNames=new Map((examRows||[]).map(row=>[row.id,row.name]));
-      }catch(error){console.warn('Không đọc được tên kỳ thi hiện hành:',error)}
+        const {data:examRows,error:examError}=await state.client.rpc('exam_my_grading_exam_names_v266');
+        if(!examError&&Array.isArray(examRows))currentExamNames=new Map(examRows.map(row=>[row.exam_id,row.exam_name]));
+      }catch(error){console.warn('Không đọc được tên kỳ thi qua RPC:',error)}
+      if(!currentExamNames.size){
+        try{
+          const {data:examRows,error:examError}=await state.client.from('exam_sessions').select('id,name').in('id',examIds);
+          if(!examError)currentExamNames=new Map((examRows||[]).map(row=>[row.id,row.name]));
+        }catch(error){console.warn('Không đọc được tên kỳ thi hiện hành:',error)}
+      }
     }
     $('grader-exam').innerHTML='<option value="">-- Chọn kỳ thi --</option>'+[...new Map(cache.graderWork.map(work=>[work.exam_id,work])).values()]
       .map(work=>`<option value="${esc(work.exam_id)}">${esc(currentExamNames.get(work.exam_id)||work.exam_title||work.exam_id)}</option>`).join('');
@@ -2302,7 +2308,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       return saveGraderScores(indexes);
     },$('grader-save-all'));
     $('grader-edit-bag').onclick=()=>{graderBagEditing=true;renderGraderQueue();};
-    $('grader-logout').onclick=async()=>{await state.client.auth.signOut();location.reload()};
+    // Đăng xuất dùng nút trên thanh thông tin người dùng (app.js).
   }
   function wireScores(){
     for(const id of ['scores-include-absent','scores-include-violations'])$(id).onchange=()=>{
