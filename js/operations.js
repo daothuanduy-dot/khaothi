@@ -2163,7 +2163,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       p_candidate_id:mode==='manual'?$('script-repair-candidate').value||null:null,
       p_phach_code:mode==='manual'?$('script-repair-code').value.trim()||null:null,
       p_reason:$('script-repair-reason').value.trim(),p_apply:apply,
-      p_expected:apply?repairPreview:null};
+      p_expected:apply?(mode==='rebuild'?{...repairPreview,confirm_delete_all_room_scores:'DELETE_ALL_ROOM_SCORES'}:repairPreview):null};
     if(args.p_reason.length<8)throw new Error('Nhập lý do ít nhất 8 ký tự.');
     const {data,error}=await state.client.rpc('exam_repair_script_room',args);
     if(error)throw new Error(error.message);
@@ -2171,8 +2171,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function showRepairPreview(data){
     const changed=new Set((data.changes||[]).map(r=>String(r.id)));
-    $('script-repair-apply').disabled=!(data.changes?.length)||Number(data.affected_score_count||0)>0;
-    $('script-repair-summary').textContent=`${data.rows?.length||0} học sinh · ${data.changes?.length||0} bản ghi thay đổi · Đầu phách ${data.prefix||'—'} · Phòng ${data.room_code}. ${Number(data.affected_score_count||0)>0?'KHÔNG THỂ ÁP DỤNG: '+data.affected_score_count+' điểm thuộc bài đổi phách/vắng cần đối chiếu.':'Điểm hiện có được giữ nguyên; không xóa điểm.'}`;
+    $('script-repair-apply').disabled=!(data.changes?.length)||(data.method==='manual'&&Number(data.affected_score_count||0)>0);
+    const scoreNotice=data.method==='rebuild'?`ĐÁNH LẠI TOÀN PHÒNG: sẽ sao lưu và XÓA TOÀN BỘ ${Number(data.scores_to_delete||0)} bản ghi điểm của phòng; phải nhập lại điểm.`:(Number(data.affected_score_count||0)>0?`KHÔNG THỂ ÁP DỤNG: ${data.affected_score_count} điểm thuộc bài đổi phách/vắng.`:'Đánh bổ sung: giữ nguyên điểm hiện có.');
+    $('script-repair-summary').textContent=`${data.rows?.length||0} học sinh · ${data.changes?.length||0} bản ghi thay đổi · Đầu phách ${data.prefix||'—'} · Phòng ${data.room_code}. ${scoreNotice}`;
     $('script-repair-body').innerHTML=(data.rows||[]).map(r=>`<tr style="${changed.has(String(r.id))?'background:#fff7ed;':''}"><td>${esc(r.script_order??'—')}</td><td>${esc(r.sbd||'—')}</td><td>${r.is_absent?'Vắng':'Có mặt'}${r.old_absent!==r.is_absent?' (đã đính chính)':''}</td><td>${esc(r.old_code||'—')}</td><td><strong style="${changed.has(String(r.id))?'color:#9a3412;':''}">${esc(r.new_code||'—')}</strong>${changed.has(String(r.id))?' <span title="Phách thay đổi">●</span>':''}</td></tr>`).join('');
   }
   async function toggleRepairLock(open){
@@ -2222,10 +2223,16 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     safeAction('script-repair-message',async()=>{repairPreview=await callRepair(false);showRepairPreview(repairPreview);},$('script-repair-preview'));
     safeAction('script-repair-message',async()=>{
       if(!repairPreview)throw new Error('Cần xem trước lại.');
-      if(Number(repairPreview.affected_score_count||0)>0)throw new Error('Có điểm trên bài thay đổi phách/vắng. Không được tự động áp dụng.');
-      if(!confirm(`Xác nhận cập nhật ${repairPreview.changes.length} bản ghi tại phòng ${repairPreview.room_code}? Tất cả điểm hiện có được giữ nguyên.`))return;
+      const isRebuild=repairPreview.method==='rebuild';
+      if(!isRebuild&&Number(repairPreview.affected_score_count||0)>0)throw new Error('Đánh bổ sung ảnh hưởng điểm đã nhập; cần chọn đánh lại toàn phòng.');
+      if(isRebuild){
+        const count=Number(repairPreview.scores_to_delete||0);
+        const room=repairPreview.room_code;
+        if(!confirm(`CẢNH BÁO: Đánh lại phách toàn phòng ${room} sẽ XÓA TOÀN BỘ ${count} bản ghi điểm đã nhập của phòng này (có sao lưu). Bạn phải nhập điểm lại. Tiếp tục?`))return;
+        if(prompt(`Để xác nhận xóa ${count} bản ghi điểm của phòng ${room}, nhập chính xác: XOA DIEM`) !== 'XOA DIEM')return;
+      }else if(!confirm(`Xác nhận bổ sung phách cho phòng ${repairPreview.room_code}? Điểm hiện có được giữ nguyên.`))return;
       const result=await callRepair(true);
-      message($('script-repair-message'),`Đã đính chính ${result.updated_count} bản ghi; không xóa điểm. Nhật ký #${result.archive_id}.`, 'success');
+      message($('script-repair-message'),`Đã đính chính ${result.updated_count} bản ghi; đã xóa ${result.invalidated_score_count||0} bản ghi điểm (có sao lưu). Nhật ký #${result.archive_id}.`, 'success');
       await openScriptRepair(repairRun.id);await loadScriptRuns();
     },$('script-repair-apply'));
     $('script-runs-body').addEventListener('click',event=>{
