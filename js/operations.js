@@ -898,8 +898,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       if(!candidate.outsideAbsences.length)edited.get(String(candidate.id))?.querySelector('[data-absence-outside-wrap]')?.remove();
     }
     absenceDirty=false;
-    applyAbsenceFilters();
-    message($('absence-message'),`Đã lưu ${data?.absence_count??rows.length} mục báo vắng.`, 'success');
+    await loadAbsences(); // Re-read authoritative absence data after save; do not keep stale local flags.
+    if(repairRun){repairPreview=null;$('script-repair-apply').disabled=true;}
+    message($('absence-message'),`Đã lưu ${data?.absence_count??rows.length} mục báo vắng và tải lại dữ liệu. Nếu đã đánh phách, cần đồng bộ hồ sơ phách trên Supabase trước khi đính chính.`, 'success');
   }
 
   function allSubjectOptions(){return [{code:'TOAN',name:nameOf('TOAN')},{code:'VAN',name:nameOf('VAN')},...subjects];}
@@ -2157,6 +2158,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   async function callRepair(apply=false){
     if(!repairRun)throw new Error('Chưa chọn lượt đánh phách.');
     const mode=$('script-repair-method').value;
+
     const args={p_run_id:repairRun.id,p_room_code:$('script-repair-room').value,p_method:mode,
       p_candidate_id:mode==='manual'?$('script-repair-candidate').value||null:null,
       p_phach_code:mode==='manual'?$('script-repair-code').value.trim()||null:null,
@@ -2169,8 +2171,9 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   }
   function showRepairPreview(data){
     const changed=new Set((data.changes||[]).map(r=>String(r.id)));
-    $('script-repair-summary').textContent=`${data.rows?.length||0} học sinh · ${data.changes?.length||0} phách thay đổi · Đầu phách ${data.prefix||'—'} · Phòng ${data.room_code}.${data.score_count?' CẢNH BÁO: '+data.score_count+' điểm cũ sẽ được lưu lịch sử và hủy hiệu lực khi xác nhận; phải nhập lại điểm cả phòng.':''}`;
-    $('script-repair-body').innerHTML=(data.rows||[]).map(r=>`<tr style="${changed.has(String(r.id))?'background:#fff7ed;':''}"><td>${esc(r.script_order??'—')}</td><td>${esc(r.sbd||'—')}</td><td>${r.is_absent?'Vắng':'Có mặt'}</td><td>${esc(r.old_code||'—')}</td><td><strong style="${changed.has(String(r.id))?'color:#9a3412;':''}">${esc(r.new_code||'—')}</strong>${changed.has(String(r.id))?' <span title="Phách thay đổi">●</span>':''}</td></tr>`).join('');
+    $('script-repair-apply').disabled=!(data.changes?.length)||Number(data.affected_score_count||0)>0;
+    $('script-repair-summary').textContent=`${data.rows?.length||0} học sinh · ${data.changes?.length||0} bản ghi thay đổi · Đầu phách ${data.prefix||'—'} · Phòng ${data.room_code}. ${Number(data.affected_score_count||0)>0?'KHÔNG THỂ ÁP DỤNG: '+data.affected_score_count+' điểm thuộc bài đổi phách/vắng cần đối chiếu.':'Điểm hiện có được giữ nguyên; không xóa điểm.'}`;
+    $('script-repair-body').innerHTML=(data.rows||[]).map(r=>`<tr style="${changed.has(String(r.id))?'background:#fff7ed;':''}"><td>${esc(r.script_order??'—')}</td><td>${esc(r.sbd||'—')}</td><td>${r.is_absent?'Vắng':'Có mặt'}${r.old_absent!==r.is_absent?' (đã đính chính)':''}</td><td>${esc(r.old_code||'—')}</td><td><strong style="${changed.has(String(r.id))?'color:#9a3412;':''}">${esc(r.new_code||'—')}</strong>${changed.has(String(r.id))?' <span title="Phách thay đổi">●</span>':''}</td></tr>`).join('');
   }
   async function toggleRepairLock(open){
     if(!repairRun)throw new Error('Chưa chọn lượt đánh phách.');
@@ -2216,19 +2219,13 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     $('script-repair-reason').oninput=()=>{$('script-repair-apply').disabled=true;repairPreview=null;};
     safeAction('script-repair-message',()=>toggleRepairLock(true),$('script-repair-unlock'));
     safeAction('script-repair-message',()=>toggleRepairLock(false),$('script-repair-relock'));
-    safeAction('script-repair-message',async()=>{repairPreview=await callRepair(false);showRepairPreview(repairPreview);$('script-repair-apply').disabled=!repairPreview.changes?.length;},$('script-repair-preview'));
+    safeAction('script-repair-message',async()=>{repairPreview=await callRepair(false);showRepairPreview(repairPreview);},$('script-repair-preview'));
     safeAction('script-repair-message',async()=>{
       if(!repairPreview)throw new Error('Cần xem trước lại.');
-      const oldScores=Number(repairPreview.score_count||0);
-      const notice=oldScores>0
-        ?`CẢNH BÁO: Sửa ${repairPreview.changes.length} phách phòng ${repairPreview.room_code} và HỦY HIỆU LỰC ${oldScores} điểm tự luận cũ. Điểm sẽ được sao lưu trong nhật ký và PHẢI NHẬP LẠI cho cả phòng. Không ảnh hưởng phòng khác. Tiếp tục?`
-        :`Xác nhận sửa ${repairPreview.changes.length} bản ghi phách trong phòng ${repairPreview.room_code}?`;
-      if(!confirm(notice))return;
-      if(oldScores>0){
-        const entered=prompt(`Để xác nhận hủy hiệu lực ${oldScores} điểm cũ, nhập chính xác: ${repairPreview.room_code}`);
-        if(entered!==repairPreview.room_code)throw new Error('Chưa xác nhận đúng tên phòng. Không thay đổi dữ liệu.');
-      }
-      const result=await callRepair(true);message($('script-repair-message'),`Đã cập nhật ${result.updated_count} phách, hủy hiệu lực ${result.invalidated_score_count||0} điểm cũ (đã lưu lịch sử #${result.archive_id}). Hãy khóa lại và nhập điểm mới cho phòng.`, 'success');
+      if(Number(repairPreview.affected_score_count||0)>0)throw new Error('Có điểm trên bài thay đổi phách/vắng. Không được tự động áp dụng.');
+      if(!confirm(`Xác nhận cập nhật ${repairPreview.changes.length} bản ghi tại phòng ${repairPreview.room_code}? Tất cả điểm hiện có được giữ nguyên.`))return;
+      const result=await callRepair(true);
+      message($('script-repair-message'),`Đã đính chính ${result.updated_count} bản ghi; không xóa điểm. Nhật ký #${result.archive_id}.`, 'success');
       await openScriptRepair(repairRun.id);await loadScriptRuns();
     },$('script-repair-apply'));
     $('script-runs-body').addEventListener('click',event=>{
