@@ -90,19 +90,48 @@ async function renderAppeals(examId,scores,container){
    if(r.status==='submitted' && settings?.is_open){const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Rút đề nghị';cancel.onclick=async()=>{if(!confirm('Rút đề nghị phúc khảo này?'))return;cancel.disabled=true;const {error}=await client.rpc('exam_student_appeal_withdraw',{p_appeal_id:r.id});if(error){state.textContent='Không rút được đề nghị.';cancel.disabled=false;return;}r.status='withdrawn';state.textContent='Đã rút đề nghị.';showList();};line.append(cancel);}box.append(line);
   }
  };
- state.textContent=settings?.is_open?'Đang nhận đề nghị phúc khảo. Hạn: '+new Date(settings.deadline_at).toLocaleString('vi-VN'):'Hiện chưa mở nhận phúc khảo.';
+ state.textContent=settings?.is_open?'Đang nhận đăng ký phúc khảo đến '+new Date(settings.deadline_at).toLocaleString('vi-VN')+'.':settings?.status==='expired'?'Đã hết thời gian đăng ký phúc khảo.':settings?.status==='upcoming'?'Chưa đến thời gian đăng ký phúc khảo.': 'Hiện chưa mở đăng ký phúc khảo.';
  if(settings?.is_open){
   const form=document.createElement('form');
-  const subject=document.createElement('select');subject.required=true;
-  for(const s of scores){if(s.is_absent||s.no_paper)continue;const opt=document.createElement('option');opt.value=s.subject_code;opt.textContent=subjectName(s.subject_code);subject.append(opt);}
-  const component=document.createElement('select');component.required=true;
-  const reason=document.createElement('textarea');reason.maxLength=500;reason.placeholder='Lý do đề nghị (không bắt buộc)';
-  const submit=document.createElement('button');submit.type='submit';submit.className='secondary';submit.textContent='Gửi đề nghị';
-  const label=(s,el)=>{const l=document.createElement('label');l.textContent=s;l.append(el);return l;};
-  const sync=()=>{component.replaceChildren();const sc=scores.find(x=>x.subject_code===subject.value);if(!sc)return;for(const [kind,name] of [['mcq','Trắc nghiệm'],['essay','Tự luận']]){if(sc.score_mode===kind||sc.score_mode==='combined'){const o=document.createElement('option');o.value=kind;o.textContent=name;component.append(o);}}};subject.onchange=sync;sync();
-  form.append(label('Môn thi',subject),label('Phần đề nghị phúc khảo',component),label('Nội dung',reason),submit);
-  form.onsubmit=async ev=>{ev.preventDefault();submit.disabled=true;const {data,error}=await client.rpc('exam_student_appeal_submit',{p_exam_id:examId,p_subject_code:subject.value,p_component_type:component.value,p_note:reason.value});submit.disabled=false;if(error){state.textContent='Không gửi được đề nghị: '+error.message;return;}state.textContent='Đã gửi đề nghị phúc khảo.';current.unshift({id:data,subject_code:subject.value,component_type:component.value,status:'submitted'});showList();};
-  if(subject.options.length)box.append(form);
+  const hint=document.createElement('p');hint.className='appeal-status';hint.textContent='Chọn các môn và phần điểm cần phúc khảo. Có thể chọn nhiều môn và gửi trong một lần.';
+  const grid=document.createElement('div');grid.className='appeal-choices';
+  const active=new Set(current.filter(r=>r.status!=='withdrawn'&&r.status!=='rejected').map(r=>String(r.subject_code).toUpperCase()+':'+r.component_type));
+  const choices=[];
+  for(const sc of scores){
+   if(sc.is_absent||sc.no_paper)continue;
+   const kinds=[['mcq','Trắc nghiệm'],['essay','Tự luận']].filter(([kind])=>sc.score_mode===kind||sc.score_mode==='combined');
+   if(!kinds.length)continue;
+   const row=document.createElement('div');row.className='appeal-choice-row';
+   const name=document.createElement('strong');name.textContent=subjectName(sc.subject_code);row.append(name);
+   const controls=document.createElement('div');controls.className='appeal-choice-controls';
+   for(const [kind,label] of kinds){
+    const wrap=document.createElement('label');wrap.className='appeal-check';
+    const check=document.createElement('input');check.type='checkbox';check.value=kind;
+    check.disabled=active.has(String(sc.subject_code).toUpperCase()+':'+kind);
+    wrap.append(check,document.createTextNode(label+(check.disabled?' (đã đăng ký)':'')));
+    controls.append(wrap);choices.push({check,subject_code:sc.subject_code,component_type:kind});
+   }
+   row.append(controls);grid.append(row);
+  }
+  const reason=document.createElement('textarea');reason.maxLength=500;reason.placeholder='Lý do chung (không bắt buộc, tối đa 500 ký tự)';
+  const reasonLabel=document.createElement('label');reasonLabel.textContent='Lý do đề nghị';reasonLabel.append(reason);
+  const submit=document.createElement('button');submit.type='submit';submit.className='secondary';submit.textContent='Gửi các đề nghị đã chọn';
+  const count=document.createElement('div');count.className='appeal-status';
+  const update=()=>{const n=choices.filter(c=>c.check.checked).length;count.textContent='Đã chọn '+n+' phần điểm';submit.disabled=n===0;};
+  choices.forEach(c=>c.check.addEventListener('change',update));update();
+  form.append(hint,grid,reasonLabel,count,submit);
+  form.onsubmit=async ev=>{
+   ev.preventDefault();const selected=choices.filter(c=>c.check.checked);
+   if(!selected.length)return;
+   submit.disabled=true;
+   const items=selected.map(c=>({subject_code:c.subject_code,component_type:c.component_type,note:reason.value}));
+   const {data,error}=await client.rpc('exam_student_appeal_submit_batch',{p_exam_id:examId,p_items:items});
+   if(error){state.textContent='Không gửi được đề nghị: '+error.message;update();return;}
+   const ids=Array.isArray(data?.ids)?data.ids:[];
+   selected.forEach((c,i)=>{c.check.checked=false;c.check.disabled=true;c.check.parentElement.lastChild.textContent=c.component_type==='essay'?'Tự luận (đã đăng ký)':'Trắc nghiệm (đã đăng ký)';current.unshift({id:ids[i],subject_code:c.subject_code,component_type:c.component_type,status:'submitted'});});
+   reason.value='';state.textContent='Đã gửi thành công '+selected.length+' đề nghị phúc khảo.';update();showList();
+  };
+  if(choices.length)box.append(form);
  }
  showList();container.append(box);
 }
