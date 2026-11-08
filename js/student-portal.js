@@ -39,7 +39,33 @@ async function status(){
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
  const active=data?.status==='active';updateLinkedUI(active);showSession(user,active);
  const summary=$('student-summary');summary.textContent='';summary.classList.add('hidden');
- if(active){const result=await client.rpc('exam_student_my_account_summary');if(!result.error&&result.data?.student_code){summary.textContent='Mã định danh Bộ GDĐT: '+result.data.student_code;summary.classList.remove('hidden');}}
+ if(active){
+  const result=await client.rpc('exam_student_my_profile');
+  if(!result.error && result.data?.student_code){
+    const d=result.data;
+    const lines=[
+      ['Mã định danh Bộ GDĐT',d.student_code],
+      ['Họ và tên',d.full_name],
+      ['Lớp',d.class_code],
+      ['Khối',d.grade],
+    ].filter(([,value])=>value!==null&&value!==undefined&&String(value).trim()!=='');
+    summary.replaceChildren();
+    for(const [label,value] of lines){
+      const p=document.createElement('p');
+      const strong=document.createElement('strong');
+      strong.textContent=label+': ';
+      p.append(strong,document.createTextNode(String(value)));
+      summary.appendChild(p);
+    }
+    summary.classList.remove('hidden');
+  }else{
+    const old=await client.rpc('exam_student_my_account_summary');
+    if(!old.error&&old.data?.student_code){
+      summary.textContent='Mã định danh Bộ GDĐT: '+old.data.student_code+' · Thông tin hồ sơ bổ sung chưa sẵn sàng.';
+      summary.classList.remove('hidden');
+    }
+  }
+}
  $('identity').classList.add('hidden');return user;
 }
 async function busy(form,fn){const btn=form.querySelector('button[type="submit"]');btn.disabled=true;try{await fn()}catch(e){err(e)}finally{btn.disabled=false;}}
