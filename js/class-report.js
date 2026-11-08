@@ -215,12 +215,21 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       if(error)throw new Error(error.message);
       if(token!==request||captured!==context())return;
       let report=data;
-      if(!data.classes.some(c=>c.subjects?.some(s=>s.subject_code==='VAN')))report=enrichClassVan(data,await loadVanRows(state.client,exam));
+      let vanRows=[];
+      if(!data.classes.some(c=>c.subjects?.some(s=>s.subject_code==='VAN'))){
+        vanRows=await loadVanRows(state.client,exam);
+        report=enrichClassVan(data,vanRows);
+      }
       if(['subject','choice'].includes(data.exam_mode)){
         const detail=await state.client.rpc('exam_get_choice_statistics_report',{p_exam_id:exam,p_include_absent:!!$('class-report-absent').checked,p_include_violations:!!$('class-report-violations').checked});
         if(detail.error)throw new Error('Không tải được số dự thi/điểm cao nhất: '+detail.error.message);
         if(token!==request||captured!==context())return;
-        report=attachChoiceParticipation(report,detail.data.rows||[]);
+        // Choice-statistics RPC omits mandatory VAN; merge official VAN candidates
+        // before deriving participation, otherwise SL is overwritten with zero.
+        const detailRows=detail.data.rows||[];
+        const detailIds=new Set(detailRows.filter(r=>r.subject_code==='VAN').map(r=>String(r.candidate_id)));
+        const allDetails=detailRows.concat(vanRows.filter(r=>!detailIds.has(String(r.candidate_id))));
+        report=attachChoiceParticipation(report,allDetails);
       }
       payload=report;key=captured;loadHeader();
       selectedClasses=data.classes.map(c=>c.class_code);
@@ -228,7 +237,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       renderGroups();
       if($('class-report-classes'))$('class-report-classes').innerHTML=data.classes.map(c=>`<label style="display:inline-block;margin:6px"><input type="checkbox" data-class="${esc(c.class_code)}" checked> ${esc(c.class_code)}</label>`).join('');
       if($('class-report-extra-max'))$('class-report-extra-max').disabled=data.exam_mode==='default';
-      subjectOrder=classReportSubjectOrder(report.classes.flatMap(c=>c.subjects.map(s=>s.subject_code)));hiddenSubjects=['subject','choice'].includes(data.exam_mode)?defaultHiddenClassSubjects(subjectOrder):new Set();renderSubjects();
+      subjectOrder=classReportSubjectOrder(data.classes.flatMap(c=>c.subjects.map(s=>s.subject_code)));hiddenSubjects=['subject','choice'].includes(data.exam_mode)?defaultHiddenClassSubjects(subjectOrder):new Set();renderSubjects();
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
