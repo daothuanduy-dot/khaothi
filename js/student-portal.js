@@ -8,7 +8,7 @@ let examLoadSequence=0;
 function pendingGet(email){try{const p=JSON.parse(sessionStorage.getItem(pendingKey)||"null");return p?.email?.toLowerCase()===email?.toLowerCase()?p.code:null;}catch{return null;}}
 function pendingSave(email,code){sessionStorage.setItem(pendingKey,JSON.stringify({email,code}));}
 function pendingClear(){sessionStorage.removeItem(pendingKey);}
-function updateLinkedUI(active){isActive=active;const claimTab=document.querySelector('[data-tab="claim"]');claimTab.classList.toggle("hidden",active);$("claim").classList.toggle("hidden",active);$("active-account").classList.toggle("hidden",!active);if(active&&$("claim").classList.contains("active"))selectTab("login");}
+function updateLinkedUI(active){isActive=active;const claimTab=document.querySelector('[data-tab="claim"]');claimTab.classList.toggle("hidden",active);$("claim").classList.toggle("hidden",active);if(active&&$("claim").classList.contains("active"))selectTab("login");}
 function reasonMessage(reason){switch(reason){case "already_linked":return "Tài khoản này đã liên kết với hồ sơ khác. Vui lòng liên hệ quản trị viên.";case "unverified":return "Email chưa được xác minh. Hãy kiểm tra thư xác minh.";case "invalid":return "Mã định danh không hợp lệ.";case "unavailable":return "Không thể liên kết hồ sơ. Hãy kiểm tra mã định danh hoặc liên hệ quản trị viên nếu hồ sơ đã được đăng ký.";case "unauthorized":return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";default:return "Không thể liên kết hồ sơ. Vui lòng thử lại hoặc liên hệ quản trị viên.";}}
 function msg(s,kind='info'){const el=$('message');el.textContent=s;el.className='message'+(kind==='error'?' error':kind==='success'?' success':'');el.classList.toggle('hidden',!s);}
 
@@ -24,7 +24,7 @@ async function loadStudentExams(active){
  info.textContent='Đang tải danh sách kỳ thi...';
  const {data,error}=await client.rpc('exam_student_my_exam_list');
  if(sequence!==examLoadSequence)return;
- if(error){info.textContent='Chưa tải được danh sách kỳ thi. Kiểm tra SQL v0.1.280.';return;}
+ if(error){info.textContent='Chưa tải được danh sách kỳ thi.';return;}
  const rawItems=Array.isArray(data)?data:[];
  const seen=new Set();
  const items=rawItems.filter(item=>{
@@ -34,7 +34,7 @@ async function loadStudentExams(active){
   seen.add(key);return true;
  });
  if(!items.length){info.textContent='Chưa tìm thấy kỳ thi liên kết với hồ sơ này.';return;}
- info.textContent=`Có ${items.length} kỳ thi.`;
+ info.textContent='';
  for(const item of items){
   const card=document.createElement('div');
   card.className='note';
@@ -48,7 +48,7 @@ async function loadStudentExams(active){
    const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.textContent='Xem điểm đã công bố';
    const result=document.createElement('div');result.setAttribute('aria-live','polite');
    btn.addEventListener('click',async()=>{
-    btn.disabled=true;result.textContent='Đang kiểm tra quyền xem điểm...';
+    btn.disabled=true;result.textContent='Đang tải kết quả...';
     try{
      const {data:scores,error:e}=await client.rpc('exam_student_my_published_scores',{p_exam_id:item.exam_id});
      if(e){result.textContent=e.code==='42501'?'Tài khoản chưa đủ điều kiện xem điểm. Hãy xác nhận email và liên kết hồ sơ học sinh.':'Không thể tải điểm: '+e.message;return;}
@@ -63,7 +63,7 @@ async function loadStudentExams(active){
       const note=score.is_absent?'Vắng thi':score.no_paper?'Không có bài':score.essay_missing||score.mcq_missing?'Thiếu điểm':'';
       for(const value of [subjectName(score.subject_code),fmt(score.mcq_score),fmt(score.essay_score),fmt(score.total_score),note]){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}table.appendChild(tr);
      }
-     wrapper.appendChild(table);result.appendChild(wrapper);
+     wrapper.appendChild(table);result.appendChild(wrapper);await renderAppeals(item.exam_id,scores,result);
     }catch(ex){result.textContent='Không tải được điểm: '+(ex?.message||'Lỗi không xác định');}
     finally{btn.disabled=false;}
    });
@@ -71,6 +71,40 @@ async function loadStudentExams(active){
   }
   list.append(card);
  }
+}
+
+async function renderAppeals(examId,scores,container){
+ const box=document.createElement('div');box.className='appeal-box';
+ const heading=document.createElement('strong');heading.textContent='Đề nghị phúc khảo';box.append(heading);
+ const state=document.createElement('div');state.className='appeal-status';box.append(state);
+ const {data:settings,error:se}=await client.rpc('exam_student_appeal_settings',{p_exam_id:examId});
+ if(se){state.textContent='Chức năng phúc khảo chưa được thiết lập.';container.append(box);return;}
+ const {data:requests,error:re}=await client.rpc('exam_student_my_appeals',{p_exam_id:examId});
+ if(re){state.textContent='Chưa tải được thông tin phúc khảo.';container.append(box);return;}
+ const current=Array.isArray(requests)?requests:[];
+ const statusLabel={submitted:'Đã gửi',withdrawn:'Đã rút',reviewing:'Đang xử lý',resolved:'Đã xử lý',rejected:'Không tiếp nhận'};
+ const showList=()=>{
+  [...box.querySelectorAll('.appeal-entry')].forEach(el=>el.remove());
+  for(const r of current){const line=document.createElement('div');line.className='appeal-entry appeal-status';
+   line.textContent=subjectName(r.subject_code)+' · '+(r.component_type==='essay'?'Tự luận':'Trắc nghiệm')+' · '+(statusLabel[r.status]||r.status);
+   if(r.status==='submitted' && settings?.is_open){const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Rút đề nghị';cancel.onclick=async()=>{if(!confirm('Rút đề nghị phúc khảo này?'))return;cancel.disabled=true;const {error}=await client.rpc('exam_student_appeal_withdraw',{p_appeal_id:r.id});if(error){state.textContent='Không rút được đề nghị.';cancel.disabled=false;return;}r.status='withdrawn';state.textContent='Đã rút đề nghị.';showList();};line.append(cancel);}box.append(line);
+  }
+ };
+ state.textContent=settings?.is_open?'Đang nhận đề nghị phúc khảo. Hạn: '+new Date(settings.deadline_at).toLocaleString('vi-VN'):'Hiện chưa mở nhận phúc khảo.';
+ if(settings?.is_open){
+  const form=document.createElement('form');
+  const subject=document.createElement('select');subject.required=true;
+  for(const s of scores){if(s.is_absent||s.no_paper)continue;const opt=document.createElement('option');opt.value=s.subject_code;opt.textContent=subjectName(s.subject_code);subject.append(opt);}
+  const component=document.createElement('select');component.required=true;
+  const reason=document.createElement('textarea');reason.maxLength=500;reason.placeholder='Lý do đề nghị (không bắt buộc)';
+  const submit=document.createElement('button');submit.type='submit';submit.className='secondary';submit.textContent='Gửi đề nghị';
+  const label=(s,el)=>{const l=document.createElement('label');l.textContent=s;l.append(el);return l;};
+  const sync=()=>{component.replaceChildren();const sc=scores.find(x=>x.subject_code===subject.value);if(!sc)return;for(const [kind,name] of [['mcq','Trắc nghiệm'],['essay','Tự luận']]){if(sc.score_mode===kind||sc.score_mode==='combined'){const o=document.createElement('option');o.value=kind;o.textContent=name;component.append(o);}}};subject.onchange=sync;sync();
+  form.append(label('Môn thi',subject),label('Phần đề nghị phúc khảo',component),label('Nội dung',reason),submit);
+  form.onsubmit=async ev=>{ev.preventDefault();submit.disabled=true;const {data,error}=await client.rpc('exam_student_appeal_submit',{p_exam_id:examId,p_subject_code:subject.value,p_component_type:component.value,p_note:reason.value});submit.disabled=false;if(error){state.textContent='Không gửi được đề nghị: '+error.message;return;}state.textContent='Đã gửi đề nghị phúc khảo.';current.unshift({id:data,subject_code:subject.value,component_type:component.value,status:'submitted'});showList();};
+  if(subject.options.length)box.append(form);
+ }
+ showList();container.append(box);
 }
 
 const SUBJECT_NAMES={TOAN:'Toán',VAN:'Ngữ văn',N1:'Tiếng Anh',ANH:'Tiếng Anh',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',KTPL:'Giáo dục kinh tế và pháp luật',GDKTPL:'Giáo dục kinh tế và pháp luật'};
@@ -83,7 +117,7 @@ function showSession(user,active){
  const panel=$('account-panel');
  const detail=$('account-detail');
  panel.classList.toggle('hidden',!user);
- if(user){detail.textContent='Email: '+(user.email||'')+' · Xác minh: '+(user.email_confirmed_at?'Đã xác minh':'Chưa xác minh')+' · Hồ sơ: '+(active?'Đã kích hoạt':'Chưa liên kết');} else {$('student-summary').classList.add('hidden');$('student-summary').textContent='';}
+ if(user){detail.textContent='Email: '+(user.email||'');} else {$('student-summary').classList.add('hidden');$('student-summary').textContent='';}
  tabsBox.classList.toggle('hidden',!!user && (active || !resetFlow));
  if(user && active && !resetFlow){
    for(const form of document.querySelectorAll('form.tab'))form.classList.remove('active');
