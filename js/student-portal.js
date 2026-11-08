@@ -37,16 +37,16 @@ async function loadStudentExams(active){
  info.textContent='';
  for(const item of items){
   const card=document.createElement('div');
-  card.className='note';
+  card.className='note exam-card';
   card.style.marginTop='10px';
   const title=document.createElement('strong');
-  title.textContent=item.exam_name||'Kỳ thi';
+  title.className='exam-title';title.textContent=item.exam_name||'Kỳ thi';
   const detail=document.createElement('p');
-  detail.textContent='Khối: '+(item.grade_code||'Chưa xác định')+' · '+(item.is_published?'Đã công bố':'Chưa công bố');
+  detail.className='exam-meta';detail.append(document.createTextNode('Khối '+(item.grade_code||'—')+' · '));const statusBadge=document.createElement('span');statusBadge.className='exam-status'+(item.is_published?' published':'');statusBadge.textContent=item.is_published?'Đã công bố':'Chưa công bố';detail.append(statusBadge);
   card.append(title,detail);
   if(item.is_published && item.exam_id){
-   const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.textContent='Xem điểm đã công bố';
-   const result=document.createElement('div');result.setAttribute('aria-live','polite');
+   const btn=document.createElement('button');btn.type='button';btn.className='secondary view-scores';btn.textContent='Xem điểm đã công bố';
+   const result=document.createElement('div');result.className='exam-results';result.setAttribute('aria-live','polite');
    btn.addEventListener('click',async()=>{
     btn.disabled=true;result.textContent='Đang tải kết quả...';
     try{

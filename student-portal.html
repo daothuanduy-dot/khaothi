@@ -17,6 +17,50 @@
 .student-score-table tbody tr:nth-child(even){background:#f5f8fd}
 .student-score-table td:first-child{font-weight:600}
 .appeal-choices{border:1px solid #cbd6e6;border-radius:9px;overflow:hidden;margin:10px 0}.appeal-choice-row{padding:10px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid #d9e2ee}.appeal-choice-row:last-child{border-bottom:0}.appeal-choice-controls{display:flex;gap:14px;flex-wrap:wrap}.appeal-check{display:inline-flex!important;align-items:center;gap:6px;margin:0!important;font-weight:normal!important}.appeal-check input{width:auto!important;accent-color:#215bc2}.appeal-check input:disabled{opacity:.65}@media(max-width:480px){.appeal-choice-row{align-items:flex-start;flex-direction:column;gap:5px}}
+
+/* v0.1.291 - visual hierarchy for student portal */
+:root{color:#18304f;background:linear-gradient(145deg,#edf5ff 0%,#f4f8ff 50%,#effbf8 100%)}
+main{max-width:860px;margin:26px auto;padding:0 16px 28px}
+.panel{border:1px solid #dce7f4;border-radius:24px;padding:clamp(18px,4vw,34px);box-shadow:0 18px 48px #1e4d8b12}
+.eyebrow{color:#1d62d5;font-size:12px;letter-spacing:.11em}
+h1{font-size:clamp(24px,4vw,32px);color:#12315b;letter-spacing:-.025em}
+.panel>p{margin-top:6px;margin-bottom:24px;font-size:15px}
+#account-panel{background:transparent;border:0;padding:0;font-size:inherit}
+#account-panel>h2{font-size:20px;color:#143d74;margin:0 0 14px}
+#account-detail{display:inline-flex;background:#f0f6ff;border:1px solid #dce9ff;color:#365b86;border-radius:999px;padding:7px 13px;margin:0 0 12px;font-size:13px;overflow-wrap:anywhere;max-width:100%}
+#student-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 14px;background:#f7fbff;border:1px solid #dce9f7;border-radius:14px;padding:14px;margin:0 0 22px}
+#student-summary p{margin:0;line-height:1.5;font-size:14px;color:#294b73}
+#student-summary strong{color:#173c67}
+#student-exams{margin-top:18px}
+#student-exams>h3{font-size:19px;color:#143d74;margin:0 0 12px;display:flex;align-items:center;gap:9px}
+#student-exams>h3:before{content:'';width:5px;height:22px;border-radius:4px;background:#26b6a5;display:inline-block}
+#student-exams-list{display:grid;gap:14px}
+#student-exams-list>.exam-card{margin:0!important;padding:18px!important;background:#fff;border:1px solid #d9e6f5;border-radius:16px;box-shadow:0 4px 16px #2e5c9c0a;min-width:0}
+.exam-card>.exam-title{display:block;font-size:16px;line-height:1.45;color:#153a68;margin-bottom:9px}
+.exam-card>.exam-meta{margin:0 0 14px;font-size:13px;color:#526b87}
+.exam-status{display:inline-flex;align-items:center;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:750;background:#fff4e7;color:#9a5717}
+.exam-status.published{background:#e3f8ee;color:#15734c}
+.exam-card button.view-scores{background:#205bd7;color:#fff;padding:11px 17px;box-shadow:0 5px 12px #205bd72b}
+.exam-card button.view-scores:hover{background:#1647b0}
+.exam-card .exam-results{margin-top:14px}
+.exam-card .student-score-scroll{margin-top:4px;border-radius:12px;overflow:auto;border:1px solid #d3e0ef}
+.student-score-table{min-width:500px;font-size:14px}
+.student-score-table th{background:#e6f0ff;color:#173e73}
+.student-score-table th,.student-score-table td{padding:12px 9px}
+.appeal-box{border:1px solid #b8d8ee;border-radius:14px;padding:17px;background:#f8fcff;margin-top:16px}
+.appeal-box>strong{display:block;color:#174777;font-size:16px}
+.appeal-choices{background:#fff}
+.appeal-choice-row{padding:13px 12px}
+.appeal-check input{width:17px!important;height:17px!important}
+.appeal-box button[type=submit]{background:#0e947e;color:#fff;padding:12px 18px}
+.appeal-box button[type=submit]:hover{background:#087c69}
+#change-password{margin-top:22px;background:#edf3ff;color:#2052a2;border:1px solid #d8e5fb}
+#account-actions{margin-top:10px!important;justify-content:flex-end}
+#logout{background:#fff;color:#b34750;border:1px solid #f0cbd0}
+button{transition:background .15s ease,box-shadow .15s ease,transform .15s ease}
+button:not(:disabled):active{transform:translateY(1px)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #6ab7ff;outline-offset:2px}
+@media(max-width:560px){main{margin:10px auto;padding:0 10px 20px}.panel{border-radius:18px;padding:18px}#student-summary{grid-template-columns:1fr}#student-exams-list>.exam-card{padding:14px!important}.student-score-table{font-size:12px}.student-score-table th,.student-score-table td{padding:9px 6px}#account-actions{justify-content:stretch}#logout{width:100%}}
 </style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body>
 <main><section class="panel"><div class="eyebrow">TRƯỜNG THPT LÊ HỒNG PHONG</div><h1>Cổng thông tin học sinh</h1><p>Tra cứu kết quả thi và gửi đề nghị phúc khảo.</p>
 <div id="message" class="message hidden" role="status" aria-live="polite"></div>
@@ -28,4 +72,4 @@
 <form id="claim" class="tab"><h2>Liên kết hồ sơ học sinh</h2><p>Chỉ thực hiện sau khi email đã xác minh và bạn đã đăng nhập. Không cần mã kích hoạt riêng.</p><label for="student-code">Mã định danh Bộ GDĐT</label><input id="student-code" autocomplete="off" maxlength="64" required><button class="primary" type="submit">Liên kết tài khoản</button></form>
 <form id="recover" class="tab"><h2>Khôi phục mật khẩu</h2><label for="recover-email">Email đã xác minh</label><input id="recover-email" type="email" autocomplete="email" required><button class="primary" type="submit">Gửi email đặt lại mật khẩu</button></form>
 <form id="new-password" class="tab"><h2>Đặt lại mật khẩu</h2><label for="reset-password">Mật khẩu mới (tối thiểu 12 ký tự)</label><input id="reset-password" type="password" minlength="12" required><label for="reset-confirm">Nhập lại mật khẩu</label><input id="reset-confirm" type="password" minlength="12" required><button class="primary" type="submit">Lưu mật khẩu mới</button></form>
-<div class="row" id="account-actions" style="margin-top:16px"><button class="secondary hidden" id="logout" type="button">Đăng xuất tài khoản học sinh</button><button class="secondary hidden" id="check" type="button">Kiểm tra trạng thái</button></div></section><footer>Không cung cấp mật khẩu cho người khác.</footer></main><script type="module" src="./js/student-portal.js?v=0.1.290"></script></body></html>
+<div class="row" id="account-actions" style="margin-top:16px"><button class="secondary hidden" id="logout" type="button">Đăng xuất tài khoản học sinh</button><button class="secondary hidden" id="check" type="button">Kiểm tra trạng thái</button></div></section><footer>Không cung cấp mật khẩu cho người khác.</footer></main><script type="module" src="./js/student-portal.js?v=0.1.291"></script></body></html>
