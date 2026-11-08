@@ -5,7 +5,7 @@ export function wireClassResultsExport({state, $, esc, message}) {
   const $subject=$('class-results-subjects');
   // Per-browser print preferences; no DB changes.
   const configKey='exam-class-results-print-v0.1.298'; // Retain v0.1.298 saved settings
-  const defaults={font:'Arial',size:11,paper:'A4',orientation:'landscape',nameWidth:26,sbdWidth:13,dobWidth:14,subjectWidth:9,nameSize:11,sbdSize:11,nameAlign:'left',sbdAlign:'center',nameBold:'normal',sbdBold:'normal'};
+  const defaults={font:'Arial',size:11,paper:'A4',orientation:'landscape',nameWidth:26,sbdWidth:13,dobWidth:14,subjectWidth:9,nameSize:11,sbdSize:11,nameAlign:'left',sbdAlign:'center',nameBold:'normal',sbdBold:'normal',marginTop:10,marginRight:10,marginBottom:10,marginLeft:10};
   let printConfig={...defaults};
   try {const saved=JSON.parse(localStorage.getItem(configKey)||'{}');for(const k of Object.keys(defaults))if(Object.prototype.hasOwnProperty.call(saved,k))printConfig[k]=saved[k];}catch(_e){}
   const controls=document.createElement('fieldset');
@@ -25,13 +25,17 @@ export function wireClassResultsExport({state, $, esc, message}) {
     <label>SBD <select data-print-key="sbdBold"><option value="normal">Chữ thường</option><option value="bold">In đậm</option></select></label>
     <label>Ngày sinh (mm) <input data-print-key="dobWidth" type="number" min="12" max="25" step="1" style="width:65px"></label>
     <label>Môn thi (mm) <input data-print-key="subjectWidth" type="number" min="8" max="25" step="1" style="width:65px"></label>
+    <label>Lề trên (mm) <input data-print-key="marginTop" type="number" min="0" max="50" step="1" style="width:65px"></label>
+    <label>Lề phải (mm) <input data-print-key="marginRight" type="number" min="0" max="50" step="1" style="width:65px"></label>
+    <label>Lề dưới (mm) <input data-print-key="marginBottom" type="number" min="0" max="50" step="1" style="width:65px"></label>
+    <label>Lề trái (mm) <input data-print-key="marginLeft" type="number" min="0" max="50" step="1" style="width:65px"></label>
     <button type="button" class="btn btn-light" data-reset-print>Khôi phục mặc định</button>
     <small style="flex-basis:100%;color:#64748b">Các cột môn thi có độ rộng bằng nhau. Cấu hình được lưu trên trình duyệt này; nếu bảng quá rộng, hãy chọn A3 hoặc giảm số môn in.</small>`;
   const previewEl=$('class-results-preview');
   previewEl.parentNode.insertBefore(controls,previewEl);
   function syncControls(){controls.querySelectorAll('[data-print-key]').forEach(el=>{el.value=printConfig[el.dataset.printKey]});}
   function saveConfig(){try{localStorage.setItem(configKey,JSON.stringify(printConfig));}catch(_e){}}
-  controls.addEventListener('change',e=>{const k=e.target.dataset.printKey;if(!k)return;const numeric=['size','nameWidth','sbdWidth','dobWidth','subjectWidth','nameSize','sbdSize'].includes(k);const n=Number(e.target.value);if(numeric&&(!Number.isFinite(n)||n<=0))return;printConfig[k]=numeric?n:e.target.value;saveConfig();});
+  controls.addEventListener('change',e=>{const k=e.target.dataset.printKey;if(!k)return;const numeric=['size','nameWidth','sbdWidth','dobWidth','subjectWidth','nameSize','sbdSize','marginTop','marginRight','marginBottom','marginLeft'].includes(k);const n=Number(e.target.value);if(numeric&&(!Number.isFinite(n)||n<0))return;if(k.startsWith('margin')&&n>50)return;printConfig[k]=numeric?n:e.target.value;saveConfig();});
   controls.querySelector('[data-reset-print]').addEventListener('click',()=>{printConfig={...defaults};saveConfig();syncControls();});
   syncControls();
   function colWidths(count){return [9,Number(printConfig.sbdWidth),Number(printConfig.nameWidth),Number(printConfig.dobWidth),...Array(count).fill(Number(printConfig.subjectWidth))];}
@@ -65,7 +69,13 @@ export function wireClassResultsExport({state, $, esc, message}) {
     const exam=state.exams.find(e=>e.id===loadedExam);
     const groups=[...grouped()];for(const [,list] of groups)ensureSbd(list);
     const widths=merged?[9,Number(printConfig.sbdWidth),Number(printConfig.nameWidth),Number(printConfig.dobWidth),25]:colWidths(selectedCodes().length);
-    const paperWidth=(printConfig.paper==='A3'? (printConfig.orientation==='landscape'?420:297):(printConfig.orientation==='landscape'?297:210))-16;
+    const marginKeys=['marginTop','marginRight','marginBottom','marginLeft'];
+    const margins=marginKeys.map(k=>Math.max(0,Math.min(50,Number(printConfig[k])||0)));
+    const [mt,mr,mb,ml]=margins;
+    const pageW=printConfig.paper==='A3'?(printConfig.orientation==='landscape'?420:297):(printConfig.orientation==='landscape'?297:210);
+    const pageH=printConfig.paper==='A3'?(printConfig.orientation==='landscape'?297:420):(printConfig.orientation==='landscape'?210:297);
+    const paperWidth=pageW-ml-mr;
+    if(paperWidth<=0||pageH-mt-mb<=0)throw Error('Lề trang in không hợp lệ.');
     if(widths.reduce((a,b)=>a+b,0)>paperWidth){throw Error('Tổng độ rộng các cột vượt khổ giấy. Hãy chọn giấy lớn hơn, giảm độ rộng cột hoặc bớt môn.');}
     const sections=groups.map(([cls,list])=>`<section class="sheet"><h3>KẾT QUẢ ${esc(exam?.name||'')} — LỚP ${esc(cls)}</h3><table>${'<colgroup>'+widths.map(mm=>`<col style="width:${mm}mm">`).join('')+'</colgroup>'}<thead><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${list.map((c,i)=>{const vals=merged?[i+1,sbd(c),c.student_name||'',date(c.date_of_birth??c.birth_date),selectedCodes().some(code=>payload.scores[code]?.get(c.id)?.total_score!=null)?selectedCodes().reduce((sum,code)=>sum+Number(payload.scores[code]?.get(c.id)?.total_score??0),0):'']:values(c,i);return `<tr>${vals.map((x,j)=>`<td class="${j===2?'name':j===1?'sbd':''}">${esc(x)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></section>`).join('');
     const w=window.open('','_blank');if(!w)throw Error('Trình duyệt chặn cửa sổ in. Hãy cho phép pop-up.');
@@ -79,7 +89,7 @@ export function wireClassResultsExport({state, $, esc, message}) {
     const sbdWeight=printConfig.sbdBold==='bold'?'bold':'normal';
     const orientation=printConfig.orientation==='portrait'?'portrait':'landscape';
     const paper=printConfig.paper==='A3'?'A3':'A4';
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Kết quả về lớp</title><style>@page{size:${paper} ${orientation};margin:8mm}*{box-sizing:border-box}body{font:${fontSize}pt "${font}",sans-serif;color:#111;margin:0}table{border-collapse:collapse;table-layout:fixed;width:auto;max-width:100%}td,th{border:1px solid #444;padding:4px 3px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}td.name{text-align:${nameAlign};font-size:${nameSize}pt;font-weight:${nameWeight}}td.sbd{text-align:${sbdAlign};font-size:${sbdSize}pt;font-weight:${sbdWeight};white-space:nowrap}th{font-weight:700}h3{text-align:center;font-size:${fontSize+1}pt;margin:0 0 10px}.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}</style></head><body>${sections}</body></html>`);
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Kết quả về lớp</title><style>@page{size:${paper} ${orientation};margin:${mt}mm ${mr}mm ${mb}mm ${ml}mm}*{box-sizing:border-box}body{font:${fontSize}pt "${font}",sans-serif;color:#111;margin:0}table{border-collapse:collapse;table-layout:fixed;width:auto;max-width:100%}td,th{border:1px solid #444;padding:4px 3px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}td.name{text-align:${nameAlign};font-size:${nameSize}pt;font-weight:${nameWeight}}td.sbd{text-align:${sbdAlign};font-size:${sbdSize}pt;font-weight:${sbdWeight};white-space:nowrap}th{font-weight:700}h3{text-align:center;font-size:${fontSize+1}pt;margin:0 0 10px}.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}</style></head><body>${sections}</body></html>`);
     w.document.close();w.focus();w.print();
   }catch(e){message($('class-results-message'),e.message,'error');}};
   renderChoices();return {invalidate};
