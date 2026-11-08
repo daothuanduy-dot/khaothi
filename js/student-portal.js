@@ -54,16 +54,16 @@ async function loadStudentExams(active){
      if(e){result.textContent=e.code==='42501'?'Tài khoản chưa đủ điều kiện xem điểm. Hãy xác nhận email và liên kết hồ sơ học sinh.':'Không thể tải điểm: '+e.message;return;}
      result.replaceChildren();
      if(!Array.isArray(scores)||!scores.length){result.textContent='Chưa có kết quả được phép hiển thị.';return;}
-     const table=document.createElement('table');table.style.width='100%';table.style.marginTop='10px';
+     const wrapper=document.createElement('div');wrapper.className='student-score-scroll';const table=document.createElement('table');table.className='student-score-table';
      const header=document.createElement('tr');
      for(const text of ['Môn','Trắc nghiệm','Tự luận','Tổng','Ghi chú']){const th=document.createElement('th');th.textContent=text;header.appendChild(th);}table.appendChild(header);
      const fmt=v=>v===null||v===undefined?'—':String(v);
      for(const score of scores){
       const tr=document.createElement('tr');
       const note=score.is_absent?'Vắng thi':score.no_paper?'Không có bài':score.essay_missing||score.mcq_missing?'Thiếu điểm':'';
-      for(const value of [score.subject_code,fmt(score.mcq_score),fmt(score.essay_score),fmt(score.total_score),note]){const td=document.createElement('td');td.textContent=value;td.style.padding='6px 3px';tr.appendChild(td);}table.appendChild(tr);
+      for(const value of [subjectName(score.subject_code),fmt(score.mcq_score),fmt(score.essay_score),fmt(score.total_score),note]){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}table.appendChild(tr);
      }
-     result.appendChild(table);
+     wrapper.appendChild(table);result.appendChild(wrapper);
     }catch(ex){result.textContent='Không tải được điểm: '+(ex?.message||'Lỗi không xác định');}
     finally{btn.disabled=false;}
    });
@@ -73,6 +73,8 @@ async function loadStudentExams(active){
  }
 }
 
+const SUBJECT_NAMES={TOAN:'Toán',VAN:'Ngữ văn',N1:'Tiếng Anh',ANH:'Tiếng Anh',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',KTPL:'Giáo dục kinh tế và pháp luật',GDKTPL:'Giáo dục kinh tế và pháp luật'};
+function subjectName(code){const key=String(code??'').trim().toUpperCase();return SUBJECT_NAMES[key]||String(code??'');}
 function clearPasswords(){for(const id of ['login-password','reg-password','reg-confirm','reset-password','reset-confirm'])$(id).value='';}
 let signedIn=false;
 function showSession(user,active){
