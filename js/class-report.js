@@ -1,3 +1,4 @@
+import {loadVanRows,enrichClassVan} from './van-report-fallback.js';
 export function classReportSubjectOrder(codes){
  const order={VAN:0,TOAN:1,N1:2,ANH:2,LY:3,LI:3,HOA:4,SINH:5,SU:6,DIA:7,KTPL:8,GDKTPL:8,N4:9,TRUNG:9,N5:10,DUC:10};
  return [...new Set(codes)].sort((a,b)=>(order[a]??99)-(order[b]??99)||a.localeCompare(b,'vi',{numeric:true}));
@@ -214,11 +215,12 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       if(error)throw new Error(error.message);
       if(token!==request||captured!==context())return;
       let report=data;
+      if(!data.classes.some(c=>c.subjects?.some(s=>s.subject_code==='VAN')))report=enrichClassVan(data,await loadVanRows(state.client,exam));
       if(['subject','choice'].includes(data.exam_mode)){
         const detail=await state.client.rpc('exam_get_choice_statistics_report',{p_exam_id:exam,p_include_absent:!!$('class-report-absent').checked,p_include_violations:!!$('class-report-violations').checked});
         if(detail.error)throw new Error('Không tải được số dự thi/điểm cao nhất: '+detail.error.message);
         if(token!==request||captured!==context())return;
-        report=attachChoiceParticipation(data,detail.data.rows||[]);
+        report=attachChoiceParticipation(report,detail.data.rows||[]);
       }
       payload=report;key=captured;loadHeader();
       selectedClasses=data.classes.map(c=>c.class_code);

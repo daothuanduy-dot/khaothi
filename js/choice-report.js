@@ -1,3 +1,4 @@
+import {loadVanRows,enrichChoiceVan} from './van-report-fallback.js';
 const subjectOrder=code=>({VAN:0,TOAN:1,N1:2,N4:3,N5:4,LY:5,HOA:6,SINH:7,SU:8,DIA:9,KTPL:10,TIN:11})[code]??99;
 export function choiceSubjects(data){
   return [...new Set(data.cells.map(c=>c.subject_code))].sort((a,b)=>subjectOrder(a)-subjectOrder(b)||a.localeCompare(b));
@@ -5,7 +6,7 @@ export function choiceSubjects(data){
 export function choiceSummary(data,tieMode='competition'){
   const cells=data.cells.map(c=>({...c,rank:null}));
   // Choice exams compare each subject across participating classes in the same grade.
-  for(const grade of new Set(data.classes.map(c=>c.grade_code).filter(Boolean))){
+  for(const grade of new Set(payload.classes.map(c=>c.grade_code).filter(Boolean))){
     const classes=new Set(data.classes.filter(c=>c.grade_code===grade).map(c=>c.class_code));
     for(const subject of choiceSubjects(data)){
       const same=cells.filter(c=>classes.has(c.class_code)&&c.subject_code===subject);
@@ -46,7 +47,7 @@ export function choiceRosterSheet(students){
   return rows;
 }
 export function choiceSummarySheet(data,selectedClasses=data.classes,tieMode='competition',selectedSubjects=choiceSubjects(data)){
-  const report=choiceSummary(data,tieMode);report.codes=report.codes.filter(code=>selectedSubjects.includes(code));const rows=[['Lớp',...report.codes.flatMap(code=>[code==='KTPL'?'KTPL':data.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
+  const report=choiceSummary(data,tieMode);report.codes=report.codes.filter(code=>selectedSubjects.includes(code));const rows=[['Lớp',...report.codes.flatMap(code=>[code==='KTPL'?'KTPL':payload.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
   for(const cls of [...selectedClasses].sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}))){rows.push([cls.class_code,...report.codes.flatMap(code=>{const c=report.cells.find(c=>c.class_code===cls.class_code&&c.subject_code===code);return c?[c.average_score??'',c.included_count,c.rank??'']:['','','']})]);}
   rows.push(['TB lớp',...report.codes.flatMap(code=>{
     const cells=report.cells.filter(c=>c.subject_code===code&&selectedClasses.some(x=>x.class_code===c.class_code)&&c.average_score!=null&&c.included_count>0);
@@ -78,12 +79,13 @@ export function wireChoiceReports({state,$,esc,message,createPrintFrame}){
     try{
       const{data,error}=await state.client.rpc('exam_get_choice_statistics_report',{p_exam_id:state.selectedExam,p_include_absent:!!$('choice-report-absent').checked,p_include_violations:!!$('choice-report-violations').checked});
       if(error)throw new Error(error.message);if(captured!==context()||token!==request)return;
-      data.classes.sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}));payload=data;key=captured;
-      subjects=choiceSubjects(data);
+      const report=data.cells?.some(c=>c.subject_code==='VAN')?data:enrichChoiceVan(data,await loadVanRows(state.client,state.selectedExam));
+      report.classes.sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}));payload=report;key=captured;
+      subjects=choiceSubjects(payload);
       const picker=$('choice-report-subjects');
-      if(picker)picker.innerHTML=subjects.map(code=>`<label style="display:inline-flex;align-items:center;gap:6px;margin:6px"><input type="checkbox" value="${esc(code)}" checked> ${esc(code==='KTPL'?'KTPL':data.cells.find(c=>c.subject_code===code)?.subject_name||code)}</label>`).join('');
-      $('choice-report-grade').innerHTML='<option value="">Tất cả khối</option>'+[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
-      $('choice-report-class').innerHTML='<option value="">Tất cả lớp</option>'+data.classes.map(c=>`<option value="${esc(c.class_code)}">${esc(c.class_code)}</option>`).join('');
+      if(picker)picker.innerHTML=subjects.map(code=>`<label style="display:inline-flex;align-items:center;gap:6px;margin:6px"><input type="checkbox" value="${esc(code)}" checked> ${esc(code==='KTPL'?'KTPL':payload.cells.find(c=>c.subject_code===code)?.subject_name||code)}</label>`).join('');
+      $('choice-report-grade').innerHTML='<option value="">Tất cả khối</option>'+[...new Set(payload.classes.map(c=>c.grade_code).filter(Boolean))].sort().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
+      $('choice-report-class').innerHTML='<option value="">Tất cả lớp</option>'+payload.classes.map(c=>`<option value="${esc(c.class_code)}">${esc(c.class_code)}</option>`).join('');
       $('choice-report-grade').value='';$('choice-report-class').value='';render();
       message($('choice-report-message'),'Đã tải. SL là số học sinh được tính vào ĐTB môn. Môn không đăng ký để trống; XH từng môn trong cùng khối, không phân biệt ban. Môn còn thiếu điểm chưa xếp hạng.','info');
     }catch(e){if(token===request)message($('choice-report-message'),e.message,'error')}
