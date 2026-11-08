@@ -51,7 +51,7 @@ async function loadStudentExams(active){
     btn.disabled=true;result.textContent='Đang kiểm tra quyền xem điểm...';
     try{
      const {data:scores,error:e}=await client.rpc('exam_student_my_published_scores',{p_exam_id:item.exam_id});
-     if(e){result.textContent=e.code==='42501'?'Chưa được nhà trường xác minh quyền xem điểm. Vui lòng liên hệ quản trị viên.':'Không thể tải điểm: '+e.message;return;}
+     if(e){result.textContent=e.code==='42501'?'Tài khoản chưa đủ điều kiện xem điểm. Hãy xác nhận email và liên kết hồ sơ học sinh.':'Không thể tải điểm: '+e.message;return;}
      result.replaceChildren();
      if(!Array.isArray(scores)||!scores.length){result.textContent='Chưa có kết quả được phép hiển thị.';return;}
      const table=document.createElement('table');table.style.width='100%';table.style.marginTop='10px';
