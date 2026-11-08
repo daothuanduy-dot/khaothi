@@ -5,7 +5,7 @@ export function wireClassResultsExport({state, $, esc, message}) {
   const $subject=$('class-results-subjects');
   // Per-browser print preferences; no DB changes.
   const configKey='exam-class-results-print-v0.1.298'; // Retain v0.1.298 saved settings
-  const defaults={font:'Arial',size:11,paper:'A4',orientation:'landscape',nameWidth:26,sbdWidth:13,dobWidth:14,subjectWidth:9,nameSize:11,sbdSize:11,nameAlign:'left',sbdAlign:'center',nameBold:'normal',sbdBold:'normal',marginTop:10,marginRight:10,marginBottom:10,marginLeft:10};
+  const defaults={font:'Arial',size:11,paper:'A4',orientation:'landscape',nameWidth:26,sbdWidth:13,dobWidth:14,subjectWidth:9,nameSize:11,sbdSize:11,nameAlign:'left',sbdAlign:'center',nameBold:'normal',sbdBold:'normal',marginTop:10,marginRight:10,marginBottom:10,marginLeft:10,bodyRowHeight:8};
   let printConfig={...defaults};
   try {const saved=JSON.parse(localStorage.getItem(configKey)||'{}');for(const k of Object.keys(defaults))if(Object.prototype.hasOwnProperty.call(saved,k))printConfig[k]=saved[k];}catch(_e){}
   const controls=document.createElement('fieldset');
@@ -29,13 +29,14 @@ export function wireClassResultsExport({state, $, esc, message}) {
     <label>Lề phải (mm) <input data-print-key="marginRight" type="number" min="0" max="50" step="1" style="width:65px"></label>
     <label>Lề dưới (mm) <input data-print-key="marginBottom" type="number" min="0" max="50" step="1" style="width:65px"></label>
     <label>Lề trái (mm) <input data-print-key="marginLeft" type="number" min="0" max="50" step="1" style="width:65px"></label>
+    <label>Chiều cao hàng dữ liệu (mm) <input data-print-key="bodyRowHeight" type="number" min="5" max="30" step="0.5" style="width:70px"></label>
     <button type="button" class="btn btn-light" data-reset-print>Khôi phục mặc định</button>
     <small style="flex-basis:100%;color:#64748b">Các cột môn thi có độ rộng bằng nhau. Cấu hình được lưu trên trình duyệt này; nếu bảng quá rộng, hãy chọn A3 hoặc giảm số môn in.</small>`;
   const previewEl=$('class-results-preview');
   previewEl.parentNode.insertBefore(controls,previewEl);
   function syncControls(){controls.querySelectorAll('[data-print-key]').forEach(el=>{el.value=printConfig[el.dataset.printKey]});}
   function saveConfig(){try{localStorage.setItem(configKey,JSON.stringify(printConfig));}catch(_e){}}
-  controls.addEventListener('change',e=>{const k=e.target.dataset.printKey;if(!k)return;const numeric=['size','nameWidth','sbdWidth','dobWidth','subjectWidth','nameSize','sbdSize','marginTop','marginRight','marginBottom','marginLeft'].includes(k);const n=Number(e.target.value);if(numeric&&(!Number.isFinite(n)||n<0))return;if(k.startsWith('margin')&&n>50)return;printConfig[k]=numeric?n:e.target.value;saveConfig();});
+  controls.addEventListener('change',e=>{const k=e.target.dataset.printKey;if(!k)return;const numeric=['size','nameWidth','sbdWidth','dobWidth','subjectWidth','nameSize','sbdSize','marginTop','marginRight','marginBottom','marginLeft','bodyRowHeight'].includes(k);const n=Number(e.target.value);if(numeric&&(!Number.isFinite(n)||n<0))return;if(k.startsWith('margin')&&n>50)return;if(k==='bodyRowHeight'&&(n<5||n>30))return;printConfig[k]=numeric?n:e.target.value;saveConfig();});
   controls.querySelector('[data-reset-print]').addEventListener('click',()=>{printConfig={...defaults};saveConfig();syncControls();});
   syncControls();
   function colWidths(count){return [9,Number(printConfig.sbdWidth),Number(printConfig.nameWidth),Number(printConfig.dobWidth),...Array(count).fill(Number(printConfig.subjectWidth))];}
@@ -89,7 +90,8 @@ export function wireClassResultsExport({state, $, esc, message}) {
     const sbdWeight=printConfig.sbdBold==='bold'?'bold':'normal';
     const orientation=printConfig.orientation==='portrait'?'portrait':'landscape';
     const paper=printConfig.paper==='A3'?'A3':'A4';
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Kết quả về lớp</title><style>@page{size:${paper} ${orientation};margin:${mt}mm ${mr}mm ${mb}mm ${ml}mm}*{box-sizing:border-box}body{font:${fontSize}pt "${font}",sans-serif;color:#111;margin:0}table{border-collapse:collapse;table-layout:fixed;width:auto;max-width:100%}td,th{border:1px solid #444;padding:4px 3px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}td.name{text-align:${nameAlign};font-size:${nameSize}pt;font-weight:${nameWeight}}td.sbd{text-align:${sbdAlign};font-size:${sbdSize}pt;font-weight:${sbdWeight};white-space:nowrap}th{font-weight:700}h3{text-align:center;font-size:${fontSize+1}pt;margin:0 0 10px}.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}</style></head><body>${sections}</body></html>`);
+    const bodyRowHeight=Math.min(30,Math.max(5,Number(printConfig.bodyRowHeight)||8));
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Kết quả về lớp</title><style>@page{size:${paper} ${orientation};margin:${mt}mm ${mr}mm ${mb}mm ${ml}mm}*{box-sizing:border-box}body{font:${fontSize}pt "${font}",sans-serif;color:#111;margin:0}table{border-collapse:collapse;table-layout:fixed;width:auto;max-width:100%}td,th{border:1px solid #444;padding:4px 3px;text-align:center;vertical-align:middle;overflow-wrap:anywhere}td.name{text-align:${nameAlign};font-size:${nameSize}pt;font-weight:${nameWeight}}td.sbd{text-align:${sbdAlign};font-size:${sbdSize}pt;font-weight:${sbdWeight};white-space:nowrap}tbody tr{height:${bodyRowHeight}mm}tbody td{height:${bodyRowHeight}mm}th{font-weight:700}h3{text-align:center;font-size:${fontSize+1}pt;margin:0 0 10px}.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}</style></head><body>${sections}</body></html>`);
     w.document.close();w.focus();w.print();
   }catch(e){message($('class-results-message'),e.message,'error');}};
   renderChoices();return {invalidate};
