@@ -1,5 +1,12 @@
 <section class="tab-panel hidden" id="tab-scores">
   <div class="section-heading"><div><h2>Tổng hợp điểm</h2><p>Nhập điểm trắc nghiệm từ Excel theo cột SBD/điểm tùy chọn, ghép với điểm tự luận đã nhập theo phách.</p></div></div>
+  <section id="publication-control" class="panel" aria-label="Công bố kết quả theo khối">
+    <h3>Công bố kết quả theo khối</h3>
+    <p class="hint">Quản lý trạng thái công bố/thu hồi theo kỳ thi và khối. Phiên bản này chưa mở cổng xem điểm học sinh.</p>
+    <p data-pub-status role="status">Chọn kỳ thi để tải trạng thái.</p>
+    <div class="table-wrap"><table><thead><tr><th>Khối</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody data-pub-rows></tbody></table></div>
+    <div class="form-actions"><button class="btn btn-light" type="button" data-pub-refresh>Làm mới trạng thái</button></div>
+  </section>
   <div class="form-actions"><button id="open-absent-scores" type="button" class="btn btn-light">Nhập điểm học sinh vắng</button></div>
   <section id="score-control" class="panel">
     <h3>Kiểm soát điểm tự luận theo phách</h3>

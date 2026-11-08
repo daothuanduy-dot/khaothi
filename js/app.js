@@ -1,4 +1,4 @@
-import {createActivityMonitor} from './activity-monitor.js?v=0.1.272';
+import {createActivityMonitor} from './activity-monitor.js?v=0.1.273';
 import {wireSubjectAmendments} from './subject-corrections.js?v=194';
 import {inheritElectiveRooms} from './inherit-elective-rooms.js?v=187';
 import {applyFixedSubjectSlots,assertElectiveLayoutEditable,privateRoomEditState} from './elective-layout.js?v=185';
@@ -8,7 +8,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.272&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {loadTabModules} from './module-loader.js?v=0.1.273&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.267&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
@@ -24,7 +24,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.272';
+const APP_VERSION='v0.1.273';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -151,7 +151,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.272';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.273';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -506,6 +506,7 @@ function switchTab(tab){
   if(tab==='forms'&&!operations)message($('forms-message'),'Chức năng biểu mẫu chưa khởi tạo được. Hãy cập nhật đồng bộ các tệp ứng dụng rồi tải lại trang.','error');
   if(tab==='scripts')operations?.refreshScriptConfigs();
   if(tab==='scores'){operations?.refreshScores();scoreControl?.refresh();templateExport?.refresh();}
+  if(tab==='scores'&&state.role==='admin'){import('./publication-control.js?v=0.1.273').then(({initPublicationControls})=>{if(!window.__examPublicationControl){window.__examPublicationControl=initPublicationControls({client:()=>state.client,examId:()=>state.selectedExam,role:state.role});}window.__examPublicationControl?.refresh();}).catch(error=>console.warn('Không tải được điều khiển công bố:',error));}
   if(tab==='forms'){classReport?.refresh();choiceReports?.refresh();topStudents?.refresh();}
   if(tab==='absences')operations?.refreshAbsences(state.selectedExam||'')
     .then(ready=>{if(ready)return violations?.refresh()})
