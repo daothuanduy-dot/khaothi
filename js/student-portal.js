@@ -10,6 +10,33 @@ function pendingClear(){sessionStorage.removeItem(pendingKey);}
 function updateLinkedUI(active){isActive=active;const claimTab=document.querySelector('[data-tab="claim"]');claimTab.classList.toggle("hidden",active);$("claim").classList.toggle("hidden",active);$("active-account").classList.toggle("hidden",!active);if(active&&$("claim").classList.contains("active"))selectTab("login");}
 function reasonMessage(reason){switch(reason){case "already_linked":return "Tài khoản này đã liên kết với hồ sơ khác. Vui lòng liên hệ quản trị viên.";case "unverified":return "Email chưa được xác minh. Hãy kiểm tra thư xác minh.";case "invalid":return "Mã định danh không hợp lệ.";case "unavailable":return "Không thể liên kết hồ sơ. Hãy kiểm tra mã định danh hoặc liên hệ quản trị viên nếu hồ sơ đã được đăng ký.";case "unauthorized":return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";default:return "Không thể liên kết hồ sơ. Vui lòng thử lại hoặc liên hệ quản trị viên.";}}
 function msg(s,kind='info'){const el=$('message');el.textContent=s;el.className='message'+(kind==='error'?' error':kind==='success'?' success':'');el.classList.toggle('hidden',!s);}
+
+async function loadStudentExams(active){
+ const section=$('student-exams');
+ if(!section)return;
+ section.classList.toggle('hidden',!active);
+ if(!active)return;
+ const info=$('student-exams-status');
+ const list=$('student-exams-list');
+ list.replaceChildren();
+ info.textContent='Đang tải danh sách kỳ thi...';
+ const {data,error}=await client.rpc('exam_student_my_exam_list');
+ if(error){info.textContent='Chưa tải được danh sách kỳ thi. Kiểm tra SQL v0.1.280.';return;}
+ const items=Array.isArray(data)?data:[];
+ if(!items.length){info.textContent='Chưa tìm thấy kỳ thi liên kết với hồ sơ này.';return;}
+ info.textContent=`Có ${items.length} kỳ thi.`;
+ for(const item of items){
+  const card=document.createElement('div');
+  card.className='note';
+  card.style.marginTop='10px';
+  const title=document.createElement('strong');
+  title.textContent=item.exam_name||'Kỳ thi';
+  const detail=document.createElement('p');
+  detail.textContent='Khối: '+(item.grade_code||'Chưa xác định')+' · '+(item.is_published?'Đã công bố (chưa mở tra cứu điểm)':'Chưa công bố');
+  card.append(title,detail);list.append(card);
+ }
+}
+
 function clearPasswords(){for(const id of ['login-password','reg-password','reg-confirm','reset-password','reset-confirm'])$(id).value='';}
 let signedIn=false;
 function showSession(user,active){
@@ -38,6 +65,7 @@ async function status(){
  const {data,error}=await client.rpc('exam_student_my_activation_status');
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
  const active=data?.status==='active';updateLinkedUI(active);showSession(user,active);
+ await loadStudentExams(active);
  const summary=$('student-summary');summary.textContent='';summary.classList.add('hidden');
  if(active){
   const result=await client.rpc('exam_student_my_profile');
