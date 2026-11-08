@@ -6,7 +6,7 @@ export function choiceSubjects(data){
 export function choiceSummary(data,tieMode='competition'){
   const cells=data.cells.map(c=>({...c,rank:null}));
   // Choice exams compare each subject across participating classes in the same grade.
-  for(const grade of new Set(payload.classes.map(c=>c.grade_code).filter(Boolean))){
+  for(const grade of new Set(data.classes.map(c=>c.grade_code).filter(Boolean))){
     const classes=new Set(data.classes.filter(c=>c.grade_code===grade).map(c=>c.class_code));
     for(const subject of choiceSubjects(data)){
       const same=cells.filter(c=>classes.has(c.class_code)&&c.subject_code===subject);
@@ -47,7 +47,7 @@ export function choiceRosterSheet(students){
   return rows;
 }
 export function choiceSummarySheet(data,selectedClasses=data.classes,tieMode='competition',selectedSubjects=choiceSubjects(data)){
-  const report=choiceSummary(data,tieMode);report.codes=report.codes.filter(code=>selectedSubjects.includes(code));const rows=[['Lớp',...report.codes.flatMap(code=>[code==='KTPL'?'KTPL':payload.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
+  const report=choiceSummary(data,tieMode);report.codes=report.codes.filter(code=>selectedSubjects.includes(code));const rows=[['Lớp',...report.codes.flatMap(code=>[code==='KTPL'?'KTPL':data.cells.find(c=>c.subject_code===code)?.subject_name||code,'SL','XH'])]];
   for(const cls of [...selectedClasses].sort((a,b)=>a.class_code.localeCompare(b.class_code,'vi',{numeric:true}))){rows.push([cls.class_code,...report.codes.flatMap(code=>{const c=report.cells.find(c=>c.class_code===cls.class_code&&c.subject_code===code);return c?[c.average_score??'',c.included_count,c.rank??'']:['','','']})]);}
   rows.push(['TB lớp',...report.codes.flatMap(code=>{
     const cells=report.cells.filter(c=>c.subject_code===code&&selectedClasses.some(x=>x.class_code===c.class_code)&&c.average_score!=null&&c.included_count>0);
