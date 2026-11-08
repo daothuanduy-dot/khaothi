@@ -18,7 +18,7 @@ function showSession(user,active){
  const panel=$('account-panel');
  const detail=$('account-detail');
  panel.classList.toggle('hidden',!user);
- if(user){detail.textContent=(user.email||'')+' · '+(active?'Hồ sơ đã kích hoạt':'Hồ sơ chưa liên kết');}
+ if(user){detail.textContent='Email: '+(user.email||'')+' · Xác minh: '+(user.email_confirmed_at?'Đã xác minh':'Chưa xác minh')+' · Hồ sơ: '+(active?'Đã kích hoạt':'Chưa liên kết');} else {$('student-summary').classList.add('hidden');$('student-summary').textContent='';}
  tabsBox.classList.toggle('hidden',!!user && (active || !resetFlow));
  if(user && active && !resetFlow){
    for(const form of document.querySelectorAll('form.tab'))form.classList.remove('active');
@@ -27,7 +27,7 @@ function showSession(user,active){
    selectTab('claim');
  }
  if(!user && !resetFlow && !document.querySelector('form.tab.active'))selectTab('login');
- $('check').classList.toggle('hidden',!user);
+ $('check').classList.add('hidden');$('change-password').classList.toggle('hidden',!user);
 }
 function selectTab(name){for(const tab of tabs)tab.setAttribute('aria-selected',String(tab.dataset.tab===name));for(const form of document.querySelectorAll('form.tab'))form.classList.toggle('active',form.id===name);if(name==='new-password')$('new-password').classList.add('active');}
 function err(e){msg(e?.message||'Có lỗi xảy ra. Vui lòng thử lại.','error');}
@@ -38,7 +38,9 @@ async function status(){
  const {data,error}=await client.rpc('exam_student_my_activation_status');
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
  const active=data?.status==='active';updateLinkedUI(active);showSession(user,active);
- $('identity').textContent='Email: '+(user.email||'')+' · Xác minh: '+(user.email_confirmed_at?'Đã xác minh':'Chưa xác minh')+' · Hồ sơ: '+(active?'Đã kích hoạt':'Chưa liên kết');return user;
+ const summary=$('student-summary');summary.textContent='';summary.classList.add('hidden');
+ if(active){const result=await client.rpc('exam_student_my_account_summary');if(!result.error&&result.data?.student_code){summary.textContent='Mã định danh Bộ GDĐT: '+result.data.student_code;summary.classList.remove('hidden');}}
+ $('identity').classList.add('hidden');return user;
 }
 async function busy(form,fn){const btn=form.querySelector('button[type="submit"]');btn.disabled=true;try{await fn()}catch(e){err(e)}finally{btn.disabled=false;}}
 function redirect(){return new URL('./student-portal.html',location.href).href;}
@@ -82,5 +84,6 @@ $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.curren
  const {error}=await client.auth.updateUser({password});if(error)throw error;resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
 $('logout').addEventListener('click',async()=>{try{await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
+$('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');const {error}=await client.auth.resetPasswordForEmail(user.email,{redirectTo:redirect()});if(error)throw error;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
 $('check').addEventListener('click',async()=>{try{const user=await status();msg(user?'':'Chưa có phiên đăng nhập học sinh.')}catch(e){err(e)}});
 init().catch(err);
