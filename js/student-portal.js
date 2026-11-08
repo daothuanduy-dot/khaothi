@@ -2,6 +2,7 @@ import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[data-tab]')];
 let client=null,resetFlow=false;
+const pendingKey="exam-student-pending-code-v275";
 function msg(s,kind='info'){const el=$('message');el.textContent=s;el.className='message'+(kind==='error'?' error':kind==='success'?' success':'');}
 function selectTab(name){for(const tab of tabs)tab.setAttribute('aria-selected',String(tab.dataset.tab===name));for(const form of document.querySelectorAll('form.tab'))form.classList.toggle('active',form.id===name);if(name==='new-password')$('new-password').classList.add('active');}
 function err(e){msg(e?.message||'Có lỗi xảy ra. Vui lòng thử lại.','error');}
@@ -18,26 +19,28 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){resetFlow=true;selectTab('new-password');msg('Vui lòng đặt mật khẩu mới.');}setTimeout(()=>{status().catch(()=>{})},0)});
  const {data,error}=await client.auth.getSession();if(error)throw error;
  if(location.hash.includes('type=recovery')||new URLSearchParams(location.search).get('type')==='recovery'){resetFlow=true;selectTab('new-password');}
- await status();if(data.session?.user&&!resetFlow)selectTab('claim');
+ await status();if(data.session?.user&&!resetFlow){selectTab('claim');const pending=sessionStorage.getItem(pendingKey);if(pending){$('student-code').value=pending;if(data.session.user.email_confirmed_at)await claimStudent(pending);}}
 }
 tabs.forEach(t=>t.addEventListener('click',()=>selectTab(t.dataset.tab)));
 $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const email=$('reg-email').value.trim(),password=$('reg-password').value;
  if(password!==$('reg-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect()}});if(error)throw error;
- msg('Nếu đăng ký hợp lệ, Supabase sẽ gửi email xác minh. Hãy mở liên kết trong email, đăng nhập rồi chọn Kích hoạt.','success');
+ const code=$('reg-student-code').value.trim();if(!code||code.length>64)throw new Error('Mã định danh không hợp lệ.');
+ const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect()}});if(error)throw error;sessionStorage.setItem(pendingKey,code);$('student-code').value=code;
+ msg('Nếu đăng ký hợp lệ, Supabase sẽ gửi email xác minh. Hãy mở liên kết trong email. Sau khi xác minh, hệ thống sẽ thử liên kết hồ sơ; nếu cần, hãy đăng nhập và chọn Liên kết hồ sơ.','success');
 });});
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const {error}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;
- await status();selectTab('claim');msg('Đăng nhập thành công. Nếu chưa liên kết hồ sơ, hãy nhập mã định danh và mã kích hoạt.','success');
+ await status();selectTab('claim');const pending=sessionStorage.getItem(pendingKey);if(pending){$('student-code').value=pending;await claimStudent(pending);}else msg('Đăng nhập thành công. Nếu chưa liên kết hồ sơ, hãy nhập mã định danh.','success');
 });});
-$('claim').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const user=await current();if(!user)throw new Error('Bạn cần đăng nhập trước khi kích hoạt.');
- if(!user.email_confirmed_at)throw new Error('Bạn phải xác minh email trước khi kích hoạt.');
- const {data,error}=await client.functions.invoke('student-claim',{body:{student_code:$('student-code').value.trim(),activation_code:$('activation-code').value.trim().toLowerCase()}});
- if(error||!data?.ok)throw new Error(data?.error||'Kích hoạt chưa thành công. Kiểm tra mã kích hoạt hoặc liên hệ nhà trường.');
- $('activation-code').value='';await status();msg('Kích hoạt thành công. Chức năng xem điểm sẽ được mở ở bản nâng cấp sau.','success');
-});});
+async function claimStudent(code){
+ const user=await current();if(!user)throw new Error('Bạn cần đăng nhập trước khi liên kết hồ sơ.');
+ if(!user.email_confirmed_at)throw new Error('Bạn phải xác minh email trước khi liên kết hồ sơ.');
+ const {data,error}=await client.functions.invoke('student-claim',{body:{student_code:code}});
+ if(error||!data?.ok)throw new Error(data?.error||'Không thể liên kết hồ sơ. Mã định danh có thể đã được đăng ký.');
+ sessionStorage.removeItem(pendingKey);await status();msg('Liên kết hồ sơ thành công. Chức năng xem điểm chưa được mở.','success');
+}
+$('claim').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,()=>claimStudent($('student-code').value.trim()));});
 $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const {error}=await client.auth.resetPasswordForEmail($('recover-email').value.trim(),{redirectTo:redirect()});if(error)throw error;
  msg('Nếu email đã đăng ký, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.','success');
