@@ -32,8 +32,34 @@ async function loadStudentExams(active){
   const title=document.createElement('strong');
   title.textContent=item.exam_name||'Kỳ thi';
   const detail=document.createElement('p');
-  detail.textContent='Khối: '+(item.grade_code||'Chưa xác định')+' · '+(item.is_published?'Đã công bố (chưa mở tra cứu điểm)':'Chưa công bố');
-  card.append(title,detail);list.append(card);
+  detail.textContent='Khối: '+(item.grade_code||'Chưa xác định')+' · '+(item.is_published?'Đã công bố':'Chưa công bố');
+  card.append(title,detail);
+  if(item.is_published && item.exam_id){
+   const btn=document.createElement('button');btn.type='button';btn.className='secondary';btn.textContent='Xem điểm đã công bố';
+   const result=document.createElement('div');result.setAttribute('aria-live','polite');
+   btn.addEventListener('click',async()=>{
+    btn.disabled=true;result.textContent='Đang kiểm tra quyền xem điểm...';
+    try{
+     const {data:scores,error:e}=await client.rpc('exam_student_my_published_scores',{p_exam_id:item.exam_id});
+     if(e){result.textContent=e.code==='42501'?'Chưa được nhà trường xác minh quyền xem điểm. Vui lòng liên hệ quản trị viên.':'Không thể tải điểm: '+e.message;return;}
+     result.replaceChildren();
+     if(!Array.isArray(scores)||!scores.length){result.textContent='Chưa có kết quả được phép hiển thị.';return;}
+     const table=document.createElement('table');table.style.width='100%';table.style.marginTop='10px';
+     const header=document.createElement('tr');
+     for(const text of ['Môn','Trắc nghiệm','Tự luận','Tổng','Ghi chú']){const th=document.createElement('th');th.textContent=text;header.appendChild(th);}table.appendChild(header);
+     const fmt=v=>v===null||v===undefined?'—':String(v);
+     for(const score of scores){
+      const tr=document.createElement('tr');
+      const note=score.is_absent?'Vắng thi':score.no_paper?'Không có bài':score.essay_missing||score.mcq_missing?'Thiếu điểm':'';
+      for(const value of [score.subject_code,fmt(score.mcq_score),fmt(score.essay_score),fmt(score.total_score),note]){const td=document.createElement('td');td.textContent=value;td.style.padding='6px 3px';tr.appendChild(td);}table.appendChild(tr);
+     }
+     result.appendChild(table);
+    }catch(ex){result.textContent='Không tải được điểm: '+(ex?.message||'Lỗi không xác định');}
+    finally{btn.disabled=false;}
+   });
+   card.append(btn,result);
+  }
+  list.append(card);
  }
 }
 
