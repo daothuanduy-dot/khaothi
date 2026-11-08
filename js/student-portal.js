@@ -4,6 +4,7 @@ const tabs=[...document.querySelectorAll('[data-tab]')];
 let client=null,resetFlow=false;
 const pendingKey="exam-student-pending-code-v276";
 let isActive=false;
+let examLoadSequence=0;
 function pendingGet(email){try{const p=JSON.parse(sessionStorage.getItem(pendingKey)||"null");return p?.email?.toLowerCase()===email?.toLowerCase()?p.code:null;}catch{return null;}}
 function pendingSave(email,code){sessionStorage.setItem(pendingKey,JSON.stringify({email,code}));}
 function pendingClear(){sessionStorage.removeItem(pendingKey);}
@@ -12,6 +13,7 @@ function reasonMessage(reason){switch(reason){case "already_linked":return "Tài
 function msg(s,kind='info'){const el=$('message');el.textContent=s;el.className='message'+(kind==='error'?' error':kind==='success'?' success':'');el.classList.toggle('hidden',!s);}
 
 async function loadStudentExams(active){
+ const sequence=++examLoadSequence;
  const section=$('student-exams');
  if(!section)return;
  section.classList.toggle('hidden',!active);
@@ -21,8 +23,16 @@ async function loadStudentExams(active){
  list.replaceChildren();
  info.textContent='Đang tải danh sách kỳ thi...';
  const {data,error}=await client.rpc('exam_student_my_exam_list');
+ if(sequence!==examLoadSequence)return;
  if(error){info.textContent='Chưa tải được danh sách kỳ thi. Kiểm tra SQL v0.1.280.';return;}
- const items=Array.isArray(data)?data:[];
+ const rawItems=Array.isArray(data)?data:[];
+ const seen=new Set();
+ const items=rawItems.filter(item=>{
+  const key=String(item.exam_id||'').trim();
+  if(!key)return true;
+  if(seen.has(key))return false;
+  seen.add(key);return true;
+ });
  if(!items.length){info.textContent='Chưa tìm thấy kỳ thi liên kết với hồ sơ này.';return;}
  info.textContent=`Có ${items.length} kỳ thi.`;
  for(const item of items){
