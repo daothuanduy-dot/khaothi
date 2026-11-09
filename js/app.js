@@ -1,6 +1,6 @@
 
 // v0.1.313: Public Cloudflare Turnstile Site Key only. Never expose the Secret Key.
-const EXAM_TURNSTILE_SITE_KEY='0x4AAAAAAF5vV0YOT5lSN8_Y';
+const EXAM_TURNSTILE_SITE_KEY='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY';
 let examLoginCaptchaId=null;
 function examLoginCaptchaRender(){
  const el=document.getElementById('admin-login-captcha'),hint=document.getElementById('admin-captcha-help');
@@ -3612,7 +3612,7 @@ async function boot(){
         nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
       nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
     }
-    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.267');
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.314');
     wireClassResultsExport({state,$,esc,message});
   }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();
