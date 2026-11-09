@@ -156,7 +156,7 @@ export function statisticsTableHtml(table,esc,scoreColumns=[]){
  const rowHtml=(row,r)=>`<tr${r===table.rows.length-1&&row[0]==='TB các lớp'?' class="report-footer"':''}>${row.map((value,c)=>{
   if(covered.has(`${r}:${c}`))return '';const m=starts.get(`${r}:${c}`),tag=r<2?'th':'td';
   const text=value==null?'':typeof value==='number'&&scoreColumns.includes(c)?value.toFixed(table.scoreDecimals??3):value;
-  return `<${tag}${m?` rowspan="${m.e.r-m.s.r+1}" colspan="${m.e.c-m.s.c+1}"`:''}>${esc(text).replace(/\n/g,'<br>')}</${tag}>`;
+  return `<${tag}${['subjectHeader','subHeader','groupAverage','footer'].includes(table.kinds?.[r])?' style="font-weight:bold"':''}${m?` rowspan="${m.e.r-m.s.r+1}" colspan="${m.e.c-m.s.c+1}"`:''}>${esc(text).replace(/\n/g,'<br>')}</${tag}>`;
  }).join('')}</tr>`;
  return `<table><thead>${table.rows.slice(0,2).map(rowHtml).join('')}</thead><tbody>${table.rows.slice(2).map((r,i)=>rowHtml(r,i+2)).join('')}</tbody></table>`;
 }
@@ -211,18 +211,18 @@ export function defaultStatisticsSheet(block){
  const allCounted=c=>c.subjects.filter(s=>s.is_counted===true);
  const totalFor=c=>{const list=allCounted(c);if(!list.length||list.some(s=>!validSubject(s)||Number(s.missing_count)>0))return {total:null,mean:null};const total=list.reduce((n,s)=>n+Number(s.average_score),0);return {total,mean:total/list.length}};
  const rankMap=new Map();for(const id of groupIds){const members=groupClasses(id).map(c=>({...c,summary:totalFor(c)})).filter(c=>c.summary.mean!==null).sort((a,b)=>b.summary.mean-a.summary.mean);let rank=0,last=null;members.forEach((c,i)=>{if(last===null||c.summary.mean!==last)rank=block.dense?rank+1:i+1;rankMap.set(c.class_code,rank);last=c.summary.mean})}
- const header=(codes)=>{const first=['Lớp / GVCN'],second=[''];for(let j=0;j<slots;j++){const code=codes[j];first.push(code?(['KTPL','GDKTPL'].includes(code)?'KTPL':(classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)):'','');second.push(code?'ĐTB':'',code?'XT':'')};first.push('Tổng','TB','XT theo ban','Tăng/Giảm');second.push('','','','');const r=push(first,'subjectHeader');push(second,'subHeader');merge(r,0,0,r+1);for(let j=0;j<slots;j++)merge(r,1+j*2,2+j*2);for(let c=width-4;c<width;c++)merge(r,c,c,r+1)};
+ const header=(codes,groupIndex=0)=>{const first=['Lớp / GVCN'],second=[''];for(let j=0;j<slots;j++){const code=codes[j];first.push(code&&(groupIndex===0||!common.includes(code))?(['KTPL','GDKTPL'].includes(code)?'KTPL':(classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)):'','');second.push(code&&(groupIndex===0||!common.includes(code))?'ĐTB':'',code&&(groupIndex===0||!common.includes(code))?'XT':'')};first.push(...(groupIndex===0?['Tổng','TB','XT theo ban','Tăng/Giảm']:['','','','']));second.push('','','','');const r=push(first,'subjectHeader');push(second,'subHeader');merge(r,0,0,r+1);for(let j=0;j<slots;j++)merge(r,1+j*2,2+j*2);for(let c=width-4;c<width;c++)merge(r,c,c,r+1)};
  for(let gi=0;gi<groupIds.length;gi++){
   const id=groupIds[gi],members=groupClasses(id),codes=[...common,...local[gi]];
-  header(codes);
+  header(codes,gi);
   for(const c of members){const r=rows.length,home=c.homeroom_teacher==='Chưa phân công'?'':c.homeroom_teacher||'';const top=[c.class_code+(home?'\n'+home:'')],teachers=[''];
    for(let j=0;j<slots;j++){const code=codes[j],s=code?countedSubject(c,code):null;top.push(s?.average_score??'',s?.rank??'');teachers.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');if(s?.average_score!=null)scoreCells.push({r,c:1+j*2});merge(r+1,1+j*2,2+j*2)}
    const summary=totalFor(c),rank=rankMap.get(c.class_code)??null,previous=block.previousRanks?.get(c.class_code),delta=previous!=null&&rank!=null?previous-rank:'';
-   top.push(summary.total??'',summary.mean??'',rank??'',delta);teachers.push('','','','');push(top,'class');push(teachers,'teacher');merge(r,0,0,r+1);for(let j=width-4;j<width;j++)merge(r,j,j,r+1);if(summary.total!==null){scoreCells.push({r,c:width-4},{r,c:width-3})}
+   top.push(...(gi===0?[summary.total??'',summary.mean??'',rank??'',delta]:['','','','']));teachers.push('','','','');push(top,'class');push(teachers,'teacher');merge(r,0,0,r+1);for(let j=width-4;j<width;j++)merge(r,j,j,r+1);if(gi===0&&summary.total!==null){scoreCells.push({r,c:width-4},{r,c:width-3})}
   }
-  const r=rows.length,avg=[''];for(let j=0;j<slots;j++){const code=codes[j],a=code&&!isGradeScope(code)?weightedAverage(members,code):'';avg.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}avg.push('','','','');if(avg.some((v,i)=>i>0&&v!==''))push(avg,'groupAverage');
+  if(gi<groupIds.length-1){const r=rows.length,avg=[''];for(let j=0;j<slots;j++){const code=codes[j],a=code&&!isGradeScope(code)?weightedAverage(members,code):'';avg.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}avg.push('','','','');if(avg.some((v,i)=>i>0&&v!==''))push(avg,'groupAverage');}
  }
- const r=rows.length,footer=['ĐTB các lớp'];for(let j=0;j<slots;j++){const code=common[j]||null,a=code&&isGradeScope(code)?weightedAverage(classes,code):'';footer.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}footer.push('','','','');push(footer,'footer');
+ const r=rows.length,footer=['ĐTB các lớp'];for(let j=0;j<slots;j++){const code=j<common.length?common[j]:local[groupIds.length-1]?.[j-common.length],a=code?(isGradeScope(code)?weightedAverage(classes,code):weightedAverage(groupClasses(groupIds[groupIds.length-1]),code)):'';footer.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}footer.push('','','','');push(footer,'footer');
  return {rows,merges,width,scoreCells,scoreDecimals:3,kinds,groupIds};
 }
 
@@ -348,7 +348,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     const choice=['subject','choice'].includes(payload.exam_mode);
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
       @page{size:A4 landscape;margin:5mm}body{font:8pt 'Times New Roman',serif;margin:0;line-height:1.05}h2,h3{text-align:center;margin:1mm 0;font-size:11pt;line-height:1.05}table{border-collapse:collapse;width:100%;font-size:8pt;line-height:1.05}th,td{border:1px solid #000;padding:0.35mm 0.3mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.report-footer{break-before:avoid;page-break-before:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
-      .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:1mm;font-size:10pt;line-height:1.05}.school-year{text-align:center;font-size:8pt;margin:0 0 1mm}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.class-statistics thead tr:first-child th:first-child{width:18mm}.extra-statistics{background:#ddd;margin-bottom:1.5mm!important;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}
+      .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:1mm;font-size:10pt;line-height:1.05}.school-year{text-align:center;font-size:8pt;margin:0 0 1mm}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.class-statistics thead tr:first-child th:first-child{width:18mm}.extra-statistics{background:#ddd;margin-bottom:1.5mm!important;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}.class-statistics tr:has(th),.class-statistics tr.report-footer{font-weight:bold}
       </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):visibleBlocks().map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,Array.from({length:(defaultStatisticsSheet(b).width-5)/2},(_,i)=>1+i*2).concat([defaultStatisticsSheet(b).width-4,defaultStatisticsSheet(b).width-3]))}</div>`).join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   };
   $('class-report-export').onclick=()=>{
@@ -363,6 +363,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
         const position=window.XLSX.utils.decode_cell(address);
         const decimals=scoreCells.get(`${position.r}:${position.c}`);cell.z=decimals==null?'0':'0.'+'0'.repeat(decimals);
       }
+      if(block.defaultStatistics){for(let r=0;r<4;r++)for(let c=0;c<table.width;c++){const a=window.XLSX.utils.encode_cell({r,c});const cell=ws[a];if(cell)cell.s={font:{name:'Times New Roman',sz:r===2?13:10,bold:true,color:{rgb:'000000'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}}}}
       ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?19:i>=table.width-4?11:i%2===1?10:6}));
       if(block.defaultStatistics){
         const border={top:{style:'thin',color:{rgb:'000000'}},bottom:{style:'thin',color:{rgb:'000000'}},left:{style:'thin',color:{rgb:'000000'}},right:{style:'thin',color:{rgb:'000000'}}};
