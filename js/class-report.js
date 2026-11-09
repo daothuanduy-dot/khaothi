@@ -1,6 +1,6 @@
 import {loadVanRows,enrichClassVan} from './van-report-fallback.js';
 export function classReportSubjectOrder(codes){
- const order={VAN:0,TOAN:1,N1:2,ANH:2,LY:3,LI:3,HOA:4,SINH:5,SU:6,DIA:7,KTPL:8,GDKTPL:8,N4:9,TRUNG:9,N5:10,DUC:10};
+ const order={VAN:0,TOAN:1,N1:2,ANH:2,LY:3,LI:3,HOA:4,SINH:5,SU:6,DIA:7,KTPL:8,GDKTPL:8,TIN:9,N4:10,TRUNG:10,N5:11,DUC:11};
  return [...new Set(codes)].sort((a,b)=>(order[a]??99)-(order[b]??99)||a.localeCompare(b,'vi',{numeric:true}));
 }
 export function defaultHiddenClassSubjects(codes){return new Set(codes.filter(code=>['N4','N5','TRUNG','DUC'].includes(code)))}
@@ -162,7 +162,16 @@ export function statisticsTableHtml(table,esc,scoreColumns=[]){
 }
 
 
-// Default-exam statistical sheet: one table for the grade, with per-subject ranking scopes.
+// Default exam: only class/subject pairs explicitly marked is_counted may
+// participate in the report, ranks, and group averages. A class can have
+// both natural- and social-science subjects; no ban-wide assumption is made.
+const countedSubject=(c,code)=>c.subjects?.find(s=>s.subject_code===code&&s.is_counted===true);
+const validSubject=s=>s&&s.average_score!=null&&Number.isFinite(Number(s.average_score))&&Number(s.included_count)>0&&!s.error;
+const weightedAverage=(classes,code)=>{
+ const entries=classes.map(c=>countedSubject(c,code)).filter(validSubject);
+ const n=entries.reduce((sum,s)=>sum+Number(s.included_count),0);
+ return n?entries.reduce((sum,s)=>sum+Number(s.average_score)*Number(s.included_count),0)/n:'';
+};
 export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,subjectOrder=[],hiddenSubjects=new Set(),scopes={},rankGroups=[],dense=false}={}){
  const classes=(data.classes||[]).filter(c=>!grade||c.grade_code===grade);
  const groups=rankGroups.filter(g=>Array.isArray(g)&&g.length);
@@ -172,26 +181,38 @@ export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,
   const bi=groupOf.has(b.class_code)?groupOf.get(b.class_code):groups.length;
   return ai-bi||a.class_code.localeCompare(b.class_code,'vi',{numeric:true});
  });
- const codes=subjectOrder.filter(code=>!hiddenSubjects.has(code)&&classes.some(c=>c.subjects?.some(s=>s.subject_code===code)));
+ const codes=subjectOrder.filter(code=>!hiddenSubjects.has(code)&&classes.some(c=>countedSubject(c,code)));
  const ranks=new Map();
  for(const code of codes){
   const scope=scopes[code]||(['VAN','TOAN','N1','ANH'].includes(code)?'grade':'group');
-  const candidates=classes.filter(c=>{const s=c.subjects?.find(x=>x.subject_code===code);return s&&s.average_score!=null&&Number.isFinite(Number(s.average_score))&&Number(s.included_count)>0&&!s.error&&!s.missing_count;});
+  const candidates=classes.filter(c=>{const s=countedSubject(c,code);return validSubject(s)&&!Number(s.missing_count);});
   const buckets=new Map();for(const c of candidates){const key=scope==='grade'?'grade:'+c.grade_code:groupOf.has(c.class_code)?'group:'+c.grade_code+':'+groupOf.get(c.class_code):null;if(key===null)continue;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(c)}
   const byClass=new Map();for(const bucket of buckets.values()){
-   const sorted=bucket.sort((a,b)=>Number(b.subjects.find(s=>s.subject_code===code).average_score)-Number(a.subjects.find(s=>s.subject_code===code).average_score));
-   let rank=0,last=null;sorted.forEach((c,i)=>{const score=Number(c.subjects.find(s=>s.subject_code===code).average_score);if(last===null||score!==last)rank=dense?rank+1:i+1;byClass.set(c.class_code,rank);last=score});
+   const sorted=bucket.sort((a,b)=>Number(countedSubject(b,code).average_score)-Number(countedSubject(a,code).average_score));
+   let rank=0,last=null;sorted.forEach((c,i)=>{const score=Number(countedSubject(c,code).average_score);if(last===null||score!==last)rank=dense?rank+1:i+1;byClass.set(c.class_code,rank);last=score});
   }ranks.set(code,byClass);
  }
  const chosen=selectedClasses===null?ordered:ordered.filter(c=>selectedClasses.includes(c.class_code));
- return {choice:false,defaultStatistics:true,name:'Thống kê kỳ thi mặc định',grade_code:grade||[...new Set(classes.map(c=>c.grade_code))].join(', '),codes,classes:chosen.map(c=>({...c,subjects:c.subjects.map(s=>({...s,rank:ranks.get(s.subject_code)?.get(c.class_code)??null}))})),groupOf};
+ return {choice:false,defaultStatistics:true,name:'Thống kê kỳ thi mặc định',grade_code:grade||[...new Set(classes.map(c=>c.grade_code))].join(', '),codes,classes:chosen.map(c=>({...c,subjects:c.subjects.map(s=>({...s,rank:s.is_counted===true?ranks.get(s.subject_code)?.get(c.class_code)??null:null}))})),groupOf};
 }
 export function defaultStatisticsSheet(block){
- const width=1+block.codes.length*2,rows=[['Lớp / GVCN'],['']],merges=[{s:{r:0,c:0},e:{r:1,c:0}}];
+ const width=1+block.codes.length*2,rows=[['Lớp / GVCN'],['']],merges=[{s:{r:0,c:0},e:{r:1,c:0}}],scoreCells=[];
  for(const code of block.codes){const col=rows[0].length;rows[0].push(block.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code,'');rows[1].push('ĐTB','XH');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}})}
- for(const c of block.classes){const r=rows.length,top=[c.class_code+(c.homeroom_teacher&&c.homeroom_teacher!=='Chưa phân công'?'\n'+c.homeroom_teacher:'')],bottom=[''];for(const code of block.codes){const s=c.subjects.find(x=>x.subject_code===code);top.push(s?.average_score??'',s?.rank??'');bottom.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');merges.push({s:{r:r+1,c:top.length-2},e:{r:r+1,c:top.length-1}})}rows.push(top,bottom);merges.push({s:{r,c:0},e:{r:r+1,c:0}})}
- const footer=['TB các lớp'];for(const code of block.codes){const valid=block.classes.flatMap(c=>c.subjects.filter(s=>s.subject_code===code&&s.average_score!=null&&Number(s.included_count)>0));const n=valid.reduce((v,s)=>v+Number(s.included_count),0);footer.push(n?valid.reduce((v,s)=>v+Number(s.average_score)*Number(s.included_count),0)/n:'','')}rows.push(footer);
- return {rows,merges,width,scoreCells:rows.flatMap((r,i)=>i<2?[]:block.codes.map((_,j)=>({r:i,c:1+j*2})))};
+ const pushAverage=(label,classes)=>{
+  const r=rows.length,row=[label];for(const code of block.codes){const avg=weightedAverage(classes,code);row.push(avg,'');if(avg!=='')scoreCells.push({r,c:row.length-2})}rows.push(row);
+ };
+ let previousGroup=null,groupClasses=[];
+ for(const c of block.classes){
+  const group=block.groupOf.has(c.class_code)?block.groupOf.get(c.class_code):'unassigned';
+  if(previousGroup!==null&&group!==previousGroup){pushAverage(previousGroup==='unassigned'?'TB các lớp chưa phân nhóm':`TB nhóm ${Number(previousGroup)+1}`,groupClasses);groupClasses=[];}
+  previousGroup=group;groupClasses.push(c);
+  const r=rows.length,top=[c.class_code+(c.homeroom_teacher&&c.homeroom_teacher!=='Chưa phân công'?'\n'+c.homeroom_teacher:'')],bottom=[''];
+  for(const code of block.codes){const s=countedSubject(c,code);top.push(s?.average_score??'',s?.rank??'');bottom.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');merges.push({s:{r:r+1,c:top.length-2},e:{r:r+1,c:top.length-1}});if(s?.average_score!=null)scoreCells.push({r,c:top.length-2})}
+  rows.push(top,bottom);merges.push({s:{r,c:0},e:{r:r+1,c:0}});
+ }
+ if(groupClasses.length)pushAverage(previousGroup==='unassigned'?'TB các lớp chưa phân nhóm':`TB nhóm ${Number(previousGroup)+1}`,groupClasses);
+ pushAverage('TB các lớp',block.classes);
+ return {rows,merges,width,scoreCells,scoreDecimals:3};
 }
 
 export function wireClassReport({state,$,esc,message,createPrintFrame}){
@@ -280,7 +301,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
-      message($('class-report-message'),data.exam_mode!=='default'?'SL là số học sinh dự thi, không tính vắng. TB bài thi = trung bình các ĐTB môn của lớp có điểm được tính, không tính trọng số sĩ số. XH từng môn và XH TB so trong cùng khối, dùng điểm chưa làm tròn; lớp thiếu điểm chưa có TB/XH TB. Dòng TB các lớp = trung bình ĐTB các lớp, không tính trọng số học sinh.':!data.period_id?'Chưa liên kết học kỳ phân công. Thiết lập tại Cấu hình kỳ thi.':'Đã tải báo cáo. Thứ hạng chỉ so sánh trong từng ban.','info');render();
+      message($('class-report-message'),data.exam_mode!=='default'?'SL là số học sinh dự thi, không tính vắng. TB bài thi = trung bình các ĐTB môn của lớp có điểm được tính, không tính trọng số sĩ số. XH từng môn và XH TB so trong cùng khối, dùng điểm chưa làm tròn; lớp thiếu điểm chưa có TB/XH TB. Dòng TB các lớp = trung bình ĐTB các lớp, không tính trọng số học sinh.':!data.period_id?'Chưa liên kết học kỳ phân công. Thiết lập tại Cấu hình kỳ thi.':'Đã tải báo cáo. Chỉ thống kê môn/lớp được đánh dấu Tính điểm tổng hợp; TB từng nhóm nằm ngay sau lớp cuối nhóm.','info');render();
     }catch(e){if(token===request)message($('class-report-message'),e.message,'error')}
     finally{$('class-report-load').disabled=false}
   };
@@ -306,7 +327,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
       @page{size:A4 landscape;margin:5mm}body{font:8pt 'Times New Roman',serif;margin:0;line-height:1.05}h2,h3{text-align:center;margin:1mm 0;font-size:11pt;line-height:1.05}table{border-collapse:collapse;width:100%;font-size:8pt;line-height:1.05}th,td{border:1px solid #000;padding:0.35mm 0.3mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.report-footer{break-before:avoid;page-break-before:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
       .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:1mm;font-size:10pt;line-height:1.05}.school-year{text-align:center;font-size:8pt;margin:0 0 1mm}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.class-statistics thead tr:first-child th:first-child{width:18mm}.extra-statistics{background:#ddd;margin-bottom:1.5mm!important;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}
-      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):$('class-report-results').innerHTML}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
+      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):visibleBlocks().map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,b.codes.map((_,i)=>1+i*2))}</div>`).join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   };
   $('class-report-export').onclick=()=>{
     if(!payload||key!==context()){clear();return}
@@ -320,13 +341,14 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
         const position=window.XLSX.utils.decode_cell(address);
         const decimals=scoreCells.get(`${position.r}:${position.c}`);cell.z=decimals==null?'0':'0.'+'0'.repeat(decimals);
       }
-      ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?23:14}));
+      ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?24:i%2===1?12:7}));
+      if(block.defaultStatistics){ws['!rows']=table.rows.map((row,i)=>({hpt:i<5?22:row[0]&&String(row[0]).startsWith('TB ')?22:row[0]&&String(row[0]).includes('\n')?30:18}));ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToWidth:1,fitToHeight:1};ws['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.1,footer:0.1};}
       window.XLSX.utils.book_append_sheet(wb,ws,`${++index} ${block.name}`.replace(/[\\/?*\[\]:]/g,' ').slice(0,31));
     }
     window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet([
       ['Kỳ thi',exam?.name||state.selectedExam],['Năm học',exam?.school_year||''],['Học kỳ phân công',payload.period_id||'Chưa liên kết'],
       ['Hiển thị môn',options().allSubjects?'Tất cả môn':'Môn tính điểm'],['Tính vắng',payload.exam_mode==='default'?false:!!$('class-report-absent').checked],['Tính vi phạm',payload.exam_mode==='default'?true:!!$('class-report-violations').checked],
-      ['Đồng hạng',options().dense?'1,1,2':'1,1,3'],['Cách tính và xếp hạng',policy()],['Lớp hiển thị',selectedClasses?.join(', ')||'Không chọn lớp'],['TB các lớp',options().byPaper?'Tổng điểm / tổng số bài được tính của các lớp có TB hợp lệ':'Trung bình ĐTB lớp; không trọng số sĩ số'],['SL','Học sinh dự thi, không tính vắng'],...(extraMax()&&payload.exam_mode!=='default'?[['Max','Điểm thống kê cao nhất của học sinh dự thi theo lựa chọn xử lý vi phạm']]:[])
+      ['Đồng hạng',options().dense?'1,1,2':'1,1,3'],['Cách tính và xếp hạng',policy()],['Lớp hiển thị',selectedClasses?.join(', ')||'Không chọn lớp'],['TB các lớp',payload.exam_mode==='default'?'Trung bình có trọng số theo số điểm hợp lệ, chỉ môn/lớp is_counted=true':'Trung bình ĐTB lớp theo cấu hình'],['SL',payload.exam_mode==='default'?'Không hiển thị trên biểu':'Học sinh dự thi, không tính vắng'],...(extraMax()&&payload.exam_mode!=='default'?[['Max','Điểm thống kê cao nhất của học sinh dự thi theo lựa chọn xử lý vi phạm']]:[])
     ]),'Thong tin');
     window.XLSX.writeFile(wb,`thong-ke-lop-${state.selectedExam}.xlsx`);
   };
