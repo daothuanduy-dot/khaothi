@@ -1,4 +1,4 @@
-// v0.1.299: isolated, read-only class results export. No database mutations.
+// v0.1.317: class results export; compact subjects come from per-class exam configuration (read-only).
 export function wireClassResultsExport({state, $, esc, message}) {
   const subjectNames={TOAN:'Toán',VAN:'Ngữ văn',N1:'Tiếng Anh',ANH:'Tiếng Anh',LY:'Vật lí',HOA:'Hóa học',SU:'Lịch sử',DIA:'Địa lí',KTPL:'GDKT&PL',GDKTPL:'GDKT&PL',SINH:'Sinh học',TIN:'Tin học'};
   let codes=['VAN','TOAN','N1','LY','HOA','SINH','SU','DIA','KTPL','TIN'], chosen=new Set(codes), payload=null, loadedExam='';
@@ -38,7 +38,7 @@ export function wireClassResultsExport({state, $, esc, message}) {
     <button type="button" class="btn btn-light" data-reset-print>Khôi phục mặc định</button>
     <small style="flex-basis:100%;color:#64748b">Các cột môn thi có độ rộng bằng nhau. Cấu hình được lưu trên trình duyệt này; nếu bảng quá rộng, hãy chọn A3 hoặc giảm số môn in.</small>`;
   const previewEl=$('class-results-preview');
-  const options=document.createElement('div');options.innerHTML='<label style="display:inline-flex;gap:8px;align-items:center;margin:8px 0"><input id="class-results-identifier" type="checkbox"> Xuất kèm Mã định danh Bộ GDĐT</label><p style="font-size:12px;color:#64748b;margin:4px 0">Mẫu rút gọn chỉ xuất các môn đã cấu hình cho lớp thuộc nhóm xếp SBD. Môn được chọn nhưng không thuộc cấu hình lớp sẽ tự ẩn.</p>';
+  const options=document.createElement('div');options.innerHTML='<label style="display:inline-flex;gap:8px;align-items:center;margin:8px 0"><input id="class-results-identifier" type="checkbox"> Xuất kèm Mã định danh Bộ GDĐT</label><p style="font-size:12px;color:#64748b;margin:4px 0">Mẫu rút gọn chỉ xuất môn đã cấu hình cho từng lớp trong kỳ thi. Không phụ thuộc dữ liệu nhóm SBD lưu trên trình duyệt.</p>';
   $subject.parentNode.insertBefore(options,$subject);
   try{const saved=JSON.parse(localStorage.getItem(exportKey)||'{}');$('class-results-identifier').checked=!!saved.includeId;if(['detail','compact'].includes(saved.layout))$('class-results-layout').value=saved.layout;}catch(_e){}
   $('class-results-identifier').addEventListener('change',()=>{saveExport();if(payload)preview();});
@@ -66,26 +66,22 @@ export function wireClassResultsExport({state, $, esc, message}) {
   function studentId(c){return String(c.student_code??'');}
   function subjectCodesForClass(cls){
     if(!isCompact())return selectedCodes();
-    if(!payload?.groupMap?.has(cls))throw Error(`Lớp ${cls} chưa thuộc nhóm lớp xếp SBD đã lưu. Vui lòng kiểm tra cấu hình nhóm.`);
     const configured=payload.classSubjects.get(cls);
     if(!configured?.size)throw Error(`Lớp ${cls} chưa có cấu hình môn thi. Không thể xuất rút gọn.`);
-    return selectedCodes().filter(code=>configured.has(code));
+    const visible=selectedCodes().filter(code=>configured.has(code));
+    if(!visible.length)throw Error(`Lớp ${cls} không có môn nào trùng với các môn đang chọn. Hãy chọn thêm môn phù hợp.`);
+    return visible;
   }
   function headers(cls){return ['STT',...(includeId()?['Mã định danh Bộ GDĐT']:[]),'SBD','Họ và tên','Ngày sinh',...subjectCodesForClass(cls).map(c=>subjectNames[c]||c)];}
   function values(c,i,cls){const r=[i+1,...(includeId()?[studentId(c)]:[]),sbd(c),c.student_name||'',date(c.date_of_birth??c.birth_date)];for(const code of subjectCodesForClass(cls)){const item=payload.scores[code]?.get(c.id);r.push(item?.total_score??'');}return r;}
   function grouped(){const groups=new Map();for(const c of rows()){const key=c.class_code||'Chưa phân lớp';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}return groups;}
   function preview(){if(!payload)return;try{const groups=grouped(), first=[...groups][0];if(!first){previewEl.innerHTML='<p>Không có học sinh thuộc lớp đã chọn.</p>';return;}const [cls,list]=first;const h=headers(cls);previewEl.innerHTML=`<p>${rows().length} học sinh · ${isCompact()?'Mẫu rút gọn theo nhóm lớp':'Mẫu chi tiết'} · ${includeId()?'Có mã định danh':'Không có mã định danh'} · ${subjectCodesForClass(cls).length} môn ở lớp ${esc(cls)}</p><table><thead><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${list.slice(0,30).map((c,i)=>`<tr>${values(c,i,cls).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table><p>Hiển thị tối đa 30 dòng của lớp đầu tiên; xuất đầy đủ danh sách theo từng lớp.</p>`;}catch(e){previewEl.textContent=e.message;}}
   $('class-results-class').onchange=preview;$('class-results-layout').onchange=()=>{saveExport();preview();};
-  function parseGroups(text){return String(text||'').split(/\r?\n/).map(line=>line.split(/[,;]/).map(c=>c.trim()).filter(Boolean)).filter(g=>g.length);}
   async function readGroupAndSubjects(id,candidates){
     const classSubjects=new Map();let cfg=[];
     for(let from=0;;from+=750){const {data,error}=await state.client.from('exam_subject_class_configs').select('class_code,subject_code').eq('exam_id',id).range(from,from+749);if(error)throw Error('Không đọc được cấu hình môn theo lớp: '+error.message);cfg.push(...(data||[]));if((data||[]).length<750)break;}
     for(const x of cfg){const code=normalizeCode(x.subject_code);if(!classSubjects.has(x.class_code))classSubjects.set(x.class_code,new Set());classSubjects.get(x.class_code).add(code);}
-    const groupMap=new Map();let raw='';try{raw=localStorage.getItem('sbd-groups:'+id)||'';}catch(_e){}
-    if(!raw&&$('sbd-groups')?.dataset.examId===id)raw=$('sbd-groups').value;
-    const groups=parseGroups(raw);
-    for(let i=0;i<groups.length;i++)for(const cls of groups[i]){if(groupMap.has(cls))throw Error('Lớp '+cls+' bị khai báo trùng nhóm SBD.');groupMap.set(cls,i);}
-    return {classSubjects,groupMap,groupCount:groups.length};
+    return {classSubjects,configuredClassCount:classSubjects.size};
   }
   $('class-results-read').onclick=async()=>{invalidate();const id=examId();if(!id){message($('class-results-message'),'Hãy chọn kỳ thi trước.','error');return;}const button=$('class-results-read');button.disabled=true;message($('class-results-message'),'Đang đọc danh sách và điểm các môn…','info');try{
     const exam=state.exams.find(e=>e.id===id);if(exam?.exam_mode&&exam.exam_mode!=='default')throw Error('Chức năng này dành cho kỳ thi mặc định.');
@@ -93,10 +89,10 @@ export function wireClassResultsExport({state, $, esc, message}) {
     if(!candidates.length)throw Error('Kỳ thi không có thí sinh.');
     const config=await readGroupAndSubjects(id,candidates);
     const scores={};const failures=[];for(const code of codes){const {data,error}=await state.client.rpc('exam_get_subject_results',{p_exam_id:id,p_subject_code:code});if(error){if(/chưa cấu hình|không có cấu hình/i.test(error.message||'')){failures.push(code);continue;}throw error;}scores[code]=new Map((data||[]).map(r=>[r.candidate_id,r]));}
-    payload={candidates,scores,...config};loadedExam=id;const classes=[...new Set(candidates.map(c=>c.class_code).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));$('class-results-class').innerHTML='<option value="">Tất cả lớp</option>'+classes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');$('class-results-xlsx').disabled=false;$('class-results-pdf').disabled=false;preview();message($('class-results-message'),`Đã đọc ${candidates.length} học sinh, ${config.groupCount} nhóm SBD. ${failures.length?'Môn chưa cấu hình điểm: '+failures.join(', '):''}`,'success');
+    payload={candidates,scores,...config};loadedExam=id;const classes=[...new Set(candidates.map(c=>c.class_code).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));$('class-results-class').innerHTML='<option value="">Tất cả lớp</option>'+classes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');$('class-results-xlsx').disabled=false;$('class-results-pdf').disabled=false;preview();message($('class-results-message'),`Đã đọc ${candidates.length} học sinh, ${config.configuredClassCount} lớp có cấu hình môn. ${failures.length?'Môn chưa cấu hình điểm: '+failures.join(', '):''}`,'success');
   }catch(error){message($('class-results-message'),error.message||String(error),'error');}finally{button.disabled=false;}};
   function assertFresh(){if(!payload||loadedExam!==examId())throw Error('Kỳ thi đã thay đổi. Hãy đọc lại dữ liệu trước khi xuất.');if(!selectedCodes().length)throw Error('Hãy chọn ít nhất một môn.');}
-  function validateGroups(groups){if(!isCompact())return;for(const [cls] of groups){if(!payload.groupMap.has(cls))throw Error(`Lớp ${cls} chưa thuộc nhóm lớp xếp SBD đã lưu. Hãy cấu hình nhóm và đọc lại dữ liệu.`);subjectCodesForClass(cls);}}
+  function validateGroups(groups){if(!isCompact())return;for(const [cls] of groups)subjectCodesForClass(cls);}
   $('class-results-xlsx').onclick=()=>{try{assertFresh();if(!window.XLSX)throw Error('Chưa tải thư viện Excel.');const wb=XLSX.utils.book_new(),exam=state.exams.find(e=>e.id===loadedExam),groups=grouped();validateGroups(groups);for(const [cls,list] of groups){ensureSbd(list);const h=headers(cls),data=list.map((c,i)=>values(c,i,cls));const sheet=XLSX.utils.aoa_to_sheet([[`KẾT QUẢ ${exam?.name||''} — LỚP ${cls}`],h,...data]);sheet['!pageSetup']={paperSize:9,orientation:'landscape',fitToWidth:1,fitToHeight:0};sheet['!cols']=colWidths(subjectCodesForClass(cls).length).map(mm=>({wch:Math.max(9,Math.round(mm/2.2))}));for(let r=2;r<2+data.length;r++){for(const j of [1,...(includeId()?[2]:[])]){const addr=XLSX.utils.encode_cell({r,c:j});if(sheet[addr])sheet[addr].t='s';}}XLSX.utils.book_append_sheet(wb,sheet,String(cls).replace(/[\\/?*\[\]:]/g,'').slice(0,31)||'Lop');}XLSX.writeFile(wb,`ket-qua-ve-lop-${isCompact()?'rut-gon':'chi-tiet'}.xlsx`);}catch(e){message($('class-results-message'),e.message,'error');}};
   $('class-results-pdf').onclick=()=>{try{
     assertFresh();const exam=state.exams.find(e=>e.id===loadedExam);const groups=grouped();validateGroups(groups);for(const [,list] of groups)ensureSbd(list);
