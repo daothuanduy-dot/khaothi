@@ -128,7 +128,7 @@ export function maxScoreSections(block){
  const sections=[];for(let i=0;i<block.codes.length;i+=6){const codes=block.codes.slice(i,i+6);sections.push({...maxScoreSheet({...block,codes}),count:codes.length})}return sections;
 }
 export function statisticsExportSheet(block,header,{extra=false}={}){
- const main=classReportSheet(block),width=main.width,middle=Math.max(1,Math.floor(width/2)),top=[header.authority||''],second=[header.institution||''];
+ const main=block.defaultStatistics?defaultStatisticsSheet(block):classReportSheet(block),width=main.width,middle=Math.max(1,Math.floor(width/2)),top=[header.authority||''],second=[header.institution||''];
  top[middle]=header.exam_title||'';second[middle]=header.grade_label||'';
  const rows=[top,second,[header.report_title||''],['Năm học '+(header.school_year||'')],[]],merges=[],scoreCells=[];
  for(const r of [0,1])merges.push({s:{r,c:0},e:{r,c:middle-1}},{s:{r,c:middle},e:{r,c:width-1}});
@@ -144,7 +144,8 @@ export function statisticsExportSheet(block,header,{extra=false}={}){
   rows.push(...part,[]);
  }
  const offset=rows.length;rows.push(...main.rows);merges.push(...main.merges.map(m=>({s:{r:m.s.r+offset,c:m.s.c},e:{r:m.e.r+offset,c:m.e.c}})));
- for(let r=offset+2;r<rows.length;r++)for(let c=0;c<width;c++){
+ if(block.defaultStatistics){for(const p of main.scoreCells)scoreCells.push({r:p.r+offset,c:p.c});return {rows,merges,width,scoreCells};}
+ for(let r=offset+2;r<rows.length;r++)for(let c=0;c<width;c++){ 
   const tail=width-(block.choice?2:3),score=block.choice?(c>0&&c<tail&&(c-2)%3===0)||c===tail:(c>0&&c<tail&&c%2===1)||c===tail||c===tail+1;
   if(score&&typeof rows[r][c]==='number')scoreCells.push({r,c});
  }
@@ -160,8 +161,41 @@ export function statisticsTableHtml(table,esc,scoreColumns=[]){
  return `<table><thead>${table.rows.slice(0,2).map(rowHtml).join('')}</thead><tbody>${table.rows.slice(2).map((r,i)=>rowHtml(r,i+2)).join('')}</tbody></table>`;
 }
 
+
+// Default-exam statistical sheet: one table for the grade, with per-subject ranking scopes.
+export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,subjectOrder=[],hiddenSubjects=new Set(),scopes={},rankGroups=[],dense=false}={}){
+ const classes=(data.classes||[]).filter(c=>!grade||c.grade_code===grade);
+ const groups=rankGroups.filter(g=>Array.isArray(g)&&g.length);
+ const groupOf=new Map();groups.forEach((g,i)=>g.forEach(code=>groupOf.set(code,i)));
+ const ordered=[...classes].sort((a,b)=>{
+  const ai=groupOf.has(a.class_code)?groupOf.get(a.class_code):groups.length;
+  const bi=groupOf.has(b.class_code)?groupOf.get(b.class_code):groups.length;
+  return ai-bi||a.class_code.localeCompare(b.class_code,'vi',{numeric:true});
+ });
+ const codes=subjectOrder.filter(code=>!hiddenSubjects.has(code)&&classes.some(c=>c.subjects?.some(s=>s.subject_code===code)));
+ const ranks=new Map();
+ for(const code of codes){
+  const scope=scopes[code]||(['VAN','TOAN','N1','ANH'].includes(code)?'grade':'group');
+  const candidates=classes.filter(c=>{const s=c.subjects?.find(x=>x.subject_code===code);return s&&s.average_score!=null&&Number.isFinite(Number(s.average_score))&&Number(s.included_count)>0&&!s.error&&!s.missing_count;});
+  const buckets=new Map();for(const c of candidates){const key=scope==='grade'?'grade:'+c.grade_code:groupOf.has(c.class_code)?'group:'+c.grade_code+':'+groupOf.get(c.class_code):null;if(key===null)continue;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(c)}
+  const byClass=new Map();for(const bucket of buckets.values()){
+   const sorted=bucket.sort((a,b)=>Number(b.subjects.find(s=>s.subject_code===code).average_score)-Number(a.subjects.find(s=>s.subject_code===code).average_score));
+   let rank=0,last=null;sorted.forEach((c,i)=>{const score=Number(c.subjects.find(s=>s.subject_code===code).average_score);if(last===null||score!==last)rank=dense?rank+1:i+1;byClass.set(c.class_code,rank);last=score});
+  }ranks.set(code,byClass);
+ }
+ const chosen=selectedClasses===null?ordered:ordered.filter(c=>selectedClasses.includes(c.class_code));
+ return {choice:false,defaultStatistics:true,name:'Thống kê kỳ thi mặc định',grade_code:grade||[...new Set(classes.map(c=>c.grade_code))].join(', '),codes,classes:chosen.map(c=>({...c,subjects:c.subjects.map(s=>({...s,rank:ranks.get(s.subject_code)?.get(c.class_code)??null}))})),groupOf};
+}
+export function defaultStatisticsSheet(block){
+ const width=1+block.codes.length*2,rows=[['Lớp / GVCN'],['']],merges=[{s:{r:0,c:0},e:{r:1,c:0}}];
+ for(const code of block.codes){const col=rows[0].length;rows[0].push(block.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code,'');rows[1].push('ĐTB','XH');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}})}
+ for(const c of block.classes){const r=rows.length,top=[c.class_code+(c.homeroom_teacher&&c.homeroom_teacher!=='Chưa phân công'?'\n'+c.homeroom_teacher:'')],bottom=[''];for(const code of block.codes){const s=c.subjects.find(x=>x.subject_code===code);top.push(s?.average_score??'',s?.rank??'');bottom.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');merges.push({s:{r:r+1,c:top.length-2},e:{r:r+1,c:top.length-1}})}rows.push(top,bottom);merges.push({s:{r,c:0},e:{r:r+1,c:0}})}
+ const footer=['TB các lớp'];for(const code of block.codes){const valid=block.classes.flatMap(c=>c.subjects.filter(s=>s.subject_code===code&&s.average_score!=null&&Number(s.included_count)>0));const n=valid.reduce((v,s)=>v+Number(s.included_count),0);footer.push(n?valid.reduce((v,s)=>v+Number(s.average_score)*Number(s.included_count),0)/n:'','')}rows.push(footer);
+ return {rows,merges,width,scoreCells:rows.flatMap((r,i)=>i<2?[]:block.codes.map((_,j)=>({r:i,c:1+j*2})))};
+}
+
 export function wireClassReport({state,$,esc,message,createPrintFrame}){
-  let payload=null,key='',request=0,subjectOrder=[],hiddenSubjects=new Set(),selectedClasses=null,rankGroups=[];
+  let payload=null,key='',request=0,subjectOrder=[],hiddenSubjects=new Set(),selectedClasses=null,rankGroups=[],defaultScopes={};
   const groupStorageKey=()=>`class-report-rank-groups:${state.selectedExam}`;
   function renderGroups(){
     const root=$('class-report-rank-groups');if(!root||!payload)return;
@@ -184,12 +218,12 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   const header=()=>({...Object.fromEntries(headerFields.map(f=>[f,$('statistics-header-'+f)?.value||''])),grade_label:'Khối '+[...new Set(visibleBlocks().map(b=>b.grade_code).filter(Boolean))].join(', ')});
   const extraMax=()=>!!$('class-report-extra-max')?.checked;
   const scoreColumns=b=>[...b.codes.map((_,i)=>2+i*3),1+b.codes.length*3];
-  const currentSheet=classReportSheet;
+  const currentSheet=b=>b.defaultStatistics?defaultStatisticsSheet(b):classReportSheet(b);
   const choiceBlocksHtml=(blocks,forPrint=false)=>blocks.map(b=>`${!forPrint||blocks.length>1?`<h3>Khối ${esc(b.grade_code||'')}</h3>`:''}${extraMax()?`<div class="extra-statistics" style="background:#ddd;margin-bottom:4mm">${maxScoreSections(b).map(s=>`<div class="table-wrap" style="width:${s.count/Math.min(b.codes.length,6)*100}%;margin-left:auto">${statisticsTableHtml(s,esc,Array.from({length:s.count},(_,i)=>i*2+1))}</div>`).join('')}</div>`:''}<div class="table-wrap class-statistics">${statisticsTableHtml(currentSheet(b),esc,scoreColumns(b))}</div>`).join('');
-  const visibleBlocks=()=>rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))})).filter(b=>b.codes.length);
+  const visibleBlocks=()=>payload?.exam_mode==='default'?[buildDefaultStatisticsBlock(payload,{grade:options().grade,selectedClasses,subjectOrder,hiddenSubjects,scopes:defaultScopes,rankGroups,dense:options().dense})].filter(b=>b.codes.length&&b.classes.length):rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))})).filter(b=>b.codes.length);
   function renderSubjects(){
     const el=$('class-report-subjects');if(!el)return;
-    el.innerHTML=subjectOrder.map((code,i)=>`<div style="display:flex;align-items:center;gap:8px;margin:6px"><label><input type="checkbox" data-code="${esc(code)}" ${hiddenSubjects.has(code)?'':'checked'}> ${esc(payload.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</label><button type="button" data-move="-1" data-code="${esc(code)}" ${i===0?'disabled':''} aria-label="Đưa ${esc(code)} lên">↑</button><button type="button" data-move="1" data-code="${esc(code)}" ${i===subjectOrder.length-1?'disabled':''} aria-label="Đưa ${esc(code)} xuống">↓</button></div>`).join('');
+    el.innerHTML=subjectOrder.map((code,i)=>`<div style="display:flex;align-items:center;gap:8px;margin:6px"><label><input type="checkbox" data-code="${esc(code)}" ${hiddenSubjects.has(code)?'':'checked'}> ${esc(payload.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</label><button type="button" data-move="-1" data-code="${esc(code)}" ${i===0?'disabled':''} aria-label="Đưa ${esc(code)} lên">↑</button><button type="button" data-move="1" data-code="${esc(code)}" ${i===subjectOrder.length-1?'disabled':''} aria-label="Đưa ${esc(code)} xuống">↓</button>${payload.exam_mode==='default'?`<select data-rank-subject="${esc(code)}" aria-label="Phạm vi xếp hạng ${esc(code)}"><option value="grade" ${defaultScopes[code]==='grade'?'selected':''}>Toàn khối</option><option value="group" ${defaultScopes[code]==='group'?'selected':''}>Theo nhóm</option></select>`:''}</div>`).join('');
   }
   const context=()=>JSON.stringify([state.selectedExam||'',!!$('class-report-absent').checked,!!$('class-report-violations').checked,state.statisticsRevision||0]);
   const options=()=>({allSubjects:$('class-report-scope').value==='all',grade:$('class-report-grade').value,dense:$('class-report-ties').value==='dense',byPaper:!!$('class-report-by-paper')?.checked,allowIncomplete:!!$('class-report-incomplete')?.checked,rankScope:$('class-report-rank-scope')?.value||'selected',selectedClasses,rankGroups});
@@ -200,6 +234,10 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     if(!payload)return;
     const blocks=visibleBlocks();
     message($('class-report-message'),policy(),'info');
+    if(payload.exam_mode==='default'){
+      $('class-report-results').innerHTML=blocks.map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,b.codes.map((_,i)=>1+i*2))}</div>`).join('')||'<p>Không có lớp hoặc môn phù hợp.</p>';
+      $('class-report-export').disabled=!blocks.length;if($('class-report-pdf'))$('class-report-pdf').disabled=!blocks.length;return;
+    }
     if(['subject','choice'].includes(payload.exam_mode)){
       $('class-report-results').innerHTML=choiceBlocksHtml(blocks)||'<p>Không có lớp theo lựa chọn.</p>';
       $('class-report-export').disabled=!blocks.length;if($('class-report-pdf'))$('class-report-pdf').disabled=!blocks.length;return;
@@ -211,7 +249,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     const exam=state.selectedExam;if(!exam){message($('class-report-message'),'Chọn kỳ thi tại tab Kỳ thi.','error');return}
     clear();const token=request,captured=context();$('class-report-load').disabled=true;
     try{
-      const{data,error}=await state.client.rpc('exam_get_class_statistics_report',{p_exam_id:exam,p_include_absent:!!$('class-report-absent').checked,p_include_violations:!!$('class-report-violations').checked});
+      const{data,error}=await state.client.rpc('exam_get_class_statistics_report',{p_exam_id:exam,p_include_absent:false,p_include_violations:true});
       if(error)throw new Error(error.message);
       if(token!==request||captured!==context())return;
       let report=data;
@@ -234,10 +272,11 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       payload=report;key=captured;loadHeader();
       selectedClasses=data.classes.map(c=>c.class_code);
       try{const saved=JSON.parse(globalThis.localStorage?.getItem(groupStorageKey())||'[]');const known=new Set(selectedClasses),used=new Set();rankGroups=Array.isArray(saved)?saved.filter(Array.isArray).map(g=>g.filter(c=>known.has(c)&&!used.has(c)&&(used.add(c),true))):[];}catch{rankGroups=[];}
+      if(data.exam_mode==='default'&&!rankGroups.length){const byGrade=new Map();for(const c of data.classes){const key=String(c.ban_id||'')||('unassigned-'+c.grade_code);if(!byGrade.has(key))byGrade.set(key,[]);byGrade.get(key).push(c.class_code)}rankGroups=[...byGrade.values()];if(rankGroups.length===1&&rankGroups[0].length>=4){const sorted=[...rankGroups[0]].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));rankGroups=[sorted.slice(0,Math.ceil(sorted.length/2)),sorted.slice(Math.ceil(sorted.length/2))];}}
       renderGroups();
       if($('class-report-classes'))$('class-report-classes').innerHTML=data.classes.map(c=>`<label style="display:inline-block;margin:6px"><input type="checkbox" data-class="${esc(c.class_code)}" checked> ${esc(c.class_code)}</label>`).join('');
       if($('class-report-extra-max'))$('class-report-extra-max').disabled=data.exam_mode==='default';
-      subjectOrder=classReportSubjectOrder(report.classes.flatMap(c=>(c.subjects||[]).map(s=>s.subject_code)));hiddenSubjects=['subject','choice'].includes(data.exam_mode)?defaultHiddenClassSubjects(subjectOrder):new Set();renderSubjects();
+      subjectOrder=classReportSubjectOrder(report.classes.flatMap(c=>(c.subjects||[]).map(s=>s.subject_code)));hiddenSubjects=['subject','choice'].includes(data.exam_mode)?defaultHiddenClassSubjects(subjectOrder):new Set();defaultScopes=Object.fromEntries(subjectOrder.map(code=>[code,['VAN','TOAN','N1','ANH'].includes(code)?'grade':'group']));renderSubjects();
       if(!data.classes.some(c=>c.counted_subjects>0))$('class-report-scope').value='all';
       const grades=[...new Set(data.classes.map(c=>c.grade_code).filter(Boolean))].sort();
       const old=$('class-report-grade').value;$('class-report-grade').innerHTML='<option value="">Tất cả khối</option>'+grades.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('class-report-grade').value=grades.includes(old)?old:'';
@@ -255,7 +294,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   for(const id of ['class-report-absent','class-report-violations'])$(id).onchange=clear;
   const picker=$('class-report-subjects');
   if(picker){
-    picker.onchange=e=>{const code=e.target.dataset.code;if(!code||!payload)return;e.target.checked?hiddenSubjects.delete(code):hiddenSubjects.add(code);render();};
+    picker.onchange=e=>{if(e.target.dataset.rankSubject){defaultScopes[e.target.dataset.rankSubject]=e.target.value;render();return;}const code=e.target.dataset.code;if(!code||!payload)return;e.target.checked?hiddenSubjects.delete(code):hiddenSubjects.add(code);render();};
     picker.onclick=e=>{const button=e.target.closest('button[data-move]');if(!button||!payload)return;const i=subjectOrder.indexOf(button.dataset.code),j=i+Number(button.dataset.move);if(i<0||j<0||j>=subjectOrder.length)return;[subjectOrder[i],subjectOrder[j]]=[subjectOrder[j],subjectOrder[i]];renderSubjects();render();};
   }
   const pdf=$('class-report-pdf');
@@ -286,7 +325,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     }
     window.XLSX.utils.book_append_sheet(wb,window.XLSX.utils.aoa_to_sheet([
       ['Kỳ thi',exam?.name||state.selectedExam],['Năm học',exam?.school_year||''],['Học kỳ phân công',payload.period_id||'Chưa liên kết'],
-      ['Hiển thị môn',options().allSubjects?'Tất cả môn':'Môn tính điểm'],['Tính vắng',!!$('class-report-absent').checked],['Tính vi phạm',!!$('class-report-violations').checked],
+      ['Hiển thị môn',options().allSubjects?'Tất cả môn':'Môn tính điểm'],['Tính vắng',payload.exam_mode==='default'?false:!!$('class-report-absent').checked],['Tính vi phạm',payload.exam_mode==='default'?true:!!$('class-report-violations').checked],
       ['Đồng hạng',options().dense?'1,1,2':'1,1,3'],['Cách tính và xếp hạng',policy()],['Lớp hiển thị',selectedClasses?.join(', ')||'Không chọn lớp'],['TB các lớp',options().byPaper?'Tổng điểm / tổng số bài được tính của các lớp có TB hợp lệ':'Trung bình ĐTB lớp; không trọng số sĩ số'],['SL','Học sinh dự thi, không tính vắng'],...(extraMax()&&payload.exam_mode!=='default'?[['Max','Điểm thống kê cao nhất của học sinh dự thi theo lựa chọn xử lý vi phạm']]:[])
     ]),'Thong tin');
     window.XLSX.writeFile(wb,`thong-ke-lop-${state.selectedExam}.xlsx`);
