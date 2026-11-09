@@ -24,6 +24,25 @@
   <div class="modal-actions"><button id="accounts-delete" class="btn danger-btn" type="button" hidden>Xóa tài khoản</button><button id="accounts-cancel" class="btn btn-light" type="button">Hủy</button><button id="accounts-create" class="btn btn-primary" type="submit">Tạo tài khoản</button><button id="accounts-update" class="btn btn-primary" type="submit" hidden>Lưu thay đổi</button></div>
   </form>
   </dialog>
+
+  <section id="student-links-admin" style="margin-top:24px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fbff">
+    <h3>Liên kết hồ sơ học sinh</h3>
+    <p>Tìm theo email tài khoản học sinh. Chỉ hủy liên kết khi đã đối chiếu thẻ học sinh và xác nhận sai hồ sơ. Không xóa tài khoản, điểm hoặc đăng ký phúc khảo.</p>
+    <div class="form-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+      <label style="flex:1;min-width:240px">Email học sinh
+        <input id="student-link-email" type="email" autocomplete="off" placeholder="Nhập đầy đủ email đã đăng ký">
+      </label>
+      <button id="student-link-find" type="button" class="btn btn-primary">Tìm liên kết</button>
+    </div>
+    <div id="student-link-message" class="notice hidden" role="status"></div>
+    <div id="student-link-result" hidden>
+      <div class="table-wrap"><table><thead><tr><th>Email</th><th>Họ và tên hồ sơ</th><th>Lớp</th><th>Mã định danh</th><th>Trạng thái</th></tr></thead><tbody id="student-link-rows"></tbody></table></div>
+      <label>Lý do hủy liên kết (bắt buộc)
+        <textarea id="student-link-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh nhập nhầm mã định danh của bạn khác"></textarea>
+      </label>
+      <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button></div>
+    </div>
+  </section>
   <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
   <div class="form-grid">
     <label>Môn của nhóm<select id="accounts-group-subject"></select></label>
