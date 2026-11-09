@@ -138,7 +138,6 @@ async function renderAppeals(examId,scores,container){
 const SUBJECT_NAMES={TOAN:'Toán',VAN:'Ngữ văn',N1:'Tiếng Anh',ANH:'Tiếng Anh',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',KTPL:'Giáo dục kinh tế và pháp luật',GDKTPL:'Giáo dục kinh tế và pháp luật'};
 function subjectName(code){const key=String(code??'').trim().toUpperCase();return SUBJECT_NAMES[key]||String(code??'');}
 function clearPasswords(){for(const id of ['login-password','reg-password','reg-confirm','reset-password','reset-confirm'])$(id).value='';}
-let signedIn=false;
 function showSession(user,active){
  signedIn=!!user;
  const tabsBox=document.querySelector('.tabs');
