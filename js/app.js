@@ -1,11 +1,11 @@
 
 // v0.1.313: Public Cloudflare Turnstile Site Key only. Never expose the Secret Key.
-const EXAM_TURNSTILE_SITE_KEY='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY';
+const EXAM_TURNSTILE_SITE_KEY='0x4AAAAAAF5vV5eX34IQ5ukIFtYmr63OMKA';
 let examLoginCaptchaId=null;
 function examLoginCaptchaRender(){
  const el=document.getElementById('admin-login-captcha'),hint=document.getElementById('admin-captcha-help');
  if(!el)return;
- if(EXAM_TURNSTILE_SITE_KEY==='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY'){if(hint)hint.textContent='CAPTCHA chưa được cấu hình. Tạm thời không thể đăng nhập.';return;}
+ if(EXAM_TURNSTILE_SITE_KEY==='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY'){if(hint)hint.textContent='Chưa nhập Cloudflare Turnstile Site Key trong js/app.js. Liên hệ quản trị hệ thống để cấu hình trước khi đăng nhập.';return;}
  if(!window.turnstile?.render){if(hint)hint.textContent='Đang tải CAPTCHA. Vui lòng chờ hoặc kiểm tra mạng.';return;}
  if(examLoginCaptchaId!==null)return;
  examLoginCaptchaId=window.turnstile.render(el,{sitekey:EXAM_TURNSTILE_SITE_KEY,theme:'auto'});
@@ -29,7 +29,7 @@ let sbdGroupEditor;
 import {optimizeByGroups,allocateByGroups,validateRoomGroups,validateGroupSbdSequence,editFreeRoom,groupClassMap} from './group-rooming.js?v=158';
 import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
-import {loadTabModules} from './module-loader.js?v=0.1.273&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
+import {loadTabModules} from './module-loader.js?v=0.1.316&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.309&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
 import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
@@ -45,7 +45,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.273';
+const APP_VERSION='v0.1.316';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -172,7 +172,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.273';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.316';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
