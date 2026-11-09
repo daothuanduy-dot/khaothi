@@ -26,12 +26,42 @@ export function enrichChoiceVan(data,rows){
   const extra=rows.filter(r=>!known.has(r.candidate_id)).map(r=>({...r,subject_type:'mandatory'}));
   return {...data,cells,rows:[...(data.rows||[]),...extra]};
 }
+// Repair a VAN cell that exists in the report but has no computed average.
+// Preserve all non-VAN subjects and all valid VAN values returned by the server.
 export function enrichClassVan(data,rows){
   if(!rows.length||!Array.isArray(data.classes))return data;
   const agg=new Map(aggregates(rows,data.classes).map(s=>[s.class_code,s]));
-  return {...data,classes:data.classes.map(c=>{
-    if(c.subjects?.some(s=>s.subject_code==='VAN'))return c;
-    const s=agg.get(c.class_code);if(!s)return c;
-    return {...c,subjects:[...(c.subjects||[]),s],counted_subjects:Number(c.counted_subjects||0)+1};
-  })};
+  let changed=false;
+  const classes=data.classes.map(c=>{
+    const official=agg.get(c.class_code);
+    if(!official||official.average_score==null)return c;
+    const subjects=[...(c.subjects||[])];
+    const index=subjects.findIndex(s=>s.subject_code==='VAN');
+    if(index>=0){
+      const existing=subjects[index];
+      if(existing.average_score!=null && Number.isFinite(Number(existing.average_score)))return c;
+      // Do not replace an explicit server-side error with a guessed score.
+      if(existing.error)return c;
+      subjects[index]={...existing,average_score:official.average_score,
+        included_count:official.included_count,missing_count:official.missing_count};
+    }else{
+      subjects.push(official);
+    }
+    changed=true;
+    // Recompute totals only for a complete set of counted subjects. Do not
+    // invent ranks or override server-side incompleteness from other causes.
+    const counted=subjects.filter(s=>s.is_counted);
+    const complete=counted.length>0&&counted.every(s=>s.average_score!=null&&
+      Number.isFinite(Number(s.average_score))&&!s.error&&!Number(s.missing_count||0));
+    const wasMissingVan=(index>=0);
+    const canRestore=complete&&c.incomplete===true&&wasMissingVan&&
+      (c.subjects||[]).filter(s=>s.is_counted).every(s=>s.subject_code==='VAN'||
+        (s.average_score!=null&&!s.error&&!Number(s.missing_count||0)));
+    return {...c,subjects,
+      counted_subjects:counted.length,
+      ...(canRestore?{incomplete:false,
+        total_score:counted.reduce((n,s)=>n+Number(s.average_score),0),
+        average_score:counted.reduce((n,s)=>n+Number(s.average_score),0)/counted.length}:{})};
+  });
+  return changed?{...data,classes}:data;
 }

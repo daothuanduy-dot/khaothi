@@ -216,7 +216,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
       if(token!==request||captured!==context())return;
       let report=data;
       let vanRows=[];
-      if(!data.classes.some(c=>c.subjects?.some(s=>s.subject_code==='VAN'))){
+      if(data.classes.some(c=>!c.subjects?.some(s=>s.subject_code==='VAN'&&s.average_score!=null&&Number.isFinite(Number(s.average_score))))){
         vanRows=await loadVanRows(state.client,exam);
         report=enrichClassVan(data,vanRows);
       }
