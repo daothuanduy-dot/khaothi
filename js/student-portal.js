@@ -2,13 +2,12 @@ import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[data-tab]')];
 let client=null,resetFlow=false;
-const pendingKey="exam-student-pending-code-v276";
+
 let isActive=false;
+let signedIn=false;
 let examLoadSequence=0;
-function pendingGet(email){try{const p=JSON.parse(sessionStorage.getItem(pendingKey)||"null");return p?.email?.toLowerCase()===email?.toLowerCase()?p.code:null;}catch{return null;}}
-function pendingSave(email,code){sessionStorage.setItem(pendingKey,JSON.stringify({email,code}));}
-function pendingClear(){sessionStorage.removeItem(pendingKey);}
-function updateLinkedUI(active){isActive=active;const claimTab=document.querySelector('[data-tab="claim"]');claimTab.classList.toggle("hidden",active);$("claim").classList.toggle("hidden",active);if(active&&$("claim").classList.contains("active"))selectTab("login");}
+function pendingClear(){try{sessionStorage.removeItem("exam-student-pending-code-v276");}catch{}}
+function updateLinkedUI(active){isActive=active;const claimTab=document.querySelector('[data-tab="claim"]');claimTab.classList.toggle("hidden",active || !signedIn);$("claim").classList.toggle("hidden",active);if(active&&$("claim").classList.contains("active"))selectTab("login");}
 function reasonMessage(reason){switch(reason){case "already_linked":return "Tài khoản này đã liên kết với hồ sơ khác. Vui lòng liên hệ quản trị viên.";case "unverified":return "Email chưa được xác minh. Hãy kiểm tra thư xác minh.";case "invalid":return "Mã định danh không hợp lệ.";case "unavailable":return "Không thể liên kết hồ sơ. Hãy kiểm tra mã định danh hoặc liên hệ quản trị viên nếu hồ sơ đã được đăng ký.";case "unauthorized":return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";default:return "Không thể liên kết hồ sơ. Vui lòng thử lại hoặc liên hệ quản trị viên.";}}
 function msg(s,kind='info'){const el=$('message');el.textContent=s;el.className='message'+(kind==='error'?' error':kind==='success'?' success':'');el.classList.toggle('hidden',!s);}
 
@@ -161,7 +160,7 @@ function selectTab(name){for(const tab of tabs)tab.setAttribute('aria-selected',
 function err(e){msg(e?.message||'Có lỗi xảy ra. Vui lòng thử lại.','error');}
 async function current(){const {data,error}=await client.auth.getUser();if(error)return null;return data.user;}
 async function status(){
- const user=await current();$('logout').classList.toggle('hidden',!user);$('identity').classList.toggle('hidden',!user);
+ const user=await current();signedIn=!!user;$('logout').classList.toggle('hidden',!user);$('identity').classList.toggle('hidden',!user);
  if(!user){updateLinkedUI(false);showSession(null,false);return null;}
  const {data,error}=await client.rpc('exam_student_my_activation_status');
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
@@ -205,19 +204,18 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){resetFlow=true;selectTab('new-password');msg('Vui lòng đặt mật khẩu mới.');}setTimeout(()=>{status().catch(()=>{})},0)});
  const {data,error}=await client.auth.getSession();if(error)throw error;
  if(location.hash.includes('type=recovery')||new URLSearchParams(location.search).get('type')==='recovery'){resetFlow=true;selectTab('new-password');}
- await status();if(data.session?.user&&!resetFlow){const pending=pendingGet(data.session.user.email);if(pending&&!isActive){$('student-code').value=pending;if(data.session.user.email_confirmed_at){try{await claimStudent(pending);}catch(e){err(e);}}}}
+ await status();
 }
 tabs.forEach(t=>t.addEventListener('click',()=>{if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
 $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const email=$('reg-email').value.trim(),password=$('reg-password').value;
  if(password!==$('reg-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- const code=$('reg-student-code').value.trim();if(!code||code.length>64)throw new Error('Mã định danh không hợp lệ.');
- const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect()}});if(error)throw error;pendingSave(email,code);$('student-code').value=code;
- msg('Nếu đăng ký hợp lệ, Supabase sẽ gửi email xác minh. Hãy mở liên kết trong email. Sau khi xác minh, hệ thống sẽ thử liên kết hồ sơ; nếu cần, hãy đăng nhập và chọn Liên kết hồ sơ.','success');
+ const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect()}});if(error)throw error;
+ msg('Đã gửi yêu cầu đăng ký. Hãy kiểm tra email để xác minh, sau đó đăng nhập và nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');selectTab('login');
 });});
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const {error}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(error)throw error;
- await status();clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');const pending=pendingGet($('login-email').value.trim());if(pending){$('student-code').value=pending;await claimStudent(pending);}else msg('Đăng nhập thành công. Nếu chưa liên kết hồ sơ, hãy nhập mã định danh.','success');
+ await status();clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
 });});
 async function claimStudent(code){
  const user=await current();if(!user)throw new Error('Bạn cần đăng nhập trước khi liên kết hồ sơ.');
