@@ -1497,7 +1497,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
   const importKey=()=>JSON.stringify([scoreKey(),$('scores-sbd-column').value,$('scores-mcq-column').value,$('scores-first-row').value]);
   function resetScores(){
     ++scoreRevision;scoreImportContext=null;combinedContext=null;
-    cache.scoreImportRows=[];cache.combinedScores=[];
+    cache.scoreImportRows=[];cache.scoreImportExcelRows=[];cache.combinedScores=[];
     cache.subjectStatistics=null;
     regradeConfig=null;regradeCurrent=new Map();regradeDraft=[];regradeContext='';
     if($('scores-regrade-editor'))$('scores-regrade-editor').innerHTML='';
@@ -1675,21 +1675,41 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     for(const id of ['scores-read-file','scores-load'])$(id).disabled=!examId;
   }
 
-  function renderScorePreview(){
-    const rows=cache.scoreImportRows.slice(0,100);
+  function scoreInvalidRows(){
     const preview=scoreImportContext?.preview;
-    const bySbd=new Map((preview?.collisions||[]).map(r=>[r.sbd,r]));
-    const invalid=new Map((preview?.invalid||[]).map(r=>[r.sbd,r]));
+    if(!preview)return [];
+    const indexed=new Map();
+    for(const [i,row] of cache.scoreImportRows.entries())indexed.set(row.sbd,{...row,excel_row:cache.scoreImportExcelRows?.[i]??i+1});
+    return (preview.invalid||[]).map(bad=>({...indexed.get(String(bad.sbd))||{},...bad}));
+  }
+  function exportScoreInvalidRows(){
+    const rows=scoreInvalidRows();
+    if(!rows.length)return;
+    const data=rows.map(r=>({'Dòng Excel':r.excel_row??'','SBD':String(r.sbd??''),'Họ tên':r.student_name??'','Lớp':r.class_code??'','Điểm file':r.score??'','Nguyên nhân':r.reason??''}));
+    const sheet=window.XLSX.utils.json_to_sheet(data);
+    sheet['!cols']=[{wch:13},{wch:17},{wch:32},{wch:12},{wch:15},{wch:65}];
+    const book=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(book,sheet,'Dong khong hop le');
+    window.XLSX.writeFile(book,`Loi_nhap_diem_${$('scores-subject').value||'MON'}.xlsx`);
+  }
+  function renderScorePreview(){
+    const preview=scoreImportContext?.preview;
+    const rows=cache.scoreImportRows.slice(0,100);
+    const bySbd=new Map((preview?.collisions||[]).map(r=>[String(r.sbd),r]));
+    const invalid=new Map((preview?.invalid||[]).map(r=>[String(r.sbd),r]));
+    const badRows=scoreInvalidRows();
     $('scores-preview').innerHTML=preview
       ?`<h3>Kiểm tra trước khi nhập: ${preview.new_count} mới, ${preview.collision_count} đã có điểm, ${preview.invalid_count} không hợp lệ</h3>
-        ${preview.collision_count?'<p style="color:#9a3412;font-weight:700">CẢNH BÁO: SBD đã có điểm. Có thể học sinh tô nhầm SBD hoặc nạp nhầm danh sách.</p>':''}
-        <table><thead><tr><th>SBD</th><th>Học sinh / lớp</th><th>Điểm cũ</th><th>Điểm file</th><th>Trạng thái</th></tr></thead><tbody>${rows.map(row=>{
-          const collision=bySbd.get(row.sbd),bad=invalid.get(row.sbd);
-          const info=collision||bad||{};
-          return `<tr><td>${esc(row.sbd)}</td><td>${esc(info.student_name||'')} ${esc(info.class_code||'')}</td><td>${collision?esc(collision.old_score):'—'}</td><td>${esc(row.score)}</td><td>${bad?'KHÔNG HỢP LỆ: '+esc(bad.reason):collision?'ĐÃ CÓ ĐIỂM':'Nhập mới'}</td></tr>`;
+        ${badRows.length?`<div style="border:1px solid #e9a5a5;border-radius:9px;padding:12px;margin:12px 0;background:#fff7f7;color:#8b2020"><strong>Phát hiện ${badRows.length} dòng không hợp lệ — chưa cho phép nhập điểm.</strong><p>Đối chiếu SBD trên phiếu trả lời trắc nghiệm, danh sách thí sinh và môn đã đăng ký. Không tự động chuyển điểm sang SBD khác.</p><button id="scores-export-invalid" class="btn btn-primary" type="button">Xuất Excel danh sách lỗi</button></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Dòng Excel</th><th>SBD</th><th>Học sinh</th><th>Lớp</th><th>Điểm file</th><th>Nguyên nhân</th></tr></thead><tbody>${badRows.map(r=>`<tr><td>${esc(r.excel_row??'')}</td><td>${esc(r.sbd??'')}</td><td>${esc(r.student_name??'—')}</td><td>${esc(r.class_code??'—')}</td><td>${esc(r.score??'')}</td><td style="color:#9b1c1c;font-weight:600">${esc(r.reason??'Không hợp lệ')}</td></tr>`).join('')}</tbody></table></div>`:''}
+        ${preview.collision_count?'<p style="color:#9a3412;font-weight:700">CẢNH BÁO: Có SBD đã có điểm. Kiểm tra kỹ trước khi lựa chọn ghi đè.</p>':''}
+        <h4>Xem trước dữ liệu (100 dòng đầu)</h4>
+        <table><thead><tr><th>Dòng Excel</th><th>SBD</th><th>Học sinh / lớp</th><th>Điểm cũ</th><th>Điểm file</th><th>Trạng thái</th></tr></thead><tbody>${rows.map((row,i)=>{
+          const collision=bySbd.get(row.sbd),bad=invalid.get(row.sbd),info=collision||bad||{};
+          return `<tr><td>${esc(cache.scoreImportExcelRows?.[i]??i+1)}</td><td>${esc(row.sbd)}</td><td>${esc(info.student_name||'')} ${esc(info.class_code||'')}</td><td>${collision?esc(collision.old_score):'—'}</td><td>${esc(row.score)}</td><td>${bad?'KHÔNG HỢP LỆ: '+esc(bad.reason):collision?'ĐÃ CÓ ĐIỂM':'Nhập mới'}</td></tr>`;
         }).join('')}</tbody></table>
-        ${cache.scoreImportRows.length>100?'<p>Chỉ hiển thị 100 dòng đầu; thống kê áp dụng toàn bộ tệp.</p>':''}`
+        ${cache.scoreImportRows.length>100?'<p>Chỉ bảng xem trước giới hạn 100 dòng; bảng lỗi phía trên hiển thị tất cả dòng không hợp lệ.</p>':''}`
       :'<p>Đang chờ kết quả kiểm tra từ máy chủ.</p>';
+    $('scores-preview').querySelector('#scores-export-invalid')?.addEventListener('click',exportScoreInvalidRows);
     $('scores-import').disabled=!preview||preview.invalid_count>0;
   }
 
@@ -1719,7 +1739,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const sheet=workbook.Sheets[workbook.SheetNames[0]];
     if(!sheet)throw new Error('Tệp không có trang tính dữ liệu.');
     const matrix=window.XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:''});
-    const rows=[];
+    const rows=[],excelRows=[];
     for(let index=firstRow-1;index<matrix.length;index++){
       const cells=matrix[index]||[];
       const rawSbd=cells[sbdIndex],rawScore=cells[scoreIndex];
@@ -1727,7 +1747,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
       const rowNumber=index+1,sbd=String(rawSbd??'').trim().replace(/\.0$/,'');
       if(!/^(?:\d{6}|\d{8})$/.test(sbd))throw new Error(`SBD ở dòng ${rowNumber} phải gồm 6 hoặc 8 chữ số.`);
       const score=parseImportedScore(rawScore,rowNumber);
-      rows.push({sbd,score});
+      rows.push({sbd,score});excelRows.push(rowNumber);
     }
     if(!rows.length)throw new Error('Không tìm thấy dòng điểm nào trong vùng đã chọn.');
     const uniqueSbd=new Set(rows.map(row=>row.sbd));
@@ -1750,7 +1770,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     const preview=await mcqPreview(examId,subjectCode,file,rows);
     if(revision!==scoreRevision||key!==importKey()||file!==$('scores-file').files?.[0])return;
     scoreImportContext={key,file,preview};
-    cache.scoreImportRows=rows;
+    cache.scoreImportRows=rows;cache.scoreImportExcelRows=excelRows;
     renderScorePreview();
     message($('scores-message'),`Đã kiểm tra ${rows.length} dòng: ${preview.new_count} mới, ${preview.collision_count} đã có điểm, ${preview.invalid_count} không hợp lệ. Mặc định KHÔNG GHI ĐÈ.`,preview.collision_count||preview.invalid_count?'warning':'success');
   }
@@ -2026,7 +2046,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
         if(label==='grader-message')updateGraderWindow();
         if(label==='scores-message'){
           refreshScores();
-          $('scores-import').disabled=!cache.scoreImportRows.length||scoreImportContext?.key!==importKey()||scoreImportContext?.file!==$('scores-file').files?.[0];
+          $('scores-import').disabled=!cache.scoreImportRows.length||!!scoreImportContext?.preview?.invalid_count||scoreImportContext?.key!==importKey()||scoreImportContext?.file!==$('scores-file').files?.[0];
         }
       }
     };
