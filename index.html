@@ -156,6 +156,20 @@
 #script-runs-body .script-assignment-count {background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:6px 9px;font-weight:700;cursor:pointer;white-space:nowrap}
 #script-runs-body .script-assignment-count:disabled {opacity:.65;cursor:not-allowed}
 </style>
+<style id="homeroom-v309-style">
+#homeroom-open,#homeroom-panel .homeroom-action{background:#174a91!important;color:#fff!important;border:1px solid #103c79!important;font-weight:700!important;box-shadow:0 2px 5px rgba(12,43,91,.18);padding:10px 16px;border-radius:8px;cursor:pointer}
+#homeroom-panel .homeroom-primary{background:#087044!important;border-color:#065735!important}
+#homeroom-open:hover,#homeroom-panel .homeroom-action:hover{filter:brightness(1.13)}
+#homeroom-panel .homeroom-action:disabled{opacity:.55;cursor:not-allowed}
+#homeroom-panel .homeroom-table-wrap{overflow-x:auto;max-width:100%;border:1px solid #aabbd0;border-radius:8px}
+#homeroom-table{border-collapse:collapse!important;width:100%;min-width:1320px;font-size:13px}
+#homeroom-table th,#homeroom-table td{border:1px solid #b7c5d6!important;padding:8px 9px!important;vertical-align:middle;white-space:nowrap}
+#homeroom-table thead th{background:#dce8f7!important;color:#15345b!important;font-weight:700!important;text-align:center}
+#homeroom-table tbody tr:nth-child(even){background:#f3f7fc}
+#homeroom-table tbody tr:hover{background:#e5f0ff}
+#homeroom-table td:nth-child(n+5){text-align:center}
+#homeroom-panel #homeroom-exam{max-width:100%;min-width:min(100%,320px);padding:7px}
+</style>
 </head>
 <body>
   <header class="topbar">
@@ -260,13 +274,13 @@
     <button id="grader-back-admin" type="button" class="btn btn-light hidden">Về quản lý tài khoản</button>
     <div id="grader-assigned-area" class="hidden" hidden><button id="grader-assigned-scores" type="button" class="btn btn-primary">Nhập điểm theo phân công mới</button><div id="grader-assigned-host"></div></div>
 
-    <div style="margin:12px 0"><button id="homeroom-open" class="btn btn-light" type="button">Bảng điểm lớp chủ nhiệm</button></div>
+    <div style="margin:12px 0"><button id="homeroom-open" class="btn homeroom-action" type="button">Bảng điểm lớp chủ nhiệm</button></div>
     <section id="homeroom-panel" hidden class="panel" style="margin:12px 0">
       <h2>Bảng điểm lớp chủ nhiệm</h2><p class="help-text">Lớp được xác định tự động từ phân công GVCN. Chỉ hiển thị kỳ thi đã công bố.</p>
       <label>Kỳ thi / lớp chủ nhiệm<select id="homeroom-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button id="homeroom-reload" class="btn btn-light" type="button">Tải lại</button><button id="homeroom-export" class="btn btn-light" type="button">Xuất Excel (.xlsx)</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button id="homeroom-reload" class="btn homeroom-action" type="button">Tải lại</button><button id="homeroom-export" class="btn homeroom-action homeroom-primary" type="button">Xuất Excel (.xlsx)</button></div>
       <p id="homeroom-status" role="status"></p><p id="homeroom-count" class="help-text"></p>
-      <div class="table-wrap"><table id="homeroom-table"><thead id="homeroom-head"></thead><tbody id="homeroom-body"></tbody></table></div>
+      <div class="table-wrap homeroom-table-wrap"><table id="homeroom-table"><thead id="homeroom-head"></thead><tbody id="homeroom-body"></tbody></table></div>
     </section>
     <button id="grader-class-scores" type="button" class="btn btn-light">Nhập điểm theo lớp</button>
     <button id="grader-absent-scores" type="button" class="btn btn-light">Nhập bổ sung điểm học sinh vắng</button>

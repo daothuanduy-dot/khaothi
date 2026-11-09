@@ -261,7 +261,7 @@ async function enterApp(user){
     $('grader-back-admin').classList.add('hidden');
     $('logout-btn').classList.remove('hidden');
     showScreen('grader-screen');
-    try{const {initHomeroomScores}=await import('./homeroom-scores.js?v=308');initHomeroomScores({client:state.client})}catch(error){console.warn('Không mở được bảng điểm GVCN',error)}
+    try{const {initHomeroomScores}=await import('./homeroom-scores.js?v=309');initHomeroomScores({client:state.client})}catch(error){console.warn('Không mở được bảng điểm GVCN',error)}
     try{await operations?.enterAsGrader()}
     catch(error){message($('grader-message'),error?.message||String(error),'error')}
     await scoreAssignments?.refreshTeacher();
