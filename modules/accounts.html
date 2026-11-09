@@ -1,6 +1,11 @@
 <section class="tab-panel hidden" id="tab-accounts">
   <h2>Quản lý tài khoản</h2>
   <p>Quản lý riêng tài khoản giáo viên và học sinh; không trộn danh sách hoặc quyền truy cập.</p>
+  <div role="tablist" aria-label="Loại tài khoản" style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0">
+    <button id="accounts-tab-teachers" type="button" role="tab" aria-controls="accounts-panel-teachers" aria-selected="true" class="btn btn-primary">Tài khoản giáo viên</button>
+    <button id="accounts-tab-students" type="button" role="tab" aria-controls="accounts-panel-students" aria-selected="false" class="btn btn-light">Tài khoản học sinh</button>
+  </div>
+  <div id="accounts-panel-teachers" role="tabpanel" aria-labelledby="accounts-tab-teachers">
   <h3>Tài khoản giáo viên / quản trị viên</h3>
   <p>Tài khoản giáo viên tồn tại độc lập với kỳ thi. Tạo tài khoản hoặc phân quyền tài khoản Google, lưu vai trò và môn phụ trách. Khi giao chấm, chọn giáo viên hoặc nhóm giáo viên; không cần cấp quyền kỳ thi riêng.</p>
   <div id="accounts-message" class="notice hidden" role="status"></div>
@@ -27,6 +32,19 @@
   </form>
   </dialog>
 
+
+  <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
+  <div class="form-grid">
+    <label>Môn của nhóm<select id="accounts-group-subject"></select></label>
+    <label>Tên nhóm<input id="accounts-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
+    <label>Nhóm đã tạo<select id="accounts-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
+  </div>
+  <div class="form-actions"><button id="accounts-group-create" class="btn btn-primary" type="button">Tạo / đổi tên nhóm</button><button id="accounts-group-delete" class="btn danger-btn" type="button">Xóa nhóm</button></div>
+  <p>Chọn các tài khoản giáo viên cùng môn rồi bấm Gán vào nhóm.</p>
+  <div id="accounts-group-members" class="table-wrap"></div>
+  <div class="form-actions"><button id="accounts-group-assign" class="btn btn-light" type="button">Gán tài khoản đã chọn vào nhóm</button></div>
+  </div>
+  <div id="accounts-panel-students" role="tabpanel" aria-labelledby="accounts-tab-students" hidden>
   <section id="student-links-admin" style="margin-top:24px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fbff">
     <h3>Tài khoản học sinh</h3>
     <p>Danh sách độc lập với giáo viên. Có thể tìm theo họ tên, lớp, mã định danh Bộ GDĐT hoặc email. Chỉ hủy liên kết sau khi đối chiếu hồ sơ.</p>
@@ -52,14 +70,5 @@
       <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
   </section>
-  <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
-  <div class="form-grid">
-    <label>Môn của nhóm<select id="accounts-group-subject"></select></label>
-    <label>Tên nhóm<input id="accounts-group-name" maxlength="100" placeholder="Ví dụ: Nhóm chấm Văn 1"></label>
-    <label>Nhóm đã tạo<select id="accounts-group-select"><option value="">-- Tạo nhóm mới --</option></select></label>
   </div>
-  <div class="form-actions"><button id="accounts-group-create" class="btn btn-primary" type="button">Tạo / đổi tên nhóm</button><button id="accounts-group-delete" class="btn danger-btn" type="button">Xóa nhóm</button></div>
-  <p>Chọn các tài khoản giáo viên cùng môn rồi bấm Gán vào nhóm.</p>
-  <div id="accounts-group-members" class="table-wrap"></div>
-  <div class="form-actions"><button id="accounts-group-assign" class="btn btn-light" type="button">Gán tài khoản đã chọn vào nhóm</button></div>
 </section>

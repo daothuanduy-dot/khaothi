@@ -2,6 +2,21 @@ import {SUBJECTS} from './rooming.js?v=0.1.119';
 
 export function wireAccounts({state,$,esc,message}){
   let users=[],groups=[],generation=0,busy=false;
+  const teacherTab=$('accounts-tab-teachers'),studentTab=$('accounts-tab-students');
+  const teacherPanel=$('accounts-panel-teachers'),studentPanel=$('accounts-panel-students');
+  function switchAccountTab(tab){
+    const isStudent=tab==='students';
+    teacherPanel.hidden=isStudent;
+    studentPanel.hidden=!isStudent;
+    teacherTab.setAttribute('aria-selected',String(!isStudent));
+    studentTab.setAttribute('aria-selected',String(isStudent));
+    teacherTab.className=isStudent?'btn btn-light':'btn btn-primary';
+    studentTab.className=isStudent?'btn btn-primary':'btn btn-light';
+    if(isStudent&&!studentPanel.dataset.loaded){studentPanel.dataset.loaded='1';loadStudents()}
+  }
+  teacherTab.onclick=()=>switchAccountTab('teachers');
+  studentTab.onclick=()=>switchAccountTab('students');
+
   const subjects=[{code:'TOAN',name:'Toán'},{code:'VAN',name:'Ngữ văn'},...SUBJECTS];
   const options='<option value="">Chọn môn</option>'+subjects.map(s=>`<option value="${esc(s.code)}">${esc(s.name)}</option>`).join('');
   $('accounts-subject').innerHTML=options;$('accounts-group-subject').innerHTML=options;
