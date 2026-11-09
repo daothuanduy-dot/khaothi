@@ -1,42 +1,18 @@
-// v0.1.307 - Bảng điểm GVCN. Quyền dữ liệu kiểm tra trong RPC, không dựa vào bộ lọc trình duyệt.
+// v0.1.308 - GVCN: danh sách học sinh độc lập điểm, môn theo đăng ký, xuất XLSX.
 const byId=id=>document.getElementById(id);
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-let currentClient=null, rows=[], exams=[], selected=null;
 const labels={TOAN:'Toán',VAN:'Ngữ văn',N1:'Ngoại ngữ',ANH:'Tiếng Anh',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',GDKTPL:'GDKT&PL',KTPL:'GDKT&PL'};
-const stateText=(msg,isError=false)=>{const el=byId('homeroom-status');el.textContent=msg;el.style.color=isError?'#b91c1c':''};
-async function rpc(name,args){const {data,error}=await currentClient.rpc(name,args);if(error)throw Error(error.message);return data}
-function fmt(v){return v===null||v===undefined?'':String(v).replace('.',',')}
-function render(){
- const body=byId('homeroom-body'),head=byId('homeroom-head');
- if(!rows.length){head.innerHTML='';body.innerHTML='<tr><td>Chưa có dữ liệu điểm cho lựa chọn này.</td></tr>';return}
- const subjects=[...new Set(rows.map(r=>r.subject_code))].sort((a,b)=>a.localeCompare(b,'vi'));
- const students=new Map();for(const r of rows){if(!students.has(r.candidate_id))students.set(r.candidate_id,{...r,grades:{}});students.get(r.candidate_id).grades[r.subject_code]=r}
- head.innerHTML='<tr><th>STT</th><th>SBD</th><th>Mã định danh</th><th>Họ tên</th>'+subjects.map(s=>`<th>${escapeHtml(labels[s]||s)}</th>`).join('')+'</tr>';
- body.innerHTML=[...students.values()].sort((a,b)=>a.student_name.localeCompare(b.student_name,'vi')).map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+escapeHtml(r.sbd)+'</td><td>'+escapeHtml(r.student_code)+'</td><td>'+escapeHtml(r.student_name)+'</td>'+subjects.map(s=>{const v=r.grades[s];return '<td title="'+escapeHtml(v?.is_absent?'Vắng thi':v?.no_paper?'Không bài':v?.total_score==null?'Chưa có điểm':'')+'">'+escapeHtml(v?.is_absent?'Vắng':v?.no_paper?'Không bài':fmt(v?.total_score))+'</td>'}).join('')+'</tr>').join('');
- byId('homeroom-count').textContent=`${students.size} học sinh · ${subjects.length} môn`;
+let client=null,exams=[],selected=null,students=[],subjects=[],scoreRows=[];
+function status(message,error=false){const e=byId('homeroom-status');e.textContent=message;e.style.color=error?'#b91c1c':''}
+async function rpc(name,args){const {data,error}=await client.rpc(name,args);if(error)throw Error(error.message);return data}
+function fmt(v){return v==null?'':String(v).replace('.',',')}
+function cellFor(student,subject,scoreMap){const r=scoreMap.get(`${student.candidate_id}|${subject}`);if(!r)return {text:'—',kind:'not-applicable'};if(r.is_absent)return {text:'Vắng',kind:'absent'};if(r.no_paper)return {text:'Không bài',kind:'no-paper'};if(r.total_score==null)return {text:'Chưa có điểm',kind:'missing'};return {text:fmt(r.total_score),number:Number(r.total_score),kind:'score'}}
+function dataset(){const scoreMap=new Map(scoreRows.map(r=>[`${r.candidate_id}|${r.subject_code}`,r]));return students.map((s,i)=>[i+1,s.sbd||'',s.student_code||'',s.student_name||'',...subjects.map(x=>cellFor(s,x,scoreMap))])}
+function render(){const head=byId('homeroom-head'),body=byId('homeroom-body');const headers=['STT','SBD','Mã định danh','Họ tên',...subjects.map(x=>labels[x]||x)];head.innerHTML='<tr>'+headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')+'</tr>';
+ const data=dataset();body.innerHTML=data.length?data.map(row=>'<tr>'+row.map((v,i)=>`<td>${escapeHtml(i<4?v:v.text)}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${headers.length}">Chưa có học sinh trong kỳ thi/lớp được chọn.</td></tr>`;
+ byId('homeroom-count').textContent=selected?`${students.length} học sinh · ${subjects.length} môn · “—”: không có bản ghi môn; “Chưa có điểm”: có môn nhưng thiếu điểm`:'';
 }
-async function load(){
- stateText('Đang tải các lớp được phân công và kỳ thi đã công bố...');
- exams=await rpc('exam_homeroom_my_exams');if(!Array.isArray(exams))throw Error('Dữ liệu kỳ thi không đúng định dạng.');
- const select=byId('homeroom-exam');select.innerHTML='<option value="">-- Chọn kỳ thi và lớp chủ nhiệm --</option>'+exams.map((x,i)=>`<option value="${i}">${escapeHtml(x.school_year+' · HK'+x.semester+' · '+x.exam_name+' · '+x.class_code)}</option>`).join('');
- rows=[];render();byId('homeroom-count').textContent='';stateText(exams.length?`Có ${exams.length} lựa chọn kỳ thi/lớp được công bố.`:'Chưa có kỳ thi đã công bố và gắn kỳ học cho lớp chủ nhiệm. Liên hệ quản trị viên.');
-}
-async function fetchScores(){
- const idx=byId('homeroom-exam').value;selected=idx===''?null:exams[Number(idx)];rows=[];render();byId('homeroom-count').textContent='';if(!selected)return;
- stateText('Đang lấy điểm chính thức...');
- const subjects=await rpc('exam_homeroom_exam_subjects',{p_exam_id:selected.exam_id,p_class_code:selected.class_code});
- for(const subject of subjects){
-   const result=await rpc('exam_homeroom_subject_results',{p_exam_id:selected.exam_id,p_subject_code:subject,p_class_code:selected.class_code});
-   rows.push(...(result||[]).map(r=>({...r,subject_code:subject})));
- }
- render();stateText(`Đã tải bảng điểm lớp ${selected.class_code}. Chỉ hiển thị điểm đã công bố.`);
-}
-function exportCsv(){if(!selected||!rows.length)return;const header=[...byId('homeroom-head').querySelectorAll('th')].map(x=>x.textContent);const body=[...byId('homeroom-body').querySelectorAll('tr')].map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent));const csv='\ufeff'+[header,...body].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`Bang_diem_GVCN_${selected.class_code}.csv`;a.click();URL.revokeObjectURL(url)}
-export function initHomeroomScores({client}){
- currentClient=client;
- byId('homeroom-open').onclick=async()=>{const pane=byId('homeroom-panel');pane.hidden=!pane.hidden;if(!pane.hidden){try{await load()}catch(e){stateText(e.message,true)}}};
- byId('homeroom-reload').onclick=()=>load().catch(e=>stateText(e.message,true));
- byId('homeroom-exam').onchange=()=>fetchScores().catch(e=>stateText(e.message,true));
- byId('homeroom-export').onclick=exportCsv;
- byId('homeroom-print').onclick=()=>{if(rows.length)window.print()};
-}
+async function load(){status('Đang tải danh sách kỳ thi và lớp chủ nhiệm...');exams=await rpc('exam_homeroom_my_exams');if(!Array.isArray(exams))throw Error('Danh sách kỳ thi không hợp lệ');const select=byId('homeroom-exam');select.innerHTML='<option value="">-- Chọn kỳ thi và lớp chủ nhiệm --</option>'+exams.map((x,i)=>`<option value="${i}">${escapeHtml(x.school_year+' · HK'+x.semester+' · '+x.exam_name+' · '+x.class_code)}</option>`).join('');selected=null;students=[];subjects=[];scoreRows=[];render();status(exams.length?`Có ${exams.length} lựa chọn kỳ thi/lớp được công bố.`:'Chưa có kỳ thi đã công bố cho lớp chủ nhiệm.')}
+async function fetchScores(){const idx=byId('homeroom-exam').value;selected=idx===''?null:exams[Number(idx)];students=[];subjects=[];scoreRows=[];render();if(!selected)return;status('Đang lấy danh sách học sinh và các môn thi...');const args={p_exam_id:selected.exam_id,p_class_code:selected.class_code};const [roster,subj]=await Promise.all([rpc('exam_homeroom_roster',args),rpc('exam_homeroom_exam_subjects',args)]);students=Array.isArray(roster)?roster:[];subjects=Array.isArray(subj)?subj:[];students.sort((a,b)=>String(a.student_name).localeCompare(String(b.student_name),'vi'));render();let failed=[];for(const subject of subjects){try{const result=await rpc('exam_homeroom_subject_results',{...args,p_subject_code:subject});scoreRows.push(...(result||[]).map(r=>({...r,subject_code:subject})))}catch(e){failed.push(`${subject}: ${e.message}`)}}render();status(failed.length?`Không tải được ${failed.length} môn: ${failed.join('; ')}. Không xuất Excel cho đến khi khắc phục.`:`Đã tải ${students.length} học sinh và ${subjects.length} môn của lớp ${selected.class_code}.`,!!failed.length);byId('homeroom-export').disabled=failed.length>0}
+function exportExcel(){if(!selected||!students.length)return;if(!window.XLSX){status('Chưa tải được thư viện Excel. Kiểm tra kết nối và tải lại trang.',true);return}const headers=['STT','SBD','Mã định danh','Họ tên',...subjects.map(x=>labels[x]||x)];const aoa=[['BẢNG ĐIỂM LỚP CHỦ NHIỆM'],[selected.exam_name],[`Lớp: ${selected.class_code} | Năm học: ${selected.school_year} | Học kỳ: ${selected.semester}`],[],headers,...dataset().map(row=>row.map((v,i)=>i<4?(i===0?v:String(v)):v.kind==='score'?v.number:v.text))];const sheet=window.XLSX.utils.aoa_to_sheet(aoa);sheet['!cols']=[{wch:7},{wch:15},{wch:20},{wch:32},...subjects.map(()=>({wch:17}))];for(let r=5;r<=aoa.length;r++){for(const col of [1,2]){const address=window.XLSX.utils.encode_cell({r:r-1,c:col});if(sheet[address]){sheet[address].t='s';sheet[address].v=String(sheet[address].v)}}}const wb=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(wb,sheet,'Bang diem GVCN');window.XLSX.writeFile(wb,`Bang_diem_GVCN_${selected.class_code}_${selected.school_year}_HK${selected.semester}.xlsx`)}
+export function initHomeroomScores({client:db}){client=db;byId('homeroom-open').onclick=async()=>{const pane=byId('homeroom-panel');pane.hidden=!pane.hidden;if(!pane.hidden)try{await load()}catch(e){status(e.message,true)}};byId('homeroom-reload').onclick=()=>load().catch(e=>status(e.message,true));byId('homeroom-exam').onchange=()=>fetchScores().catch(e=>status(e.message,true));byId('homeroom-export').onclick=exportExcel}

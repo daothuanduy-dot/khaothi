@@ -264,7 +264,7 @@
     <section id="homeroom-panel" hidden class="panel" style="margin:12px 0">
       <h2>Bảng điểm lớp chủ nhiệm</h2><p class="help-text">Lớp được xác định tự động từ phân công GVCN. Chỉ hiển thị kỳ thi đã công bố.</p>
       <label>Kỳ thi / lớp chủ nhiệm<select id="homeroom-exam"><option value="">-- Chọn kỳ thi --</option></select></label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button id="homeroom-reload" class="btn btn-light" type="button">Tải lại</button><button id="homeroom-export" class="btn btn-light" type="button">Xuất CSV (mở bằng Excel)</button><button id="homeroom-print" class="btn btn-light" type="button">In bảng điểm</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button id="homeroom-reload" class="btn btn-light" type="button">Tải lại</button><button id="homeroom-export" class="btn btn-light" type="button">Xuất Excel (.xlsx)</button></div>
       <p id="homeroom-status" role="status"></p><p id="homeroom-count" class="help-text"></p>
       <div class="table-wrap"><table id="homeroom-table"><thead id="homeroom-head"></thead><tbody id="homeroom-body"></tbody></table></div>
     </section>
@@ -287,10 +287,10 @@
     <div id="grader-score-rules" class="notice notice-info">Điểm được kiểm tra theo cấu hình của môn.</div>
     <div class="table-wrap grader-phach-scroll" role="region" aria-label="Danh sách phách có thanh cuộn" tabindex="0"><table><thead><tr><th>#</th><th>Mã phách</th><th>Điểm nhập</th><th>Không bài</th><th>Cập nhật</th></tr></thead><tbody id="grader-table-body"><tr><td colspan="5" class="empty">Chọn kỳ thi và đầu phách.</td></tr></tbody></table></div>
   </section>
-  <style>@media print{body *{visibility:hidden!important}#homeroom-panel,#homeroom-panel *{visibility:visible!important}#homeroom-panel{position:absolute;top:0;left:0;width:100%;margin:0!important}#homeroom-panel button,#homeroom-panel select{display:none!important}}</style>
+
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
-    <script id="app-entry" type="module" src="./js/app.js?v=0.1.307&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238&repairguard=272" data-previous-src="js/app.js?v=0.1.128"></script>
+    <script id="app-entry" type="module" src="./js/app.js?v=0.1.308&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238&repairguard=272" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {
