@@ -1,5 +1,7 @@
 <section class="tab-panel hidden" id="tab-accounts">
   <h2>Quản lý tài khoản</h2>
+  <p>Quản lý riêng tài khoản giáo viên và học sinh; không trộn danh sách hoặc quyền truy cập.</p>
+  <h3>Tài khoản giáo viên / quản trị viên</h3>
   <p>Tài khoản giáo viên tồn tại độc lập với kỳ thi. Tạo tài khoản hoặc phân quyền tài khoản Google, lưu vai trò và môn phụ trách. Khi giao chấm, chọn giáo viên hoặc nhóm giáo viên; không cần cấp quyền kỳ thi riêng.</p>
   <div id="accounts-message" class="notice hidden" role="status"></div>
   <div class="form-actions"><button id="accounts-new" class="btn btn-primary" type="button">Thêm tài khoản</button><button id="accounts-refresh" class="btn btn-light" type="button">Tải lại danh sách</button></div>
@@ -26,21 +28,28 @@
   </dialog>
 
   <section id="student-links-admin" style="margin-top:24px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fbff">
-    <h3>Liên kết hồ sơ học sinh</h3>
-    <p>Tìm theo email tài khoản học sinh. Chỉ hủy liên kết khi đã đối chiếu thẻ học sinh và xác nhận sai hồ sơ. Không xóa tài khoản, điểm hoặc đăng ký phúc khảo.</p>
+    <h3>Tài khoản học sinh</h3>
+    <p>Danh sách độc lập với giáo viên. Có thể tìm theo họ tên, lớp, mã định danh Bộ GDĐT hoặc email. Chỉ hủy liên kết sau khi đối chiếu hồ sơ.</p>
     <div class="form-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
-      <label style="flex:1;min-width:240px">Email học sinh
-        <input id="student-link-email" type="email" autocomplete="off" placeholder="Nhập đầy đủ email đã đăng ký">
+      <label style="flex:2;min-width:220px">Tìm kiếm học sinh
+        <input id="student-link-search" type="search" autocomplete="off" placeholder="Họ tên, lớp, mã định danh hoặc email">
       </label>
-      <button id="student-link-find" type="button" class="btn btn-primary">Tìm liên kết</button>
+      <label style="min-width:150px">Trạng thái
+        <select id="student-link-status"><option value="all">Tất cả</option><option value="active">Đã liên kết</option><option value="pending">Chưa liên kết</option></select>
+      </label>
+      <button id="student-link-find" type="button" class="btn btn-primary">Tìm kiếm</button>
+      <button id="student-link-reload" type="button" class="btn btn-light">Tải danh sách</button>
     </div>
+    <p id="student-link-count" role="status"></p>
     <div id="student-link-message" class="notice hidden" role="status"></div>
-    <div id="student-link-result" hidden>
-      <div class="table-wrap"><table><thead><tr><th>Email</th><th>Họ và tên hồ sơ</th><th>Lớp</th><th>Mã định danh</th><th>Trạng thái</th></tr></thead><tbody id="student-link-rows"></tbody></table></div>
-      <label>Lý do hủy liên kết (bắt buộc)
+    <div class="table-wrap"><table><thead><tr><th>Họ và tên</th><th>Lớp</th><th>Mã định danh Bộ</th><th>Email</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="student-link-rows"><tr><td colspan="6">Nhấn Tải danh sách để xem tài khoản học sinh.</td></tr></tbody></table></div>
+    <div class="form-actions"><button id="student-link-prev" type="button" class="btn btn-light" disabled>Trang trước</button><span id="student-link-page">Trang 1</span><button id="student-link-next" type="button" class="btn btn-light" disabled>Trang sau</button></div>
+    <div id="student-link-result" hidden style="margin-top:12px;padding:12px;border:1px solid #cbd5e1;border-radius:8px">
+      <p id="student-link-selected"></p>
+      <label>Lý do hủy liên kết (bắt buộc, ít nhất 10 ký tự)
         <textarea id="student-link-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh nhập nhầm mã định danh của bạn khác"></textarea>
       </label>
-      <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button></div>
+      <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
   </section>
   <div class="section-heading subheading"><div><h3>Nhóm giáo viên dùng chung</h3><p>Tạo nhóm và gán thành viên độc lập với kỳ thi. Khi giao chấm tại Quản lý phách, chọn giáo viên hoặc nhóm cho từng túi bài.</p></div></div>
