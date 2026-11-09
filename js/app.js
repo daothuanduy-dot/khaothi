@@ -1,3 +1,24 @@
+
+// v0.1.313: Public Cloudflare Turnstile Site Key only. Never expose the Secret Key.
+const EXAM_TURNSTILE_SITE_KEY='0x4AAAAAAF5vV0YOT5lSN8_Y';
+let examLoginCaptchaId=null;
+function examLoginCaptchaRender(){
+ const el=document.getElementById('admin-login-captcha'),hint=document.getElementById('admin-captcha-help');
+ if(!el)return;
+ if(EXAM_TURNSTILE_SITE_KEY==='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY'){if(hint)hint.textContent='CAPTCHA chưa được cấu hình. Tạm thời không thể đăng nhập.';return;}
+ if(!window.turnstile?.render){if(hint)hint.textContent='Đang tải CAPTCHA. Vui lòng chờ hoặc kiểm tra mạng.';return;}
+ if(examLoginCaptchaId!==null)return;
+ examLoginCaptchaId=window.turnstile.render(el,{sitekey:EXAM_TURNSTILE_SITE_KEY,theme:'auto'});
+ if(hint)hint.textContent='Hoàn tất xác minh bảo mật trước khi đăng nhập.';
+}
+function examLoginCaptchaToken(){
+ examLoginCaptchaRender();
+ if(examLoginCaptchaId===null)throw new Error('CAPTCHA chưa sẵn sàng. Kiểm tra cấu hình và kết nối mạng.');
+ const token=window.turnstile?.getResponse(examLoginCaptchaId);
+ if(!token)throw new Error('Vui lòng hoàn tất CAPTCHA trước khi đăng nhập.');
+ return token;
+}
+window.addEventListener('load',examLoginCaptchaRender);
 import {createActivityMonitor} from './activity-monitor.js?v=0.1.273';
 import {wireSubjectAmendments} from './subject-corrections.js?v=194';
 import {inheritElectiveRooms} from './inherit-elective-rooms.js?v=187';
@@ -204,7 +225,8 @@ async function submitLogin(event){
   button.textContent='Đang đăng nhập…';$('login-form').setAttribute('aria-busy','true');
   try{
     if(!state.client)throw new Error('Chưa kết nối hệ thống. Vui lòng liên hệ quản trị nhà trường.');
-    const {data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});
+    const captchaToken=examLoginCaptchaToken();
+    let data,error;try{({data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value,options:{captchaToken}}));}finally{if(examLoginCaptchaId!==null&&window.turnstile?.reset)window.turnstile.reset(examLoginCaptchaId);}
     if(error)throw error;
     $('login-password').value='';
     await enterApp(data.user);
