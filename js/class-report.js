@@ -144,7 +144,7 @@ export function statisticsExportSheet(block,header,{extra=false}={}){
   rows.push(...part,[]);
  }
  const offset=rows.length;rows.push(...main.rows);merges.push(...main.merges.map(m=>({s:{r:m.s.r+offset,c:m.s.c},e:{r:m.e.r+offset,c:m.e.c}})));
- if(block.defaultStatistics){for(const p of main.scoreCells)scoreCells.push({r:p.r+offset,c:p.c});return {rows,merges,width,scoreCells};}
+ if(block.defaultStatistics){for(const p of main.scoreCells)scoreCells.push({r:p.r+offset,c:p.c});return {rows,merges,width,scoreCells,kinds:main.kinds};}
  for(let r=offset+2;r<rows.length;r++)for(let c=0;c<width;c++){ 
   const tail=width-(block.choice?2:3),score=block.choice?(c>0&&c<tail&&(c-2)%3===0)||c===tail:(c>0&&c<tail&&c%2===1)||c===tail||c===tail+1;
   if(score&&typeof rows[r][c]==='number')scoreCells.push({r,c});
@@ -172,7 +172,7 @@ const weightedAverage=(classes,code)=>{
  const n=entries.reduce((sum,s)=>sum+Number(s.included_count),0);
  return n?entries.reduce((sum,s)=>sum+Number(s.average_score)*Number(s.included_count),0)/n:'';
 };
-export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,subjectOrder=[],hiddenSubjects=new Set(),scopes={},rankGroups=[],dense=false}={}){
+export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,subjectOrder=[],hiddenSubjects=new Set(),scopes={},rankGroups=[],dense=false,previousRanks=new Map()}={}){
  const classes=(data.classes||[]).filter(c=>!grade||c.grade_code===grade);
  const groups=rankGroups.filter(g=>Array.isArray(g)&&g.length);
  const groupOf=new Map();groups.forEach((g,i)=>g.forEach(code=>groupOf.set(code,i)));
@@ -193,30 +193,40 @@ export function buildDefaultStatisticsBlock(data,{grade='',selectedClasses=null,
   }ranks.set(code,byClass);
  }
  const chosen=selectedClasses===null?ordered:ordered.filter(c=>selectedClasses.includes(c.class_code));
- return {choice:false,defaultStatistics:true,name:'Thống kê kỳ thi mặc định',grade_code:grade||[...new Set(classes.map(c=>c.grade_code))].join(', '),codes,classes:chosen.map(c=>({...c,subjects:c.subjects.map(s=>({...s,rank:s.is_counted===true?ranks.get(s.subject_code)?.get(c.class_code)??null:null}))})),groupOf};
+ return {choice:false,defaultStatistics:true,name:'Thống kê kỳ thi mặc định',grade_code:grade||[...new Set(classes.map(c=>c.grade_code))].join(', '),codes,previousRanks,dense,classes:chosen.map(c=>({...c,subjects:c.subjects.map(s=>({...s,rank:s.is_counted===true?ranks.get(s.subject_code)?.get(c.class_code)??null:null}))})),groupOf};
 }
+// One presentation model is consumed by the browser preview, print/PDF and Excel.
 export function defaultStatisticsSheet(block){
- const width=1+block.codes.length*2,rows=[['Lớp / GVCN'],['']],merges=[{s:{r:0,c:0},e:{r:1,c:0}}],scoreCells=[];
- for(const code of block.codes){const col=rows[0].length;rows[0].push(block.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code,'');rows[1].push('ĐTB','XH');merges.push({s:{r:0,c:col},e:{r:0,c:col+1}})}
- const pushAverage=(label,classes)=>{
-  const r=rows.length,row=[label];for(const code of block.codes){const avg=weightedAverage(classes,code);row.push(avg,'');if(avg!=='')scoreCells.push({r,c:row.length-2})}rows.push(row);
- };
- let previousGroup=null,groupClasses=[];
- for(const c of block.classes){
-  const group=block.groupOf.has(c.class_code)?block.groupOf.get(c.class_code):'unassigned';
-  if(previousGroup!==null&&group!==previousGroup){pushAverage(previousGroup==='unassigned'?'TB các lớp chưa phân nhóm':`TB nhóm ${Number(previousGroup)+1}`,groupClasses);groupClasses=[];}
-  previousGroup=group;groupClasses.push(c);
-  const r=rows.length,top=[c.class_code+(c.homeroom_teacher&&c.homeroom_teacher!=='Chưa phân công'?'\n'+c.homeroom_teacher:'')],bottom=[''];
-  for(const code of block.codes){const s=countedSubject(c,code);top.push(s?.average_score??'',s?.rank??'');bottom.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');merges.push({s:{r:r+1,c:top.length-2},e:{r:r+1,c:top.length-1}});if(s?.average_score!=null)scoreCells.push({r,c:top.length-2})}
-  rows.push(top,bottom);merges.push({s:{r,c:0},e:{r:r+1,c:0}});
+ const classes=block.classes||[], groupOf=block.groupOf||new Map(), visible=block.codes||[];
+ const groupIds=[...new Set(classes.map(c=>groupOf.has(c.class_code)?groupOf.get(c.class_code):'other'))];
+ const groupClasses=id=>classes.filter(c=>(groupOf.has(c.class_code)?groupOf.get(c.class_code):'other')===id);
+ const common=visible.filter(code=>groupIds.every(id=>groupClasses(id).some(c=>countedSubject(c,code))));
+ const local=groupIds.map(id=>visible.filter(code=>!common.includes(code)&&groupClasses(id).some(c=>countedSubject(c,code))));
+ const maxLocal=Math.max(0,...local.map(a=>a.length));
+ const slots=common.length+maxLocal, width=1+slots*2+4;
+ const rows=[],merges=[],scoreCells=[],kinds=[];
+ const push=(row,kind)=>{const r=rows.length;rows.push([...row,...Array(Math.max(0,width-row.length)).fill('')]);kinds.push(kind);return r};
+ const merge=(r,c1,c2,r2=r)=>{if(c2>c1||r2>r)merges.push({s:{r,c:c1},e:{r:r2,c:c2}})};
+ const allCounted=c=>c.subjects.filter(s=>s.is_counted===true);
+ const totalFor=c=>{const list=allCounted(c);if(!list.length||list.some(s=>!validSubject(s)||Number(s.missing_count)>0))return {total:null,mean:null};const total=list.reduce((n,s)=>n+Number(s.average_score),0);return {total,mean:total/list.length}};
+ const rankMap=new Map();for(const id of groupIds){const members=groupClasses(id).map(c=>({...c,summary:totalFor(c)})).filter(c=>c.summary.mean!==null).sort((a,b)=>b.summary.mean-a.summary.mean);let rank=0,last=null;members.forEach((c,i)=>{if(last===null||c.summary.mean!==last)rank=block.dense?rank+1:i+1;rankMap.set(c.class_code,rank);last=c.summary.mean})}
+ const header=(codes)=>{const first=['Lớp / GVCN'],second=[''];for(let j=0;j<slots;j++){const code=codes[j];first.push(code?(classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code):'','');second.push(code?'ĐTB':'',code?'XT':'')};first.push('Tổng','TB','XT theo ban','Tăng/Giảm');second.push('','','','');const r=push(first,'subjectHeader');push(second,'subHeader');merge(r,0,0,r+1);for(let j=0;j<slots;j++)merge(r,1+j*2,2+j*2);for(let c=width-4;c<width;c++)merge(r,c,c,r+1)};
+ for(let gi=0;gi<groupIds.length;gi++){
+  const id=groupIds[gi],members=groupClasses(id),codes=[...common,...local[gi]];
+  header(codes);
+  for(const c of members){const r=rows.length,home=c.homeroom_teacher==='Chưa phân công'?'':c.homeroom_teacher||'';const top=[c.class_code+(home?'\n'+home:'')],teachers=[''];
+   for(let j=0;j<slots;j++){const code=codes[j],s=code?countedSubject(c,code):null;top.push(s?.average_score??'',s?.rank??'');teachers.push(s?.teacher==='Chưa phân công'?'':s?.teacher||'','');if(s?.average_score!=null)scoreCells.push({r,c:1+j*2});merge(r+1,1+j*2,2+j*2)}
+   const summary=totalFor(c),rank=rankMap.get(c.class_code)??null,previous=block.previousRanks?.get(c.class_code),delta=previous!=null&&rank!=null?previous-rank:'';
+   top.push(summary.total??'',summary.mean??'',rank??'',delta);teachers.push('','','','');push(top,'class');push(teachers,'teacher');merge(r,0,0,r+1);for(let j=width-4;j<width;j++)merge(r,j,j,r+1);if(summary.total!==null){scoreCells.push({r,c:width-4},{r,c:width-3})}
+  }
+  const r=rows.length,avg=['ĐTB nhóm '+(gi+1)];for(let j=0;j<slots;j++){const a=codes[j]?weightedAverage(members,codes[j]):'';avg.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}avg.push('','','','');push(avg,'groupAverage');
  }
- if(groupClasses.length)pushAverage(previousGroup==='unassigned'?'TB các lớp chưa phân nhóm':`TB nhóm ${Number(previousGroup)+1}`,groupClasses);
- pushAverage('TB các lớp',block.classes);
- return {rows,merges,width,scoreCells,scoreDecimals:3};
+ const r=rows.length,footer=['ĐTB các lớp'];for(let j=0;j<slots;j++){const code=common[j]||null,a=code?weightedAverage(classes,code):'';footer.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}footer.push('','','','');push(footer,'footer');
+ return {rows,merges,width,scoreCells,scoreDecimals:3,kinds,groupIds};
 }
 
 export function wireClassReport({state,$,esc,message,createPrintFrame}){
-  let payload=null,key='',request=0,subjectOrder=[],hiddenSubjects=new Set(),selectedClasses=null,rankGroups=[],defaultScopes={};
+  let payload=null,key='',request=0,subjectOrder=[],hiddenSubjects=new Set(),selectedClasses=null,rankGroups=[],defaultScopes={},previousRanks=new Map();
   const groupStorageKey=()=>`class-report-rank-groups:${state.selectedExam}`;
   function renderGroups(){
     const root=$('class-report-rank-groups');if(!root||!payload)return;
@@ -226,7 +236,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   }
   function saveGroups(){
     try{globalThis.localStorage?.setItem(groupStorageKey(),JSON.stringify(rankGroups));}catch{message($('class-report-message'),'Không lưu được cấu hình nhóm trên trình duyệt. Cấu hình vẫn dùng trong phiên hiện tại.','error');}
-    renderGroups();if(payload)render();
+    previousRanks=new Map();if($('class-report-previous'))$('class-report-previous').value='';renderGroups();if(payload)render();
   }
   let headerExam='';
   const headerFields=['authority','institution','report_title','exam_title','school_year'];
@@ -241,7 +251,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
   const scoreColumns=b=>[...b.codes.map((_,i)=>2+i*3),1+b.codes.length*3];
   const currentSheet=b=>b.defaultStatistics?defaultStatisticsSheet(b):classReportSheet(b);
   const choiceBlocksHtml=(blocks,forPrint=false)=>blocks.map(b=>`${!forPrint||blocks.length>1?`<h3>Khối ${esc(b.grade_code||'')}</h3>`:''}${extraMax()?`<div class="extra-statistics" style="background:#ddd;margin-bottom:4mm">${maxScoreSections(b).map(s=>`<div class="table-wrap" style="width:${s.count/Math.min(b.codes.length,6)*100}%;margin-left:auto">${statisticsTableHtml(s,esc,Array.from({length:s.count},(_,i)=>i*2+1))}</div>`).join('')}</div>`:''}<div class="table-wrap class-statistics">${statisticsTableHtml(currentSheet(b),esc,scoreColumns(b))}</div>`).join('');
-  const visibleBlocks=()=>payload?.exam_mode==='default'?[buildDefaultStatisticsBlock(payload,{grade:options().grade,selectedClasses,subjectOrder,hiddenSubjects,scopes:defaultScopes,rankGroups,dense:options().dense})].filter(b=>b.codes.length&&b.classes.length):rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))})).filter(b=>b.codes.length);
+  const visibleBlocks=()=>payload?.exam_mode==='default'?[buildDefaultStatisticsBlock(payload,{grade:options().grade,selectedClasses,subjectOrder,hiddenSubjects,scopes:defaultScopes,rankGroups,dense:options().dense,previousRanks})].filter(b=>b.codes.length&&b.classes.length):rankClassReport(payload,options()).map(b=>({...b,codes:subjectOrder.filter(code=>b.codes.includes(code)&&!hiddenSubjects.has(code))})).filter(b=>b.codes.length);
   function renderSubjects(){
     const el=$('class-report-subjects');if(!el)return;
     el.innerHTML=subjectOrder.map((code,i)=>`<div style="display:flex;align-items:center;gap:8px;margin:6px"><label><input type="checkbox" data-code="${esc(code)}" ${hiddenSubjects.has(code)?'':'checked'}> ${esc(payload.classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)}</label><button type="button" data-move="-1" data-code="${esc(code)}" ${i===0?'disabled':''} aria-label="Đưa ${esc(code)} lên">↑</button><button type="button" data-move="1" data-code="${esc(code)}" ${i===subjectOrder.length-1?'disabled':''} aria-label="Đưa ${esc(code)} xuống">↓</button>${payload.exam_mode==='default'?`<select data-rank-subject="${esc(code)}" aria-label="Phạm vi xếp hạng ${esc(code)}"><option value="grade" ${defaultScopes[code]==='grade'?'selected':''}>Toàn khối</option><option value="group" ${defaultScopes[code]==='group'?'selected':''}>Theo nhóm</option></select>`:''}</div>`).join('');
@@ -256,7 +266,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     const blocks=visibleBlocks();
     message($('class-report-message'),policy(),'info');
     if(payload.exam_mode==='default'){
-      $('class-report-results').innerHTML=blocks.map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,b.codes.map((_,i)=>1+i*2))}</div>`).join('')||'<p>Không có lớp hoặc môn phù hợp.</p>';
+      $('class-report-results').innerHTML=blocks.map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,Array.from({length:Math.max(0,(defaultStatisticsSheet(b).width-5)/2)},(_,i)=>1+i*2).concat([defaultStatisticsSheet(b).width-4,defaultStatisticsSheet(b).width-3]))}</div>`).join('')||'<p>Không có lớp hoặc môn phù hợp.</p>';
       $('class-report-export').disabled=!blocks.length;if($('class-report-pdf'))$('class-report-pdf').disabled=!blocks.length;return;
     }
     if(['subject','choice'].includes(payload.exam_mode)){
@@ -290,7 +300,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
         const allDetails=detailRows.concat(vanRows.filter(r=>!detailIds.has(String(r.candidate_id))));
         report=attachChoiceParticipation(report,allDetails);
       }
-      payload=report;key=captured;loadHeader();
+      payload=report;key=captured;previousRanks=new Map();loadHeader();if($('class-report-previous')){$('class-report-previous').innerHTML='<option value="">Không so sánh</option>'+state.exams.filter(e=>e.id!==exam&&(!e.grade_code||!data.classes[0]?.grade_code||String(e.grade_code)===String(data.classes[0].grade_code))).map(e=>`<option value="${esc(e.id)}">${esc(e.name||e.id)}</option>`).join('');}
       selectedClasses=data.classes.map(c=>c.class_code);
       try{const saved=JSON.parse(globalThis.localStorage?.getItem(groupStorageKey())||'[]');const known=new Set(selectedClasses),used=new Set();rankGroups=Array.isArray(saved)?saved.filter(Array.isArray).map(g=>g.filter(c=>known.has(c)&&!used.has(c)&&(used.add(c),true))):[];}catch{rankGroups=[];}
       if(data.exam_mode==='default'&&!rankGroups.length){const byGrade=new Map();for(const c of data.classes){const key=String(c.ban_id||'')||('unassigned-'+c.grade_code);if(!byGrade.has(key))byGrade.set(key,[]);byGrade.get(key).push(c.class_code)}rankGroups=[...byGrade.values()];if(rankGroups.length===1&&rankGroups[0].length>=4){const sorted=[...rankGroups[0]].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));rankGroups=[sorted.slice(0,Math.ceil(sorted.length/2)),sorted.slice(Math.ceil(sorted.length/2))];}}
@@ -318,6 +328,17 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     picker.onchange=e=>{if(e.target.dataset.rankSubject){defaultScopes[e.target.dataset.rankSubject]=e.target.value;render();return;}const code=e.target.dataset.code;if(!code||!payload)return;e.target.checked?hiddenSubjects.delete(code):hiddenSubjects.add(code);render();};
     picker.onclick=e=>{const button=e.target.closest('button[data-move]');if(!button||!payload)return;const i=subjectOrder.indexOf(button.dataset.code),j=i+Number(button.dataset.move);if(i<0||j<0||j>=subjectOrder.length)return;[subjectOrder[i],subjectOrder[j]]=[subjectOrder[j],subjectOrder[i]];renderSubjects();render();};
   }
+  const previousSelect=$('class-report-previous');
+  if(previousSelect){previousSelect.onchange=async()=>{
+    previousRanks=new Map();const id=previousSelect.value;if(!id||!payload){render();return}
+    try{const {data,error}=await state.client.rpc('exam_get_class_statistics_report',{p_exam_id:id,p_include_absent:false,p_include_violations:true});if(error)throw Error(error.message);
+      const previousBlock=buildDefaultStatisticsBlock(data,{grade:options().grade,subjectOrder:classReportSubjectOrder(data.classes.flatMap(c=>c.subjects.map(s=>s.subject_code))),rankGroups,dense:options().dense});
+      // Rank each class using ALL counted subjects of its own previous exam, within the same configured group.
+      const grouped=new Map();for(const c of previousBlock.classes){const counted=c.subjects.filter(s=>s.is_counted===true);if(!counted.length||counted.some(s=>!validSubject(s)||Number(s.missing_count)>0))continue;const mean=counted.reduce((n,s)=>n+Number(s.average_score),0)/counted.length;const g=previousBlock.groupOf.get(c.class_code);if(g===undefined)continue;if(!grouped.has(g))grouped.set(g,[]);grouped.get(g).push({code:c.class_code,mean})}
+      for(const entries of grouped.values()){entries.sort((a,b)=>b.mean-a.mean);let rank=0,last=null;entries.forEach((x,i)=>{if(last===null||x.mean!==last)rank=options().dense?rank+1:i+1;previousRanks.set(x.code,rank);last=x.mean})}
+      message($('class-report-message'),'Đã tính lại thứ hạng kỳ đối chiếu theo môn tính tổng hợp của kỳ đó. Cần đối chiếu nhóm lớp giữa hai kỳ.','info');render();
+    }catch(e){message($('class-report-message'),'Không tải được kỳ đối chiếu: '+e.message,'error')}
+  }}
   const pdf=$('class-report-pdf');
   if(pdf)pdf.onclick=()=>{
     if(!payload||key!==context()){clear();return}
@@ -327,7 +348,7 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
     win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê lớp</title><style>
       @page{size:A4 landscape;margin:5mm}body{font:8pt 'Times New Roman',serif;margin:0;line-height:1.05}h2,h3{text-align:center;margin:1mm 0;font-size:11pt;line-height:1.05}table{border-collapse:collapse;width:100%;font-size:8pt;line-height:1.05}th,td{border:1px solid #000;padding:0.35mm 0.3mm;text-align:center}thead{display:table-header-group}tfoot{display:table-row-group}tr{break-inside:avoid}.report-footer{break-before:avoid;page-break-before:avoid}.table-wrap{overflow:visible}h3{break-after:avoid}small{font-size:7pt}
       .statistics-header{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-bottom:1mm;font-size:10pt;line-height:1.05}.school-year{text-align:center;font-size:8pt;margin:0 0 1mm}table{table-layout:fixed}th,td{overflow-wrap:anywhere}.class-statistics thead tr:first-child th:first-child{width:18mm}.extra-statistics{background:#ddd;margin-bottom:1.5mm!important;break-inside:avoid}.extra-statistics th{background:white}.extra-statistics tbody{font-weight:bold;font-style:italic}
-      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):visibleBlocks().map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,b.codes.map((_,i)=>1+i*2))}</div>`).join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
+      </style></head><body>${statisticsHeaderHtml(header(),esc)}${choice?choiceBlocksHtml(visibleBlocks(),true):visibleBlocks().map(b=>`<div class="table-wrap class-statistics">${statisticsTableHtml(defaultStatisticsSheet(b),esc,Array.from({length:(defaultStatisticsSheet(b).width-5)/2},(_,i)=>1+i*2).concat([defaultStatisticsSheet(b).width-4,defaultStatisticsSheet(b).width-3]))}</div>`).join('')}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);win.document.close();
   };
   $('class-report-export').onclick=()=>{
     if(!payload||key!==context()){clear();return}
@@ -341,7 +362,17 @@ export function wireClassReport({state,$,esc,message,createPrintFrame}){
         const position=window.XLSX.utils.decode_cell(address);
         const decimals=scoreCells.get(`${position.r}:${position.c}`);cell.z=decimals==null?'0':'0.'+'0'.repeat(decimals);
       }
-      ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?24:i%2===1?12:7}));
+      ws['!cols']=Array.from({length:table.width},(_,i)=>({wch:i===0?19:i>=table.width-4?11:i%2===1?10:6}));
+      if(block.defaultStatistics){
+        const border={top:{style:'thin',color:{rgb:'000000'}},bottom:{style:'thin',color:{rgb:'000000'}},left:{style:'thin',color:{rgb:'000000'}},right:{style:'thin',color:{rgb:'000000'}}};
+        for(let r=5;r<table.rows.length;r++)for(let c=0;c<table.width;c++){
+          const address=window.XLSX.utils.encode_cell({r,c});const cell=ws[address]||(ws[address]={t:'s',v:''});
+          const kind=table.kinds?.[r-5]||'';
+          cell.s={font:{name:'Times New Roman',sz:9,bold:['subjectHeader','subHeader','groupAverage','footer'].includes(kind),color:{rgb:kind==='groupAverage'?'9C0069':'000000'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border,fill:['groupAverage','footer'].includes(kind)?{fgColor:{rgb:'F8E7F2'}}:kind==='subjectHeader'?{fgColor:{rgb:'EEEEEE'}}:undefined};
+          if(kind==='class'&&c===table.width-1&&typeof cell.v==='number'&&cell.v!==0)cell.s.font.color={rgb:cell.v>0?'008000':'CC0000'};
+        }
+        ws['!printHeader']=[{left:'',center:'',right:''}];ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToWidth:1,fitToHeight:1};
+      }
       if(block.defaultStatistics){ws['!rows']=table.rows.map((row,i)=>({hpt:i<5?22:row[0]&&String(row[0]).startsWith('TB ')?22:row[0]&&String(row[0]).includes('\n')?30:18}));ws['!pageSetup']={orientation:'landscape',paperSize:9,fitToWidth:1,fitToHeight:1};ws['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.1,footer:0.1};}
       window.XLSX.utils.book_append_sheet(wb,ws,`${++index} ${block.name}`.replace(/[\\/?*\[\]:]/g,' ').slice(0,31));
     }
