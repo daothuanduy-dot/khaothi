@@ -165,7 +165,7 @@ async function status(){
  const {data,error}=await client.rpc('exam_student_my_activation_status');
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
  const active=data?.status==='active';registrationRequired=!!user.app_metadata?.exam_student_registration_required;adminResetRequired=!!user.app_metadata?.exam_admin_reset_required;updateLinkedUI(active&&!adminResetRequired&&!registrationRequired);showSession(user,active&&!adminResetRequired&&!registrationRequired);
- if(adminResetRequired||registrationRequired){selectTab('new-password');msg('Bạn phải đổi mật khẩu tạm thời để kích hoạt tài khoản.');}
+ if(adminResetRequired||registrationRequired){selectTab('new-password');msg(registrationRequired?'Hãy thiết lập mật khẩu lần đầu để kích hoạt tài khoản.':'Bạn phải đổi mật khẩu tạm thời để kích hoạt tài khoản.');}
  if(adminResetRequired||registrationRequired)selectTab('new-password');
  await loadStudentExams(active&&!adminResetRequired&&!registrationRequired);
  const summary=$('student-summary');summary.textContent='';summary.classList.add('hidden');
@@ -203,7 +203,7 @@ function redirect(){return new URL('./student-portal.html',location.href).href;}
 async function init(){if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase.');
  const {url,key}=validatePublicConfig(publicConfig);
  client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'exam-student-auth-v1'}});
- client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){resetFlow=true;selectTab('new-password');msg('Vui lòng đặt mật khẩu mới.');}setTimeout(()=>{status().catch(()=>{})},0)});
+ client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){resetFlow=true;selectTab('new-password');msg('Vui lòng đặt mật khẩu mới.');}if(event==='SIGNED_IN'){setTimeout(async()=>{const u=await current();if(u?.app_metadata?.exam_student_registration_required){registrationRequired=true;selectTab('new-password');msg('Email đã xác minh. Hãy thiết lập mật khẩu lần đầu.');}},0);}setTimeout(()=>{status().catch(()=>{})},0)});
  const {data,error}=await client.auth.getSession();if(error)throw error;
  if(location.hash.includes('type=recovery')||new URLSearchParams(location.search).get('type')==='recovery'){resetFlow=true;selectTab('new-password');}
  await status();
@@ -215,11 +215,11 @@ $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTar
  const {data,error}=await client.functions.invoke('student-claim',{body:{action:'register',student_code,email}});
  if(error){let detail=data;try{if(!detail&&error.context?.json)detail=await error.context.json();}catch{}throw new Error(detail?.error||error.message||'Không thể đăng ký.');}
  if(!data?.ok)throw new Error(data?.error||'Không thể đăng ký.');
- msg(data.message||'Nếu hồ sơ đủ điều kiện, mật khẩu tạm thời sẽ được gửi tới email.','success');selectTab('login');
+ msg(data.message||'Nếu hồ sơ đủ điều kiện, liên kết thiết lập mật khẩu sẽ được gửi tới email.','success');selectTab('login');
 });});
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const loginPassword=$('login-password').value;const {error:loginError}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:loginPassword});if(loginError)throw loginError;
- const u=await current();if(u?.app_metadata?.exam_admin_reset_required||u?.app_metadata?.exam_student_registration_required){adminResetRequired=!!u.app_metadata.exam_admin_reset_required;registrationRequired=!!u.app_metadata.exam_student_registration_required;adminTempPassword=loginPassword;selectTab('new-password');msg('Bạn phải đổi mật khẩu tạm thời trước khi xem kết quả.');return;}
+ const u=await current();if(u?.app_metadata?.exam_admin_reset_required||u?.app_metadata?.exam_student_registration_required){adminResetRequired=!!u.app_metadata.exam_admin_reset_required;registrationRequired=!!u.app_metadata.exam_student_registration_required;adminTempPassword=loginPassword;selectTab('new-password');msg(registrationRequired?'Hãy thiết lập mật khẩu lần đầu.':'Bạn phải đổi mật khẩu tạm thời trước khi xem kết quả.');return;}
  await status();if(adminResetRequired||registrationRequired){selectTab('new-password');return;}clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
 });});
 async function claimStudent(code){
@@ -239,7 +239,7 @@ $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarg
 });});
 $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const password=$('reset-password').value;if(password!==$('reset-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- if(adminResetRequired||registrationRequired){const temporary_password=adminTempPassword;if(!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke(registrationRequired?'student-claim':'student-admin-password-reset',{body:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
+ if(adminResetRequired||registrationRequired){const temporary_password=adminTempPassword;if(adminResetRequired&&!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke(registrationRequired?'student-claim':'student-admin-password-reset',{body:registrationRequired?{action:'complete',new_password:password}:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
 $('logout').addEventListener('click',async()=>{try{adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
 $('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi email đặt lại mật khẩu để tiếp tục.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
