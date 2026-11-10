@@ -212,7 +212,7 @@ tabs.forEach(t=>t.addEventListener('click',()=>{if(adminResetRequired||registrat
 $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const student_code=$('reg-code').value.trim(),email=$('reg-email').value.trim();
  if(!student_code||student_code.length>64)throw new Error('Mã định danh không hợp lệ.');
- const {data,error}=await client.functions.invoke('student-register',{body:{action:'register',student_code,email}});
+ const {data,error}=await client.functions.invoke('student-claim',{body:{action:'register',student_code,email}});
  if(error){let detail=data;try{if(!detail&&error.context?.json)detail=await error.context.json();}catch{}throw new Error(detail?.error||error.message||'Không thể đăng ký.');}
  if(!data?.ok)throw new Error(data?.error||'Không thể đăng ký.');
  msg(data.message||'Nếu hồ sơ đủ điều kiện, mật khẩu tạm thời sẽ được gửi tới email.','success');selectTab('login');
@@ -227,7 +227,7 @@ async function claimStudent(code){
  if(!user.email_confirmed_at)throw new Error('Bạn phải xác minh email trước khi liên kết hồ sơ.');
  if(isActive){pendingClear();msg('Tài khoản đã kích hoạt. Không cần liên kết lại.','success');return;}
  if(!code||code.length>64)throw new Error('Mã định danh không hợp lệ.');
- const {data,error}=await client.functions.invoke('student-claim',{body:{student_code:code}});
+ const {data,error}=await client.functions.invoke('student-claim',{body:{action:'claim',student_code:code}});
  if(error){let detail=data;try{if(!detail&&error.context?.json)detail=await error.context.json();}catch{}throw new Error(reasonMessage(detail?.reason));}
  if(!data?.ok)throw new Error(reasonMessage(data?.reason));
  pendingClear();await status();clearPasswords();msg('','success');
@@ -239,7 +239,7 @@ $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarg
 });});
 $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const password=$('reset-password').value;if(password!==$('reset-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- if(adminResetRequired||registrationRequired){const temporary_password=adminTempPassword;if(!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke(registrationRequired?'student-register':'student-admin-password-reset',{body:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
+ if(adminResetRequired||registrationRequired){const temporary_password=adminTempPassword;if(!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke(registrationRequired?'student-claim':'student-admin-password-reset',{body:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
 $('logout').addEventListener('click',async()=>{try{adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
 $('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi email đặt lại mật khẩu để tiếp tục.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
