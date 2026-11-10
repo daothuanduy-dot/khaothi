@@ -80,6 +80,13 @@
       <label>Lý do hủy liên kết (bắt buộc, ít nhất 10 ký tự)
         <textarea id="student-link-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh nhập nhầm mã định danh của bạn khác"></textarea>
       </label>
+      <div style="margin:12px 0;padding:12px;border:1px solid #d6e2f0;border-radius:8px">
+        <strong>Cấp lại mật khẩu học sinh</strong>
+        <p>Chỉ thực hiện sau khi xác minh đúng học sinh. Email đăng nhập và hồ sơ không thay đổi. Mật khẩu tạm thời chỉ hiển thị một lần.</p>
+        <label>Lý do cấp lại mật khẩu (ít nhất 10 ký tự)<textarea id="student-reset-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh mất quyền truy cập email cũ"></textarea></label>
+        <button id="student-reset-password" type="button" class="btn btn-light" disabled>Cấp mật khẩu tạm thời</button>
+        <div id="student-reset-result" hidden style="margin-top:10px"><strong>Mật khẩu tạm thời (chỉ hiển thị lần này):</strong> <code id="student-reset-secret" style="user-select:all;overflow-wrap:anywhere"></code><p>Hãy bàn giao trực tiếp sau khi xác minh học sinh. Không gửi qua nhóm chat hoặc email công khai.</p><button id="student-reset-hide" type="button" class="btn btn-light">Ẩn mật khẩu</button></div>
+      </div>
       <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
   </section>

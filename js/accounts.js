@@ -244,10 +244,12 @@ export function wireAccounts({state,$,esc,message}){
     $('student-link-reason').value='';
     $('student-link-selected').textContent=`${row.full_name||'—'} · ${row.class_code||'—'} · ${row.email||'Chưa có email'}`;
     $('student-link-unlink').disabled=!(row.account_status==='active'&&row.auth_user_id);
+    $('student-reset-password').disabled=!(['active','provisioned'].includes(row.account_status)&&row.auth_user_id&&row.email);
+    $('student-reset-result').hidden=true;$('student-reset-secret').textContent='';$('student-reset-reason').value='';
   }
   function renderStudents(){
     const visible=studentRows;
-    $('student-link-rows').innerHTML=visible.map((row,i)=>`<tr><td>${esc(row.full_name||'—')}</td><td>${esc(row.class_code||'—')}</td><td>${esc(row.student_code||'—')}</td><td>${esc(row.email||'—')}</td><td>${esc(row.account_status==='active'?'Đã liên kết':'Chưa liên kết')}</td><td>${row.account_status==='active'?`<button type="button" class="btn btn-light" data-student-unlink="${i}">Xem / Hủy liên kết</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="6">Không tìm thấy học sinh phù hợp.</td></tr>';
+    $('student-link-rows').innerHTML=visible.map((row,i)=>`<tr><td>${esc(row.full_name||'—')}</td><td>${esc(row.class_code||'—')}</td><td>${esc(row.student_code||'—')}</td><td>${esc(row.email||'—')}</td><td>${esc(row.account_status==='active'?'Đã liên kết':'Chưa liên kết')}</td><td>${['active','provisioned'].includes(row.account_status)?`<button type="button" class="btn btn-light" data-student-unlink="${i}">Quản lý tài khoản</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="6">Không tìm thấy học sinh phù hợp.</td></tr>';
     $('student-link-count').textContent=`${studentTotal} hồ sơ phù hợp`;
     $('student-link-page').textContent=`Trang ${studentPage+1}`;
     $('student-link-prev').disabled=studentPage===0;
@@ -286,10 +288,27 @@ export function wireAccounts({state,$,esc,message}){
     const btn=e.target.closest('[data-student-unlink]');if(!btn)return;
     const row=studentRows[Number(btn.dataset.studentUnlink)];if(row)studentSelect(row);
   };
+  $('student-reset-hide').onclick=()=>{$('student-reset-secret').textContent='';$('student-reset-result').hidden=true};
+  $('student-reset-password').onclick=async()=>{
+    const row=studentLinkRecord,reason=$('student-reset-reason').value.trim();
+    if(!row||!['active','provisioned'].includes(row.account_status)||!row.auth_user_id)return;
+    if(reason.length<10){linkMsg('Vui lòng nhập lý do cấp lại mật khẩu tối thiểu 10 ký tự.','error');return;}
+    if(!confirm(`Cấp lại mật khẩu cho ${row.full_name} (${row.email})? Tài khoản sẽ tạm khóa xem điểm đến khi học sinh đổi mật khẩu.`))return;
+    const btn=$('student-reset-password');btn.disabled=true;
+    $('student-reset-result').hidden=true;$('student-reset-secret').textContent='';
+    try{
+      const {data,error}=await state.client.functions.invoke('student-admin-password-reset',{body:{action:'reset',student_id:row.student_id,auth_user_id:row.auth_user_id,reason}});
+      if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể cấp lại mật khẩu.');
+      $('student-reset-secret').textContent=data.temporary_password;
+      $('student-reset-result').hidden=false;
+      linkMsg('Đã cấp mật khẩu tạm thời. Hãy bàn giao riêng cho đúng học sinh.','success');
+      row.account_status='provisioned';renderStudents();
+    }catch(e){linkMsg(e.message||String(e),'error');btn.disabled=false;}
+  };
   $('student-link-cancel').onclick=()=>{studentLinkRecord=null;$('student-link-result').hidden=true};
   $('student-link-unlink').onclick=async()=>{
     const row=studentLinkRecord,reason=$('student-link-reason').value.trim();
-    if(!row||row.account_status!=='active'||!row.auth_user_id)return;
+    if(!row||!['active','provisioned'].includes(row.account_status)||!row.auth_user_id)return;
     if(reason.length<10){linkMsg('Vui lòng nhập lý do tối thiểu 10 ký tự.','error');return}
     if(!confirm(`Xác nhận hủy liên kết của ${row.full_name||row.email}? Tài khoản sẽ mất quyền xem hồ sơ hiện tại.`))return;
     $('student-link-unlink').disabled=true;

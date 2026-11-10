@@ -1,7 +1,7 @@
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[data-tab]')];
-let client=null,resetFlow=false;
+let client=null,resetFlow=false,adminResetRequired=false,adminTempPassword=null;
 // v0.1.325: CAPTCHA disabled for registration, login and password recovery.
 
 let isActive=false;
@@ -164,10 +164,12 @@ async function status(){
  if(!user){updateLinkedUI(false);showSession(null,false);return null;}
  const {data,error}=await client.rpc('exam_student_my_activation_status');
  if(error){updateLinkedUI(false);$('identity').textContent='Email: '+(user.email||'')+' · Không đọc được trạng thái hồ sơ.';showSession(user,false);return user;}
- const active=data?.status==='active';updateLinkedUI(active);showSession(user,active);
- await loadStudentExams(active);
+ const active=data?.status==='active';adminResetRequired=!!user.app_metadata?.exam_admin_reset_required;updateLinkedUI(active&&!adminResetRequired);showSession(user,active&&!adminResetRequired);
+ if(adminResetRequired){selectTab('new-password');msg('Quản trị viên đã cấp lại mật khẩu. Bạn phải đổi mật khẩu tạm thời để tiếp tục.');}
+ if(adminResetRequired)selectTab('new-password');
+ await loadStudentExams(active&&!adminResetRequired);
  const summary=$('student-summary');summary.textContent='';summary.classList.add('hidden');
- if(active){
+ if(active&&!adminResetRequired){
   const result=await client.rpc('exam_student_my_profile');
   if(!result.error && result.data?.student_code){
     const d=result.data;
@@ -206,7 +208,7 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  if(location.hash.includes('type=recovery')||new URLSearchParams(location.search).get('type')==='recovery'){resetFlow=true;selectTab('new-password');}
  await status();
 }
-tabs.forEach(t=>t.addEventListener('click',()=>{if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
+tabs.forEach(t=>t.addEventListener('click',()=>{if(adminResetRequired){selectTab('new-password');return;}if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
 $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const email=$('reg-email').value.trim(),password=$('reg-password').value;
  if(password!==$('reg-confirm').value)throw new Error('Hai mật khẩu không khớp.');
@@ -216,8 +218,9 @@ $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTar
  msg('Đã gửi yêu cầu đăng ký. Hãy kiểm tra email để xác minh, sau đó đăng nhập và nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');selectTab('login');
 });});
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const {error:loginError}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(loginError)throw loginError;
- await status();clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
+ const loginPassword=$('login-password').value;const {error:loginError}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:loginPassword});if(loginError)throw loginError;
+ const u=await current();if(u?.app_metadata?.exam_admin_reset_required){adminResetRequired=true;adminTempPassword=loginPassword;selectTab('new-password');msg('Bạn phải đổi mật khẩu tạm thời trước khi xem kết quả.');return;}
+ await status();if(adminResetRequired){selectTab('new-password');return;}clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
 });});
 async function claimStudent(code){
  const user=await current();if(!user)throw new Error('Bạn cần đăng nhập trước khi liên kết hồ sơ.');
@@ -236,9 +239,9 @@ $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarg
 });});
 $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const password=$('reset-password').value;if(password!==$('reset-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- const {error}=await client.auth.updateUser({password});if(error)throw error;resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
+ if(adminResetRequired){const temporary_password=adminTempPassword;if(!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke('student-admin-password-reset',{body:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
-$('logout').addEventListener('click',async()=>{try{await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
+$('logout').addEventListener('click',async()=>{try{adminTempPassword=null;adminResetRequired=false;await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
 $('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi email đặt lại mật khẩu để tiếp tục.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
 $('check').addEventListener('click',async()=>{try{const user=await status();msg(user?'':'Chưa có phiên đăng nhập học sinh.')}catch(e){err(e)}});
 init().catch(err);
