@@ -5,7 +5,7 @@ let examLoginCaptchaId=null;
 function examLoginCaptchaRender(){
  const el=document.getElementById('admin-login-captcha'),hint=document.getElementById('admin-captcha-help');
  if(!el)return;
- if(EXAM_TURNSTILE_SITE_KEY==='REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY'){if(hint)hint.textContent='Chưa nhập Cloudflare Turnstile Site Key trong js/app.js. Liên hệ quản trị hệ thống để cấu hình trước khi đăng nhập.';return;}
+ if(EXAM_TURNSTILE_SITE_KEY==='0x4AAAAAAF5vV5eX34IQ5ukIFtYmr63OMKA'){if(hint)hint.textContent='Chưa nhập Cloudflare Turnstile Site Key trong js/app.js. Liên hệ quản trị hệ thống để cấu hình trước khi đăng nhập.';return;}
  if(!window.turnstile?.render){if(hint)hint.textContent='Đang tải CAPTCHA. Vui lòng chờ hoặc kiểm tra mạng.';return;}
  if(examLoginCaptchaId!==null)return;
  examLoginCaptchaId=window.turnstile.render(el,{sitekey:EXAM_TURNSTILE_SITE_KEY,theme:'auto'});
