@@ -2,67 +2,7 @@ import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[data-tab]')];
 let client=null,resetFlow=false;
-// Public site key only. Never put the Turnstile secret key in a GitHub Pages file.
-// Replace this value with the Site Key created for your domain in Cloudflare Turnstile.
-const TURNSTILE_SITE_KEY = '0x4AAAAAAF5vV0YOT5lSN8_Y';
-let registerCaptchaId=null;
-function captchaConfigured(){return TURNSTILE_SITE_KEY !== 'REPLACE_WITH_CLOUDFLARE_TURNSTILE_SITE_KEY' && /^[a-zA-Z0-9_-]{10,}$/.test(TURNSTILE_SITE_KEY);}
-function renderRegisterCaptcha(){
- const el=$('student-register-captcha'),help=$('captcha-help');
- if(!el)return;
- if(!captchaConfigured()){
-  help.textContent='Quản trị viên chưa cấu hình CAPTCHA. Tạm thời chưa thể đăng ký tài khoản mới.';
-  $('register').querySelector('button[type="submit"]').disabled=true;
-  return;
- }
- if(!window.turnstile?.render){help.textContent='Đang tải CAPTCHA. Nếu không hiển thị, kiểm tra kết nối mạng hoặc trình chặn nội dung.';return;}
- if(registerCaptchaId!==null)return;
- registerCaptchaId=window.turnstile.render(el,{
-  sitekey:TURNSTILE_SITE_KEY,theme:'auto',
-  'expired-callback':()=>{help.textContent='CAPTCHA đã hết hạn, vui lòng xác minh lại.';},
-  'error-callback':()=>{help.textContent='Không tải được CAPTCHA. Vui lòng thử lại hoặc kiểm tra mạng.';}
- });
- help.textContent='Hoàn tất xác minh để tiếp tục đăng ký.';
-}
-function getRegistrationCaptchaToken(){
- if(!captchaConfigured())throw new Error('CAPTCHA chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
- renderRegisterCaptcha();
- const token=registerCaptchaId===null?'':window.turnstile?.getResponse(registerCaptchaId);
- if(!token)throw new Error('Vui lòng hoàn tất CAPTCHA trước khi đăng ký.');
- return token;
-}
-function resetRegistrationCaptcha(){if(registerCaptchaId!==null && window.turnstile?.reset)window.turnstile.reset(registerCaptchaId);}
-window.addEventListener('load',renderRegisterCaptcha);
-
-
-const extraCaptchaIds={login:null,recover:null};
-function renderExtraCaptcha(kind){
- const el=$(kind+'-captcha'),help=$(kind+'-captcha-help');
- if(!el)return;
- if(!captchaConfigured()){
-  help.textContent='CAPTCHA chưa được cấu hình. Vui lòng liên hệ quản trị viên.';
-  $(kind).querySelector('button[type="submit"]').disabled=true;
-  return;
- }
- if(!window.turnstile?.render){help.textContent='Đang tải CAPTCHA. Nếu không xuất hiện, hãy kiểm tra mạng.';return;}
- if(extraCaptchaIds[kind]!==null)return;
- extraCaptchaIds[kind]=window.turnstile.render(el,{
-  sitekey:TURNSTILE_SITE_KEY,theme:'auto',
-  'expired-callback':()=>{help.textContent='CAPTCHA đã hết hạn. Vui lòng xác minh lại.';},
-  'error-callback':()=>{help.textContent='Không tải được CAPTCHA. Hãy thử lại.';}
- });
- help.textContent='Hoàn tất xác minh bảo mật.';
-}
-function extraCaptchaToken(kind){
- if(!captchaConfigured())throw new Error('CAPTCHA chưa được cấu hình.');
- renderExtraCaptcha(kind);
- const token=extraCaptchaIds[kind]===null?'':window.turnstile?.getResponse(extraCaptchaIds[kind]);
- if(!token)throw new Error('Vui lòng hoàn tất CAPTCHA trước khi tiếp tục.');
- return token;
-}
-function resetExtraCaptcha(kind){if(extraCaptchaIds[kind]!==null&&window.turnstile?.reset)window.turnstile.reset(extraCaptchaIds[kind]);}
-window.addEventListener('load',()=>{renderExtraCaptcha('login');renderExtraCaptcha('recover');});
-
+// v0.1.325: CAPTCHA disabled for registration, login and password recovery.
 
 let isActive=false;
 let signedIn=false;
@@ -270,15 +210,13 @@ tabs.forEach(t=>t.addEventListener('click',()=>{if(t.dataset.tab==='claim'&&isAc
 $('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const email=$('reg-email').value.trim(),password=$('reg-password').value;
  if(password!==$('reg-confirm').value)throw new Error('Hai mật khẩu không khớp.');
- const captchaToken=getRegistrationCaptchaToken();
  let signupError;
- try{const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect(),captchaToken}});signupError=error;}finally{resetRegistrationCaptcha();}
+  {const {error}=await client.auth.signUp({email,password,options:{emailRedirectTo:redirect()}});signupError=error;}
  if(signupError)throw signupError;
  msg('Đã gửi yêu cầu đăng ký. Hãy kiểm tra email để xác minh, sau đó đăng nhập và nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');selectTab('login');
 });});
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const captchaToken=extraCaptchaToken('login');
- let loginError;try{const {error}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value,options:{captchaToken}});loginError=error;}finally{resetExtraCaptcha('login');}if(loginError)throw loginError;
+ const {error:loginError}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});if(loginError)throw loginError;
  await status();clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
 });});
 async function claimStudent(code){
@@ -293,8 +231,7 @@ async function claimStudent(code){
 }
 $('claim').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,()=>claimStudent($('student-code').value.trim()));});
 $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const captchaToken=extraCaptchaToken('recover');
- let recoverError;try{const {error}=await client.auth.resetPasswordForEmail($('recover-email').value.trim(),{redirectTo:redirect(),captchaToken});recoverError=error;}finally{resetExtraCaptcha('recover');}if(recoverError)throw recoverError;
+ const {error:recoverError}=await client.auth.resetPasswordForEmail($('recover-email').value.trim(),{redirectTo:redirect()});if(recoverError)throw recoverError;
  msg('Nếu email đã đăng ký, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.','success');
 });});
 $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
@@ -302,6 +239,6 @@ $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.curren
  const {error}=await client.auth.updateUser({password});if(error)throw error;resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
 $('logout').addEventListener('click',async()=>{try{await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
-$('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;renderExtraCaptcha('recover');msg('Vui lòng hoàn tất CAPTCHA và nhấn gửi email đặt lại mật khẩu.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
+$('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi email đặt lại mật khẩu để tiếp tục.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
 $('check').addEventListener('click',async()=>{try{const user=await status();msg(user?'':'Chưa có phiên đăng nhập học sinh.')}catch(e){err(e)}});
 init().catch(err);
