@@ -206,12 +206,29 @@ export function defaultStatisticsSheet(block){
  const maxLocal=Math.max(0,...local.map(a=>a.length));
  const slots=common.length+maxLocal, width=1+slots*2+4;
  const rows=[],merges=[],scoreCells=[],kinds=[];
+ // Empty transition cells are vertically merged across the two group headers.
+ let pendingTransition=null;
  const push=(row,kind)=>{const r=rows.length;rows.push([...row,...Array(Math.max(0,width-row.length)).fill('')]);kinds.push(kind);return r};
  const merge=(r,c1,c2,r2=r)=>{if(c2>c1||r2>r)merges.push({s:{r,c:c1},e:{r:r2,c:c2}})};
  const allCounted=c=>c.subjects.filter(s=>s.is_counted===true);
  const totalFor=c=>{const list=allCounted(c);if(!list.length||list.some(s=>!validSubject(s)||Number(s.missing_count)>0))return {total:null,mean:null};const total=list.reduce((n,s)=>n+Number(s.average_score),0);return {total,mean:total/list.length}};
  const rankMap=new Map();for(const id of groupIds){const members=groupClasses(id).map(c=>({...c,summary:totalFor(c)})).filter(c=>c.summary.mean!==null).sort((a,b)=>b.summary.mean-a.summary.mean);let rank=0,last=null;members.forEach((c,i)=>{if(last===null||c.summary.mean!==last)rank=block.dense?rank+1:i+1;rankMap.set(c.class_code,rank);last=c.summary.mean})}
- const header=(codes,groupIndex=0)=>{const first=[groupIndex===0?'Lớp / GVCN':''],second=[''];for(let j=0;j<slots;j++){const code=codes[j];first.push(code&&(groupIndex===0||!common.includes(code))?(['KTPL','GDKTPL'].includes(code)?'KTPL':(classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)):'','');second.push(code&&(groupIndex===0||!common.includes(code))?'ĐTB':'',code&&(groupIndex===0||!common.includes(code))?'XT':'')};first.push('Tổng','TB','XT theo ban','Tăng/Giảm');second.push('','','','');const r=push(first,'subjectHeader');push(second,'subHeader');merge(r,0,0,r+1);for(let j=0;j<slots;j++){if(groupIndex>0&&(!codes[j]||common.includes(codes[j])))merge(r,1+j*2,2+j*2,r+1);else merge(r,1+j*2,2+j*2)}for(let c=width-4;c<width;c++)merge(r,c,c,r+1)};
+ const header=(codes,groupIndex=0)=>{const first=[groupIndex===0?'Lớp / GVCN':''],second=[''];for(let j=0;j<slots;j++){const code=codes[j];first.push(code&&(groupIndex===0||!common.includes(code))?(['KTPL','GDKTPL'].includes(code)?'KTPL':(classes.flatMap(c=>c.subjects).find(s=>s.subject_code===code)?.subject_name||code)):'','');second.push(code&&(groupIndex===0||!common.includes(code))?'ĐTB':'',code&&(groupIndex===0||!common.includes(code))?'XT':'')};first.push('Tổng','TB','XT theo ban','Tăng/Giảm');second.push('','','','');const r=push(first,'subjectHeader');push(second,'subHeader');
+  if(pendingTransition&&groupIndex>0){
+   const prior=pendingTransition;
+   // Merge only genuinely empty cells; never cross a group-specific average or the next group's subject title.
+   merge(prior,0,0,r+1);
+   for(let j=0;j<slots;j++){
+    const start=1+j*2;
+    if(!codes[j]||common.includes(codes[j]))merge(prior,start,start+1,r+1);
+    else merge(r,start,start+1);
+   }
+   pendingTransition=null;
+  }else{
+   merge(r,0,0,r+1);
+   for(let j=0;j<slots;j++)merge(r,1+j*2,2+j*2,r+1);
+  }
+  for(let c=width-4;c<width;c++)merge(r,c,c,r+1)};
  for(let gi=0;gi<groupIds.length;gi++){
   const id=groupIds[gi],members=groupClasses(id),codes=[...common,...local[gi]];
   header(codes,gi);
@@ -220,7 +237,10 @@ export function defaultStatisticsSheet(block){
    const summary=totalFor(c),rank=rankMap.get(c.class_code)??null,previous=block.previousRanks?.get(c.class_code),delta=previous!=null&&rank!=null?previous-rank:'';
    top.push(summary.total??'',summary.mean??'',rank??'',delta);teachers.push('','','','');push(top,'class');push(teachers,'teacher');merge(r,0,0,r+1);for(let j=width-4;j<width;j++)merge(r,j,j,r+1);if(summary.total!==null){scoreCells.push({r,c:width-4},{r,c:width-3})}else merge(r,width-4,width-1,r+1);for(let j=0;j<slots;j++)if(!codes[j])merge(r,1+j*2,2+j*2,r+1)
   }
-  if(gi<groupIds.length-1){const r=rows.length,avg=[''];for(let j=0;j<slots;j++){const code=codes[j],a=code&&!isGradeScope(code)?weightedAverage(members,code):'';avg.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}avg.push('','','','');if(avg.some((v,i)=>i>0&&v!=='')){push(avg,'groupAverage');merge(r,width-4,width-1);for(let j=0;j<slots;){if(avg[1+j*2]!==''){j++;continue}const start=j;while(j<slots&&avg[1+j*2]==='')j++;merge(r,start===0?0:1+start*2,2+(j-1)*2)}}}
+  if(gi<groupIds.length-1){const r=rows.length,avg=[''];for(let j=0;j<slots;j++){const code=codes[j],a=code&&!isGradeScope(code)?weightedAverage(members,code):'';avg.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}avg.push('','','','');if(avg.some((v,i)=>i>0&&v!=='')){push(avg,'groupAverage');merge(r,width-4,width-1);pendingTransition=r;
+    // Preserve averages and merge each average with its adjacent empty rank cell.
+    for(let j=0;j<slots;j++)if(avg[1+j*2]!=='')merge(r,1+j*2,2+j*2);
+   }}
  }
  const r=rows.length,footer=['ĐTB các lớp'];for(let j=0;j<slots;j++){const code=j<common.length?common[j]:local[groupIds.length-1]?.[j-common.length],a=code?(isGradeScope(code)?weightedAverage(classes,code):weightedAverage(groupClasses(groupIds[groupIds.length-1]),code)):'';footer.push(a,'');if(a!=='')scoreCells.push({r,c:1+j*2})}footer.push('','','','');push(footer,'footer');merge(r,width-4,width-1);
  return {rows,merges,width,scoreCells,scoreDecimals:3,kinds,groupIds};
