@@ -52,13 +52,26 @@
       <label style="flex:2;min-width:220px">Tìm kiếm học sinh
         <input id="student-link-search" type="search" autocomplete="off" placeholder="Họ tên, lớp, mã định danh hoặc email">
       </label>
+      <label style="min-width:95px">Khối
+        <select id="student-link-grade"><option value="">Tất cả</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select>
+      </label>
+      <label style="min-width:125px">Lớp
+        <select id="student-link-class"><option value="">Tất cả lớp</option></select>
+      </label>
       <label style="min-width:150px">Trạng thái
         <select id="student-link-status"><option value="all">Tất cả</option><option value="active">Đã liên kết</option><option value="pending">Chưa liên kết</option></select>
       </label>
       <button id="student-link-find" type="button" class="btn btn-primary">Tìm kiếm</button>
       <button id="student-link-reload" type="button" class="btn btn-light">Tải danh sách</button>
+      <button id="student-link-summary-load" type="button" class="btn btn-light">Thống kê theo lớp</button>
+      <button id="student-link-print" type="button" class="btn btn-light" disabled>In thống kê</button>
     </div>
     <p id="student-link-count" role="status"></p>
+    <div id="student-link-summary" hidden style="margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:8px;background:white">
+      <strong>Thống kê liên kết tài khoản học sinh</strong>
+      <p id="student-link-summary-note"></p>
+      <div class="table-wrap"><table><thead><tr><th>Lớp</th><th>Tổng học sinh</th><th>Đã liên kết</th><th>Chưa liên kết</th><th>Tỷ lệ</th></tr></thead><tbody id="student-link-summary-rows"></tbody></table></div>
+    </div>
     <div id="student-link-message" class="notice hidden" role="status"></div>
     <div class="table-wrap"><table><thead><tr><th>Họ và tên</th><th>Lớp</th><th>Mã định danh Bộ</th><th>Email</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="student-link-rows"><tr><td colspan="6">Nhấn Tải danh sách để xem tài khoản học sinh.</td></tr></tbody></table></div>
     <div class="form-actions"><button id="student-link-prev" type="button" class="btn btn-light" disabled>Trang trước</button><span id="student-link-page">Trang 1</span><button id="student-link-next" type="button" class="btn btn-light" disabled>Trang sau</button></div>

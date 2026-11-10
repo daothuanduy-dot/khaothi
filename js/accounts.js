@@ -154,6 +154,89 @@ export function wireAccounts({state,$,esc,message}){
   // Quản trị liên kết hồ sơ học sinh. RPC chỉ trả dữ liệu cho Admin.
   let studentLinkRecord=null, studentRows=[], studentPage=0, studentTotal=0, studentRequest=0;
   const studentPageSize=30;
+  let allStudentRecords=null, studentSummaryLoading=false;
+  const normClass=value=>String(value||'').trim().toUpperCase();
+  const gradeOf=value=>(normClass(value).match(/^(10|11|12)/)||[])[1]||'';
+  const selectedClass=()=>normClass($('student-link-class').value);
+  function classSort(a,b){return a.localeCompare(b,'vi',{numeric:true,sensitivity:'base'})}
+  function filteredAllStudents(){
+    const grade=$('student-link-grade').value,cls=selectedClass();
+    return (allStudentRecords||[]).filter(r=>(!grade||gradeOf(r.class_code)===grade)&&(!cls||normClass(r.class_code)===cls));
+  }
+  function updateClassOptions(){
+    const grade=$('student-link-grade').value,previous=$('student-link-class').value;
+    const known=allStudentRecords?allStudentRecords.map(r=>normClass(r.class_code)):[];
+    // When a complete roster is not yet loaded, classes are populated from the current page.
+    const classes=[...new Set([...known,...studentRows.map(r=>normClass(r.class_code))].filter(c=>c&&(!grade||gradeOf(c)===grade)))].sort(classSort);
+    $('student-link-class').innerHTML='<option value="">Tất cả lớp</option>'+classes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if(classes.includes(previous))$('student-link-class').value=previous;
+  }
+  function renderSummary(){
+    if(!allStudentRecords)return;
+    const grouped=new Map();
+    for(const r of filteredAllStudents()){
+      const cls=normClass(r.class_code)||'Chưa xác định';
+      if(!grouped.has(cls))grouped.set(cls,{name:cls,total:0,linked:0});
+      const item=grouped.get(cls);item.total++;
+      if(r.account_status==='active')item.linked++;
+    }
+    const groups=[...grouped.values()].sort((a,b)=>classSort(a.name,b.name));
+    const totals=groups.reduce((a,r)=>({total:a.total+r.total,linked:a.linked+r.linked}),{total:0,linked:0});
+    const percent=(a,b)=>b?(100*a/b).toFixed(1)+'%':'0%';
+    const row=r=>`<tr><td>${esc(r.name)}</td><td>${r.total}</td><td>${r.linked}</td><td>${r.total-r.linked}</td><td>${percent(r.linked,r.total)}</td></tr>`;
+    $('student-link-summary-rows').innerHTML=groups.map(row).join('')+`<tr style="font-weight:bold"><td>Tổng cộng</td><td>${totals.total}</td><td>${totals.linked}</td><td>${totals.total-totals.linked}</td><td>${percent(totals.linked,totals.total)}</td></tr>`;
+    $('student-link-summary-note').textContent=`${groups.length} lớp · ${totals.total} học sinh · ${totals.linked} đã liên kết · ${totals.total-totals.linked} chưa liên kết`;
+    $('student-link-summary').hidden=false;
+    $('student-link-print').disabled=!groups.length;
+  }
+  async function loadFullStudentRoster(){
+    if(studentSummaryLoading)return;
+    studentSummaryLoading=true;
+    $('student-link-summary-load').disabled=true;
+    $('student-link-print').disabled=true;
+    linkMsg('Đang đọc đầy đủ hồ sơ học sinh để thống kê, vui lòng chờ...');
+    try{
+      const rows=[],size=100;let offset=0,total=null;
+      while(total===null||offset<total){
+        const result=await rpc('exam_admin_student_accounts_list',{p_search:'',p_status:'all',p_limit:size,p_offset:offset});
+        const batch=Array.isArray(result?.rows)?result.rows:[];
+        const reported=Number(result?.total);
+        if(!Number.isFinite(reported)||reported<0)throw new Error('Máy chủ không trả tổng số hồ sơ hợp lệ.');
+        if(total===null)total=reported;
+        if(reported!==total)throw new Error('Danh sách học sinh thay đổi trong lúc thống kê. Hãy tải lại.');
+        if(!batch.length&&offset<total)throw new Error('Không tải đủ hồ sơ. Hãy kiểm tra giới hạn phân trang của Supabase.');
+        rows.push(...batch);offset+=batch.length;
+        if(rows.length>total)throw new Error('Dữ liệu phân trang không nhất quán.');
+      }
+      // Reject duplicates rather than silently double-counting linked students.
+      const ids=rows.map(r=>r.student_id).filter(Boolean);
+      if(new Set(ids).size!==ids.length)throw new Error('Danh sách có hồ sơ trùng lặp; chưa thể thống kê chính xác.');
+      allStudentRecords=rows;
+      updateClassOptions();renderSummary();
+      linkMsg(`Đã tải ${rows.length} hồ sơ và tổng hợp theo lớp.`,'success');
+    }catch(error){allStudentRecords=null;$('student-link-summary').hidden=true;linkMsg(error.message||String(error),'error')}
+    finally{studentSummaryLoading=false;$('student-link-summary-load').disabled=false}
+  }
+  function printStudentSummary(){
+    if(!allStudentRecords)return;
+    const list=filteredAllStudents();
+    const byClass=new Map();
+    for(const r of list){const c=normClass(r.class_code)||'Chưa xác định';if(!byClass.has(c))byClass.set(c,[]);byClass.get(c).push(r)}
+    const classes=[...byClass.keys()].sort(classSort);
+    const safe=val=>esc(String(val??''));
+    const sections=classes.map(cls=>{
+      const rows=byClass.get(cls).sort((a,b)=>String(a.full_name||'').localeCompare(String(b.full_name||''),'vi'));
+      const linked=rows.filter(r=>r.account_status==='active').length;
+      return `<section><h3>Lớp ${safe(cls)} — ${linked}/${rows.length} đã liên kết</h3><table><thead><tr><th>STT</th><th>Họ và tên</th><th>Mã định danh Bộ GDĐT</th><th>Trạng thái</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${safe(r.full_name)}</td><td>${safe(r.student_code)}</td><td>${r.account_status==='active'?'Đã liên kết':'Chưa liên kết'}</td></tr>`).join('')}</tbody></table></section>`;
+    }).join('');
+    const popup=window.open('','_blank');
+    if(!popup){linkMsg('Trình duyệt đã chặn cửa sổ in. Hãy cho phép pop-up rồi thử lại.','error');return}
+    popup.document.open();popup.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê tài khoản học sinh</title><style>@page{size:A4 portrait;margin:13mm}body{font-family:Arial,sans-serif;font-size:11pt;color:#111}h2{text-align:center;font-size:15pt;margin:10px 0 5px}p{text-align:center}h3{font-size:12pt;margin:18px 0 8px}table{border-collapse:collapse;width:100%;font-size:10pt}th,td{border:1px solid #444;padding:5px 7px}th{background:#eee}td:first-child{text-align:center;width:45px}section{break-inside:avoid-page;margin-top:15px}thead{display:table-header-group}@media print{button{display:none}}</style></head><body><h2>THỐNG KÊ TÀI KHOẢN HỌC SINH ĐÃ LIÊN KẾT</h2><p>${classes.length} lớp · ${list.length} học sinh · ${list.filter(r=>r.account_status==='active').length} đã liên kết</p>${sections}<script>window.onload=()=>window.print()</script></body></html>`);popup.document.close();
+  }
+  $('student-link-grade').onchange=async()=>{studentPage=0;if(!allStudentRecords)await loadFullStudentRoster();updateClassOptions();if(allStudentRecords)renderSummary();loadStudents()};
+  $('student-link-class').onchange=async()=>{studentPage=0;if(!allStudentRecords)await loadFullStudentRoster();if(allStudentRecords)renderSummary();loadStudents()};
+  $('student-link-summary-load').onclick=loadFullStudentRoster;
+  $('student-link-print').onclick=printStudentSummary;
   const linkMsg=(txt,type='info')=>message($('student-link-message'),txt,type);
   function studentSelect(row){
     studentLinkRecord=row;
@@ -163,7 +246,8 @@ export function wireAccounts({state,$,esc,message}){
     $('student-link-unlink').disabled=!(row.account_status==='active'&&row.auth_user_id);
   }
   function renderStudents(){
-    $('student-link-rows').innerHTML=studentRows.map((row,i)=>`<tr><td>${esc(row.full_name||'—')}</td><td>${esc(row.class_code||'—')}</td><td>${esc(row.student_code||'—')}</td><td>${esc(row.email||'—')}</td><td>${esc(row.account_status==='active'?'Đã liên kết':'Chưa liên kết')}</td><td>${row.account_status==='active'?`<button type="button" class="btn btn-light" data-student-unlink="${i}">Xem / Hủy liên kết</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="6">Không tìm thấy học sinh phù hợp.</td></tr>';
+    const visible=studentRows;
+    $('student-link-rows').innerHTML=visible.map((row,i)=>`<tr><td>${esc(row.full_name||'—')}</td><td>${esc(row.class_code||'—')}</td><td>${esc(row.student_code||'—')}</td><td>${esc(row.email||'—')}</td><td>${esc(row.account_status==='active'?'Đã liên kết':'Chưa liên kết')}</td><td>${row.account_status==='active'?`<button type="button" class="btn btn-light" data-student-unlink="${i}">Xem / Hủy liên kết</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="6">Không tìm thấy học sinh phù hợp.</td></tr>';
     $('student-link-count').textContent=`${studentTotal} hồ sơ phù hợp`;
     $('student-link-page').textContent=`Trang ${studentPage+1}`;
     $('student-link-prev').disabled=studentPage===0;
@@ -174,6 +258,13 @@ export function wireAccounts({state,$,esc,message}){
     $('student-link-find').disabled=true;$('student-link-reload').disabled=true;
     studentLinkRecord=null;$('student-link-result').hidden=true;
     try{
+      const classFilter=selectedClass(),gradeFilter=$('student-link-grade').value;
+      if(allStudentRecords&&(classFilter||gradeFilter)){
+        const term=$('student-link-search').value.trim().toLocaleLowerCase('vi');
+        const status=$('student-link-status').value;
+        const filtered=filteredAllStudents().filter(r=>(status==='all'||(status==='active'?r.account_status==='active':r.account_status!=='active'))&&(!term||[r.full_name,r.class_code,r.student_code,r.email].some(v=>String(v||'').toLocaleLowerCase('vi').includes(term))));
+        studentTotal=filtered.length;studentRows=filtered.slice(studentPage*studentPageSize,(studentPage+1)*studentPageSize);renderStudents();return;
+      }
       const data=await rpc('exam_admin_student_accounts_list',{
         p_search:$('student-link-search').value.trim(),
         p_status:$('student-link-status').value,
@@ -181,12 +272,12 @@ export function wireAccounts({state,$,esc,message}){
       });
       if(token!==studentRequest)return;
       studentRows=Array.isArray(data?.rows)?data.rows:[];
-      studentTotal=Number(data?.total||0);renderStudents();
+      studentTotal=Number(data?.total||0);updateClassOptions();renderStudents();
     }catch(e){if(token===studentRequest)linkMsg(e.message||String(e),'error')}
     finally{if(token===studentRequest){$('student-link-find').disabled=false;$('student-link-reload').disabled=false}}
   }
   $('student-link-find').onclick=()=>{studentPage=0;loadStudents()};
-  $('student-link-reload').onclick=()=>{studentPage=0;loadStudents()};
+  $('student-link-reload').onclick=()=>{studentPage=0;allStudentRecords=null;$('student-link-summary').hidden=true;$('student-link-print').disabled=true;loadStudents()};
   $('student-link-search').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();studentPage=0;loadStudents()}};
   $('student-link-status').onchange=()=>{studentPage=0;loadStudents()};
   $('student-link-prev').onclick=()=>{if(studentPage>0){studentPage--;loadStudents()}};
