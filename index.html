@@ -179,8 +179,7 @@
 #exam-visit-widget [data-visit-online],#exam-visit-widget [data-visit-total]{font-weight:800;font-variant-numeric:tabular-nums;color:#123b78}
 #exam-visit-widget .visit-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#0a9d6e;margin-right:4px}
 @media(max-width:650px){#exam-visit-widget{font-size:10px;padding:5px 7px;gap:1px}}
-</style>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script></head>
+</style></head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="brand-mark">KT</div><div><div class="brand-heading"><strong>HỆ THỐNG KHẢO THÍ</strong><span id="app-version" class="version-inline">v0.1.316</span></div><small>THPT Lê Hồng Phong · Hải Phòng</small></div></div>
@@ -206,7 +205,6 @@
       <form id="login-form" class="form-grid">
         <label>Email tài khoản<input id="login-email" type="email" required autocomplete="username" placeholder="giaovien@truong.edu.vn" autocapitalize="none" spellcheck="false"></label>
         <label>Mật khẩu<span class="login-password-field"><input id="login-password" type="password" required autocomplete="current-password"><button id="login-toggle-password" class="btn btn-light" type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></span></label>
-        <div id="admin-login-captcha" style="min-height:65px"></div><p id="admin-captcha-help" style="font-size:12px;margin:0">Vui lòng hoàn tất xác minh bảo mật.</p>
         <button id="login-submit" class="btn btn-primary" type="submit">Đăng nhập</button>
       </form>
       <div id="login-message" class="notice hidden" role="alert" aria-live="polite"></div>
@@ -316,7 +314,7 @@
   <!-- Legacy compatibility marker retained for older static checks: js/app.js?v=0.1.90. -->
   <!-- Cache-buster must match the current application version so GitHub Pages does not reuse old JavaScript. -->
     <script type="module" src="./js/visit-counter.js?v=0.1.310"></script>
-  <script id="app-entry" type="module" src="./js/app.js?v=0.1.341&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238&repairguard=272" data-previous-src="js/app.js?v=0.1.128"></script>
+  <script id="app-entry" type="module" src="./js/app.js?v=0.1.342&connection=160&choice=153&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202&cleanprint=197&subjectplan=203&scriptrooms=203&mcqguard=238&repairguard=272" data-previous-src="js/app.js?v=0.1.128"></script>
   <script>
     (() => {
       document.getElementById('app-entry').addEventListener('error', () => {
