@@ -99,7 +99,14 @@ async function renderAppeals(examId,scores,container){
   const choices=[];
   for(const sc of scores){
    if(sc.is_absent||sc.no_paper)continue;
-   const kinds=[['mcq','Trắc nghiệm'],['essay','Tự luận']].filter(([kind])=>sc.score_mode===kind||sc.score_mode==='combined');
+   // Chỉ cho đăng ký thành phần đã có điểm được công bố. Điểm 0 là hợp lệ.
+   // Không dùng total_score vì môn có thể chỉ mới có một thành phần.
+   const kinds=[['mcq','Trắc nghiệm'],['essay','Tự luận']].filter(([kind])=>{
+    if(!(sc.score_mode===kind||sc.score_mode==='combined'))return false;
+    const missing=kind==='mcq'?sc.mcq_missing:sc.essay_missing;
+    const score=kind==='mcq'?sc.mcq_score:sc.essay_score;
+    return missing!==true && score!==null && score!==undefined && score!=='' && Number.isFinite(Number(score));
+   });
    if(!kinds.length)continue;
    const row=document.createElement('div');row.className='appeal-choice-row';
    const name=document.createElement('strong');name.textContent=subjectName(sc.subject_code);row.append(name);
