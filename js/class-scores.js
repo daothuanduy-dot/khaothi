@@ -5,7 +5,7 @@ function byName(a,b){const x=parts(a.student_name),y=parts(b.student_name);const
 export async function openClassScores({state,examId=''}){
  document.getElementById('class-score-dialog')?.remove();
  const d=document.createElement('dialog');d.id='class-score-dialog';d.style.cssText='width:min(1300px,97vw);max-height:94vh;overflow:auto;padding:18px';
- d.innerHTML=`<h2>Nhập điểm tự luận theo lớp được phân công</h2><p>Trắc nghiệm do quản trị nhập theo SBD, giáo viên chỉ nhập điểm tự luận. Danh sách xếp theo Tên – Đệm – Họ.</p><div data-msg role="status"></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label>Kỳ thi <select data-exam></select></label><label>Môn <select data-subject></select></label><label>Lớp <select data-class></select></label><button data-reload>Tải lại</button><button data-close>Đóng</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0"><label>Điểm mặc định <input data-default type="text" inputmode="decimal" autocomplete="off" style="width:75px"></label><button data-apply>Áp dụng cho ô trống</button><label>Nhập nhanh theo thứ tự danh sách <textarea data-quick rows="2" placeholder="Mỗi dòng một điểm hoặc 3; 2,75; 3; 1,5" style="width:280px;vertical-align:middle" aria-label="Danh sách điểm nhập nhanh"></textarea></label><button data-quick-apply type="button">Điền điểm nhanh</button><button data-save-all style="font-weight:bold">Lưu tất cả thay đổi</button><span data-counter></span></div><div data-limits style="font-weight:600;color:#1e40af;margin:6px 0"></div><div data-table></div>`;
+ d.innerHTML=`<h2>Nhập điểm tự luận theo lớp được phân công</h2><p>Trắc nghiệm do quản trị nhập theo SBD, giáo viên chỉ nhập điểm tự luận. Danh sách xếp theo Tên – Đệm – Họ.</p><div data-msg role="status"></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label>Kỳ thi <select data-exam></select></label><label>Môn <select data-subject></select></label><label>Lớp <select data-class></select></label><button data-reload>Tải lại</button><button data-close>Đóng</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0"><label>Điểm mặc định <input data-default type="text" inputmode="decimal" autocomplete="off" style="width:75px"></label><button data-apply>Áp dụng cho ô trống</button><span style="color:#475569;font-size:13px">Nhập trực tiếp tại từng ô; Enter / ↓: ô dưới, ↑: ô trên</span><button data-save-all style="font-weight:bold">Lưu tất cả thay đổi</button><span data-counter></span></div><div data-limits style="font-weight:600;color:#1e40af;margin:6px 0"></div><div data-table></div>`;
  document.body.append(d);d.showModal();const $=s=>d.querySelector(s);let rows=[],dirty=new Set(),busy=false;
  const notify=(s,error=false)=>{const e=$('[data-msg]');e.textContent=s;e.style.color=error?'#b91c1c':'#166534'};
  const rpc=async(name,args={})=>{const {data,error}=await state.client.rpc(name,args);if(error)throw Error(error.message);return data};
@@ -28,10 +28,30 @@ export async function openClassScores({state,examId=''}){
  $('[data-close]').onclick=()=>{if(!busy&&discard()){d.close();d.remove()}};
  d.addEventListener('cancel',e=>{if(busy||!discard())e.preventDefault()});
  d.addEventListener('change',e=>{if(!e.target.matches('[data-essay]'))return;try{edit(e.target.closest('tr'),e.target.value);notify('Điểm đã thay đổi, nhấn Lưu tất cả thay đổi để ghi vào CSDL.')}catch(err){notify(err.message,true);e.target.focus()}});
- d.addEventListener('keydown',e=>{if(e.key!=='Enter'||!e.target.matches('[data-essay]'))return;e.preventDefault();e.target.dispatchEvent(new Event('change',{bubbles:true}));const inputs=[...d.querySelectorAll('[data-essay]')];inputs[(inputs.indexOf(e.target)+1)%inputs.length]?.focus()});
+ d.addEventListener('keydown',e=>{
+  if(!e.target.matches('[data-essay]')||!['Enter','ArrowDown','ArrowUp'].includes(e.key))return;
+  // Navigation only: do not change the numeric value with arrow keys.
+  e.preventDefault();
+  const el=e.target,tr=el.closest('tr');
+  try{edit(tr,el.value);notify('Đã ghi nhận thay đổi trên màn hình; nhấn Lưu tất cả thay đổi để lưu vào CSDL.');}
+  catch(err){notify(err.message,true);el.focus();el.select();return;}
+  const inputs=[...d.querySelectorAll('[data-essay]')];
+  const index=inputs.indexOf(el),offset=e.key==='ArrowUp'?-1:1;
+  const next=inputs[index+offset];
+  if(next){next.focus();next.select();}
+ });
  d.addEventListener('click',e=>{if(e.target.matches('[data-clear]')){const tr=e.target.closest('tr');if(confirm('Xóa điểm tự luận của '+getRow(tr).student_name+'?'))edit(tr,'')}});
- $('[data-quick-apply]').onclick=()=>{try{const raw=$('[data-quick]').value.trim();if(!raw)throw Error('Hãy nhập dãy điểm, phân cách bằng dấu chấm phẩy, tab hoặc xuống dòng.');const values=raw.split(/[;\t\r\n]+/).map(x=>x.trim()).filter(Boolean);const trs=[...d.querySelectorAll('tr[data-key]')];if(values.length>trs.length)throw Error(`Có ${values.length} điểm nhưng chỉ ${trs.length} học sinh trong danh sách.`);const planned=values.map((v,i)=>({tr:trs[i],value:v,score:valid(getRow(trs[i]),v)}));if(!confirm(`Điền ${planned.length} điểm theo thứ tự từ dòng đầu của danh sách hiện tại? Dữ liệu chưa được lưu cho đến khi nhấn Lưu tất cả thay đổi.`))return;planned.forEach(x=>edit(x.tr,x.value));notify(`Đã điền nhanh ${planned.length} điểm. Kiểm tra lại từng dòng rồi nhấn Lưu tất cả thay đổi.`)}catch(e){notify(e.message,true)}};
- $('[data-apply]').onclick=()=>{try{const n=$('[data-default]').value;if(n==='')throw Error('Nhập điểm mặc định trước khi áp dụng.');const list=[...d.querySelectorAll('tr[data-key]')].filter(tr=>getRow(tr).essay_score==null);for(const tr of list)valid(getRow(tr),n);if(!list.length)return notify('Không có ô trống để áp dụng.');if(!confirm(`Áp dụng ${n} điểm tự luận cho ${list.length} học sinh chưa có điểm?`))return;for(const tr of list)edit(tr,n);notify(`Đã điền ${list.length} ô, nhấn Lưu tất cả để ghi vào cơ sở dữ liệu.`)}catch(e){notify(e.message,true)}};
+ $('[data-apply]').onclick=()=>{try{
+  const n=$('[data-default]').value.trim();
+  if(n==='')throw Error('Nhập điểm mặc định trước khi áp dụng.');
+  // Check the ACTUAL input cells, not cached row data: typing without blur must not be overwritten.
+  const list=[...d.querySelectorAll('tr[data-key]')].filter(tr=>tr.querySelector('[data-essay]').value.trim()==='');
+  if(!list.length)return notify('Không có ô nhập trống để áp dụng điểm mặc định.');
+  for(const tr of list)valid(getRow(tr),n);
+  if(!confirm(`Điền điểm mặc định ${n} vào ${list.length} ô đang trống? Các ô đã có số sẽ được giữ nguyên.`))return;
+  for(const tr of list)edit(tr,n);
+  notify(`Đã điền điểm mặc định vào ${list.length} ô trống. Nhấn Lưu tất cả thay đổi để ghi vào CSDL.`);
+ }catch(e){notify(e.message,true)}};
  $('[data-save-all]').onclick=()=>run(async()=>{for(const el of d.querySelectorAll('[data-essay]')){const tr=el.closest('tr'),r=getRow(tr);if(String(r.essay_score??'')!==el.value.trim().replace(',', '.'))edit(tr,el.value)}if(!dirty.size)return notify('Không có điểm thay đổi.');const items=rows.filter(r=>dirty.has(`${r.candidate_id}:${r.subject_code}`)).map(r=>({candidate_id:r.candidate_id,subject_code:r.subject_code,essay_score:r.essay_score,version:r.version||0}));if(!confirm(`Lưu ${items.length} điểm tự luận đã thay đổi?`))return;const result=await rpc('exam_save_class_essays_batch',{p_exam:$('[data-exam]').value,p_items:items});if(!result||Number(result.saved)!==items.length)throw Error(`Máy chủ chưa xác nhận lưu đủ ${items.length} điểm (đã xác nhận: ${result?.saved??'không rõ'}). Giữ nguyên dữ liệu trên màn hình để kiểm tra.`);await load();notify(`Đã lưu ${result.saved} điểm tự luận, ghi lịch sử và tải lại danh sách.`)});
  await run(async()=>{const exams=await rpc('exam_class_score_exams');$('[data-exam]').innerHTML=(exams||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} (${esc(x.school_year)})</option>`).join('');if(exams?.some(x=>x.id===examId))$('[data-exam]').value=examId;await load()});
 }
