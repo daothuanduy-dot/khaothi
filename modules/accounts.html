@@ -25,8 +25,9 @@
     <label>Tên trên thống kê<input id="accounts-report-name" autocomplete="off" maxlength="40" placeholder="Ví dụ: N.Thanh"><small>Tên ngắn gọn của giáo viên dùng trên báo cáo.</small></label>
     <label>Email<input id="accounts-email" type="email" autocomplete="off" maxlength="254" required></label>
     <label>Mật khẩu mới<input id="accounts-password" type="password" autocomplete="new-password" minlength="8"><small>Bắt buộc khi tạo mới; để trống khi sửa nếu giữ mật khẩu cũ.</small></label>
-    <label>Vai trò<select id="accounts-role"><option value="grader">Giáo viên</option><option value="admin">Admin</option></select></label>
+    <label>Vai trò<select id="accounts-role"><option value="grader">Giáo viên</option><option value="admin">Admin</option><option value="appeal_entry">Chuyên trách nhập phúc khảo</option></select></label>
     <label>Môn phụ trách<select id="accounts-subject"></select></label>
+    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="accounts-appeal-permission"> Quyền nhập điểm phúc khảo (bổ sung, không cấp Admin)</label>
   </div>
   <div class="modal-actions"><button id="accounts-delete" class="btn danger-btn" type="button" hidden>Xóa tài khoản</button><button id="accounts-cancel" class="btn btn-light" type="button">Hủy</button><button id="accounts-create" class="btn btn-primary" type="submit">Tạo tài khoản</button><button id="accounts-update" class="btn btn-primary" type="submit" hidden>Lưu thay đổi</button></div>
   </form>

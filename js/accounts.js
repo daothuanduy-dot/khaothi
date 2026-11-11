@@ -25,7 +25,7 @@ export function wireAccounts({state,$,esc,message}){
     const term=$('accounts-search').value.trim().toLocaleLowerCase('vi');
     const rows=users.filter(user=>[user.full_name,user.report_name,user.email].some(value=>String(value||'').toLocaleLowerCase('vi').includes(term)));
     $('accounts-count').textContent=`Hiển thị ${rows.length}/${users.length} tài khoản`;
-    $('accounts-list').innerHTML=rows.map(user=>`<tr><td>${esc(user.full_name||'—')}</td><td>${esc(user.report_name||'—')}</td><td>${esc(user.email||'—')}</td><td>${esc(user.role==='admin'?'Admin':user.role==='grader'?'Giáo viên':'Chưa phân quyền')}</td><td>${esc(subjects.find(subject=>subject.code===user.subject_code)?.name||user.subject_code||'—')}</td><td><button type="button" class="btn btn-light" data-account-edit="${esc(user.user_id)}">Sửa</button></td></tr>`).join('')||`<tr><td colspan="6" class="empty">${users.length?'Không có tài khoản phù hợp.':'Chưa có tài khoản.'}</td></tr>`;
+    $('accounts-list').innerHTML=rows.map(user=>`<tr><td>${esc(user.full_name||'—')}</td><td>${esc(user.report_name||'—')}</td><td>${esc(user.email||'—')}</td><td>${esc(user.role==='admin'?'Admin':user.role==='grader'?'Giáo viên':user.role==='appeal_entry'?'Nhập phúc khảo':'Chưa phân quyền')}</td><td>${esc(subjects.find(subject=>subject.code===user.subject_code)?.name||user.subject_code||'—')}</td><td><button type="button" class="btn btn-light" data-account-edit="${esc(user.user_id)}">Sửa</button></td></tr>`).join('')||`<tr><td colspan="6" class="empty">${users.length?'Không có tài khoản phù hợp.':'Chưa có tài khoản.'}</td></tr>`;
   }
   function closeEditor(){if(busy)return;$('accounts-password').value='';$('accounts-dialog').close();}
   function openEditor(id=''){
@@ -51,8 +51,8 @@ export function wireAccounts({state,$,esc,message}){
     const user=selectedUser();
     $('accounts-email').value=user?.email||'';$('accounts-full-name').value=user?.full_name||'';$('accounts-password').value='';
     $('accounts-report-name').value=user?.report_name||'';
-    $('accounts-role').value=user?.role==='admin'?'admin':'grader';$('accounts-subject').value=user?.subject_code||'';
-    $('accounts-subject').disabled=$('accounts-role').value==='admin';
+    $('accounts-role').value=['admin','grader','appeal_entry'].includes(user?.role)?user.role:'grader';$('accounts-subject').value=user?.subject_code||'';$('accounts-appeal-permission').checked=!!user?.can_enter_appeals||user?.role==='appeal_entry';
+    $('accounts-subject').disabled=$('accounts-role').value!=='grader';
     $('accounts-create').hidden=!!user;$('accounts-update').hidden=!user;
     $('accounts-delete').hidden=!user||user.user_id===state.session?.user?.id;
     $('accounts-form-title').textContent=user?'Sửa tài khoản':'Thêm tài khoản';
@@ -79,12 +79,12 @@ export function wireAccounts({state,$,esc,message}){
   }
   async function refresh(){
     const token=++generation,previousGroup=$('accounts-group-select').value;
-    const rows=await rpc('exam_manage_accounts');if(token!==generation)return;users=rows||[];
+    const rows=await rpc('exam_manage_accounts');if(token!==generation)return;users=rows||[];const grants=await rpc('exam_admin_appeal_entry_permissions');const byId=new Map((grants||[]).map(x=>[x.user_id,x.enabled]));for(const u of users)u.can_enter_appeals=byId.get(u.user_id)||u.role==='appeal_entry';
     renderUsers();
     await loadGroups();if(groups.some(group=>group.id===previousGroup)){$('accounts-group-select').value=previousGroup;renderGroup()}
   }
   function action(id,fn){$(id).onclick=async()=>{$(id).disabled=true;try{await fn()}catch(error){notify(error.message||String(error),'error')}finally{$(id).disabled=false}}}
-  $('accounts-role').onchange=()=>{$('accounts-subject').disabled=$('accounts-role').value==='admin'};
+  $('accounts-role').onchange=()=>{$('accounts-subject').disabled=$('accounts-role').value!=='grader'};
   $('accounts-search').oninput=renderUsers;
   $('accounts-list').onclick=event=>{const edit=event.target.closest('[data-account-edit]');if(edit)openEditor(edit.dataset.accountEdit)};
   $('accounts-close').onclick=closeEditor;$('accounts-cancel').onclick=closeEditor;
@@ -113,7 +113,7 @@ export function wireAccounts({state,$,esc,message}){
       // Switch to edit immediately: role failure must never cause a duplicate create.
       $('accounts-user').value=data.user_id;
       $('accounts-create').hidden=true;$('accounts-update').hidden=false;
-      try{await rpc('exam_set_account_role',{p_user_id:data.user_id,p_role:role,p_subject_code:role==='grader'?subject:null})}
+      try{await rpc('exam_set_account_role',{p_user_id:data.user_id,p_role:role,p_subject_code:role==='grader'?subject:null});await rpc('exam_admin_set_appeal_entry_permission',{p_user_id:data.user_id,p_enabled:role==='appeal_entry'||$('accounts-appeal-permission').checked})}
       catch(error){
         // Keep a selectable local account even if the following refresh is unavailable.
         if(!users.some(row=>row.user_id===data.user_id))users.push({user_id:data.user_id,email,full_name,report_name,role:'unassigned'});
