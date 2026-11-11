@@ -1,5 +1,24 @@
 
-// v0.1.325: CAPTCHA disabled for all account authentication flows.
+// v0.1.313: Public Cloudflare Turnstile Site Key only. Never expose the Secret Key.
+const EXAM_TURNSTILE_SITE_KEY='0x4AAAAAAF5vV5eX34IQ5ukIFtYmr63OMKA';
+let examLoginCaptchaId=null;
+function examLoginCaptchaRender(){
+ const el=document.getElementById('admin-login-captcha'),hint=document.getElementById('admin-captcha-help');
+ if(!el)return;
+ if(EXAM_TURNSTILE_SITE_KEY==='0x4AAAAAAF5vV5eX34IQ5ukIFtYmr63OMKA'){if(hint)hint.textContent='Chưa nhập Cloudflare Turnstile Site Key trong js/app.js. Liên hệ quản trị hệ thống để cấu hình trước khi đăng nhập.';return;}
+ if(!window.turnstile?.render){if(hint)hint.textContent='Đang tải CAPTCHA. Vui lòng chờ hoặc kiểm tra mạng.';return;}
+ if(examLoginCaptchaId!==null)return;
+ examLoginCaptchaId=window.turnstile.render(el,{sitekey:EXAM_TURNSTILE_SITE_KEY,theme:'auto'});
+ if(hint)hint.textContent='Hoàn tất xác minh bảo mật trước khi đăng nhập.';
+}
+function examLoginCaptchaToken(){
+ examLoginCaptchaRender();
+ if(examLoginCaptchaId===null)throw new Error('CAPTCHA chưa sẵn sàng. Kiểm tra cấu hình và kết nối mạng.');
+ const token=window.turnstile?.getResponse(examLoginCaptchaId);
+ if(!token)throw new Error('Vui lòng hoàn tất CAPTCHA trước khi đăng nhập.');
+ return token;
+}
+window.addEventListener('load',examLoginCaptchaRender);
 import {createActivityMonitor} from './activity-monitor.js?v=0.1.273';
 import {wireSubjectAmendments} from './subject-corrections.js?v=194';
 import {inheritElectiveRooms} from './inherit-elective-rooms.js?v=187';
@@ -12,7 +31,7 @@ import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
 import {loadTabModules} from './module-loader.js?v=0.1.316&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.309&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
-import {wireAccounts} from './accounts.js?v=0.1.328';
+import {wireAccounts} from './accounts.js?v=0.1.212';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireScoreAssignments} from './score-assignments.js?v=0.1.267';
 import {wireRanking} from './ranking.js?v=0.1.212';
@@ -206,7 +225,8 @@ async function submitLogin(event){
   button.textContent='Đang đăng nhập…';$('login-form').setAttribute('aria-busy','true');
   try{
     if(!state.client)throw new Error('Chưa kết nối hệ thống. Vui lòng liên hệ quản trị nhà trường.');
-    const {data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value});
+    const captchaToken=examLoginCaptchaToken();
+    let data,error;try{({data,error}=await state.client.auth.signInWithPassword({email:$('login-email').value.trim(),password:$('login-password').value,options:{captchaToken}}));}finally{if(examLoginCaptchaId!==null&&window.turnstile?.reset)window.turnstile.reset(examLoginCaptchaId);}
     if(error)throw error;
     $('login-password').value='';
     await enterApp(data.user);
@@ -3417,7 +3437,7 @@ function wireRoomingEditor(){
  $('save-rooming').onclick=saveRooming;
  $('lock-rooming').onclick=finalizeRooming;
  $('apply-rooming-other-subjects').onclick=applyRoomingToOtherSubjects;
- if($('grader-class-scores'))$('grader-class-scores').onclick=async()=>{try{const {openClassScores}=await import('./class-scores.js?v=233');await openClassScores({state,examId:state.selectedExam||''})}catch(e){message($('grader-message'),e.message,'error')}};
+ if($('grader-class-scores'))$('grader-class-scores').onclick=async()=>{try{const {openClassScores}=await import('./class-scores.js?v=339');await openClassScores({state,examId:state.selectedExam||''})}catch(e){message($('grader-message'),e.message,'error')}};
  for(const id of ['open-absent-scores','grader-absent-scores'])if($(id))$(id).onclick=async()=>{try{const {openAbsentScores}=await import('./absent-scores.js?v=191');await openAbsentScores({state,examId:state.selectedExam||'',subjectName})}catch(e){message($(state.role==='admin'?'global-message':'grader-message'),e.message,'error')}};
  if($('reset-official-rooming'))$('reset-official-rooming').onclick=resetOfficialRooming;
  $('rooming-table-body').addEventListener('change',updateRoomPlanCount);
