@@ -263,14 +263,22 @@ async function claimStudent(code){
 }
 $('claim').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,()=>claimStudent($('student-code').value.trim()));});
 $('recover').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const {error:recoverError}=await client.auth.resetPasswordForEmail($('recover-email').value.trim(),{redirectTo:redirect()});if(recoverError)throw recoverError;
- msg('Nếu email đã đăng ký, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu.','success');
+ const identifier=$('recover-email').value.trim();
+ if(!identifier)throw new Error('Vui lòng nhập mã định danh Bộ GDĐT hoặc email đã liên kết.');
+ // The server resolves the registered Auth email. Never accept a destination email from the browser.
+ const {data,error}=await client.functions.invoke('student-claim',{body:{action:'recover',identifier}});
+ if(error){
+   let detail=data;try{if(!detail&&error.context?.json)detail=await error.context.json();}catch{}
+   throw new Error(detail?.error||'Không thể gửi yêu cầu lúc này. Vui lòng thử lại sau.');
+ }
+ if(!data?.ok)throw new Error(data?.error||'Không thể gửi yêu cầu lúc này.');
+ msg('Nếu thông tin khớp với tài khoản đã liên kết, hướng dẫn đặt lại mật khẩu sẽ được gửi đến email đã đăng ký. Hãy kiểm tra cả thư rác.','success');
 });});
 $('new-password').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const password=$('reset-password').value;if(password!==$('reset-confirm').value)throw new Error('Hai mật khẩu không khớp.');
  if(adminResetRequired||registrationRequired){const temporary_password=adminTempPassword;if(adminResetRequired&&!temporary_password)throw new Error('Vui lòng đăng xuất và đăng nhập lại bằng mật khẩu tạm thời trước khi đổi.');const {data,error}=await client.functions.invoke(registrationRequired?'student-claim':'student-admin-password-reset',{body:registrationRequired?{action:'complete',new_password:password}:{action:'complete',temporary_password,new_password:password}});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể hoàn tất đổi mật khẩu.');adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.refreshSession();}else{const {error}=await client.auth.updateUser({password});if(error)throw error;}resetFlow=false;clearPasswords();await status();if(!signedIn)selectTab('login');msg('Đổi mật khẩu thành công.','success');
 });});
 $('logout').addEventListener('click',async()=>{try{adminTempPassword=null;adminResetRequired=false;registrationRequired=false;await client.auth.signOut();pendingClear();await status();clearPasswords();selectTab('login');msg('Đã đăng xuất.','success')}catch(e){err(e)}});
-$('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi email đặt lại mật khẩu để tiếp tục.');return;msg('Nếu tài khoản hợp lệ, hệ thống sẽ gửi email đổi mật khẩu.','success');}catch(e){err(e)}});
+$('change-password').addEventListener('click',async()=>{try{const user=await current();if(!user?.email)throw new Error('Vui lòng đăng nhập.');selectTab('recover');$('recover-email').value=user.email;msg('Nhấn gửi yêu cầu để nhận liên kết đặt lại mật khẩu tại email đã liên kết.');}catch(e){err(e)}});
 $('check').addEventListener('click',async()=>{try{const user=await status();msg(user?'':'Chưa có phiên đăng nhập học sinh.')}catch(e){err(e)}});
 init().catch(err);
