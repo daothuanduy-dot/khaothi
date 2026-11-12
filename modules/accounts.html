@@ -78,35 +78,28 @@
     <div class="form-actions"><button id="student-link-prev" type="button" class="btn btn-light" disabled>Trang trước</button><span id="student-link-page">Trang 1</span><button id="student-link-next" type="button" class="btn btn-light" disabled>Trang sau</button></div>
     <div id="student-link-result" hidden style="margin-top:12px;padding:12px;border:1px solid #cbd5e1;border-radius:8px">
       <p id="student-link-selected"></p>
-      <label>Lý do hủy liên kết (bắt buộc, ít nhất 10 ký tự)
-        <textarea id="student-link-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh nhập nhầm mã định danh của bạn khác"></textarea>
-      </label>
-      <div style="margin:12px 0;padding:12px;border:1px solid #d6e2f0;border-radius:8px">
-        <strong>Cấp lại mật khẩu học sinh</strong>
-        <p>Chỉ thực hiện sau khi xác minh đúng học sinh. Email đăng nhập và hồ sơ không thay đổi. Mật khẩu tạm thời chỉ hiển thị một lần.</p>
-        <label>Lý do cấp lại mật khẩu (ít nhất 10 ký tự)<textarea id="student-reset-reason" rows="2" maxlength="500" placeholder="Ví dụ: Học sinh mất quyền truy cập email cũ"></textarea></label>
-        <button id="student-reset-password" type="button" class="btn btn-light" disabled>Cấp mật khẩu tạm thời</button>
-        <div id="student-reset-result" hidden style="margin-top:10px"><strong>Mật khẩu tạm thời (chỉ hiển thị lần này):</strong> <code id="student-reset-secret" style="user-select:all;overflow-wrap:anywhere"></code><p>Hãy bàn giao trực tiếp sau khi xác minh học sinh. Không gửi qua nhóm chat hoặc email công khai.</p><button id="student-reset-hide" type="button" class="btn btn-light">Ẩn mật khẩu</button></div>
-      </div>
-      <div style="margin:12px 0;padding:12px;border:1px solid #d6e2f0;border-radius:8px">
-        <strong>Điều chỉnh email liên kết (quản trị viên)</strong>
-        <p>Chỉ thực hiện sau khi xác minh học sinh và quyền sử dụng email mới. Giữ nguyên tài khoản Auth, mã định danh và dữ liệu khảo thí. Email trùng tài khoản khác sẽ bị chặn và báo xung đột, không tự xóa tài khoản.</p>
-        <label>Email mới<input id="student-email-new" type="email" maxlength="254" autocomplete="off" placeholder="email-moi@example.com"></label>
-        <label>Lý do điều chỉnh (10–500 ký tự)<textarea id="student-email-reason" rows="2" maxlength="500"></textarea></label>
-        <label><input id="student-email-verified" type="checkbox"> Tôi đã xác minh đúng học sinh và quyền sử dụng email mới</label>
-        <div class="form-actions"><button id="student-email-check" type="button" class="btn btn-light">Kiểm tra xung đột</button><button id="student-email-apply" type="button" class="btn" disabled>Xác nhận đổi email</button></div>
-        <p id="student-email-result" role="status"></p>
-        <div id="student-email-conflict" hidden style="margin-top:10px;padding:12px;border:1px solid #e4b860;border-radius:8px">
-          <strong>Xử lý email bị chiếm bởi Auth chưa liên kết</strong>
-          <p id="student-email-conflict-info"></p>
-          <p style="color:#9a3412">Chỉ xử lý sau khi đã kiểm tra độc lập quyền sở hữu email và xác minh tài khoản Auth dư không còn được sử dụng. Hệ thống chuyển tài khoản dư sang email lưu trữ thuộc tên miền nhà trường và khóa đăng nhập, không xóa tài khoản.</p>
-          <label><input id="student-email-owner-confirm" type="checkbox"> Đã xác minh người sở hữu email chính xác</label>
-          <label><input id="student-email-orphan-confirm" type="checkbox"> Đã rà soát tài khoản Auth dư, đồng ý lưu trữ và khóa tài khoản này</label>
-          <label>Nhập lại chính xác email cần giải phóng<input id="student-email-confirm-email" type="email" autocomplete="off"></label>
-          <button id="student-email-resolve" type="button" class="btn danger-btn" disabled>Giải phóng email và cập nhật tài khoản học sinh</button>
+      <div style="margin:12px 0;padding:14px;border:1px solid #d6e2f0;border-radius:8px;display:grid;gap:12px">
+        <strong>Đặt lại mật khẩu</strong>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+          <label style="flex:1;min-width:180px">Mật khẩu tạm thời<input type="password" value="••••••••••••" disabled aria-label="Mật khẩu tạm thời chỉ hiển thị sau khi cấp"></label>
+          <button id="student-reset-password" type="button" class="btn btn-light" disabled>Cấp lại mật khẩu</button>
         </div>
+        <input id="student-reset-reason" type="hidden" value="Quản trị viên cấp lại mật khẩu theo yêu cầu học sinh">
+        <div id="student-reset-result" hidden><strong>Mật khẩu tạm thời (chỉ hiển thị lần này):</strong> <code id="student-reset-secret" style="user-select:all;overflow-wrap:anywhere"></code><p>Chỉ bàn giao riêng cho đúng học sinh. Học sinh phải đổi mật khẩu khi đăng nhập.</p><button id="student-reset-hide" type="button" class="btn btn-light">Ẩn mật khẩu</button></div>
       </div>
-      <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
+      <div style="margin:12px 0;padding:14px;border:1px solid #d6e2f0;border-radius:8px;display:grid;gap:10px">
+        <strong>Thay đổi email liên kết</strong>
+        <label>Email đã kết nối<input id="student-email-current" type="email" readonly></label>
+        <label>Địa chỉ email mới<input id="student-email-new" type="email" maxlength="254" autocomplete="off" placeholder="Nhập email mới"></label>
+        <button id="student-email-update" type="button" class="btn">Cập nhật email</button>
+        <p id="student-email-result" role="status" aria-live="polite"></p>
+        <small>Quản trị viên chịu trách nhiệm kiểm tra đúng học sinh và email. Không yêu cầu xác minh qua thư. UUID tài khoản và dữ liệu khảo thí được giữ nguyên.</small>
+      </div>
+      <details style="margin-top:12px"><summary>Thao tác nâng cao: Hủy liên kết sai</summary>
+        <label>Lý do hủy liên kết (ít nhất 10 ký tự)<textarea id="student-link-reason" rows="2" maxlength="500"></textarea></label>
+        <button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button>
+      </details>
+      <div class="form-actions"><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
   </section>
   </div>
