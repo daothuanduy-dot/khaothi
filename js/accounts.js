@@ -317,7 +317,7 @@ export function wireAccounts({state,$,esc,message}){
         const typed=prompt(`Nhập chính xác email ${email} để xác nhận XÓA tài khoản Auth trùng.\nLưu ý: không thể khôi phục mật khẩu, phiên đăng nhập và hồ sơ của tài khoản bị xóa.`);
         if(typed?.trim().toLowerCase()!==email){status.textContent+='\nĐã hủy xác nhận xóa.';return;}
         if(!confirm('XÁC NHẬN LẦN CUỐI: Xóa vĩnh viễn tài khoản chưa liên kết và chuyển email sang tài khoản học sinh đang active?'))return;
-        const result=await call('resolve-unlinked',{confirmed_student_identity:true,confirmed_email_owner:true,confirmed_delete:true,confirm_email:typed});
+        const result=await call('resolve-unlinked',{confirmed_student_identity:true,confirmed_email_owner:true,confirmed_orphan_review:true,confirm_email:typed});
         row.email=result.email;
         $('student-email-current').value=result.email;
         $('student-email-new').value='';
