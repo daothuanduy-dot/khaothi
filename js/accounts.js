@@ -240,12 +240,14 @@ export function wireAccounts({state,$,esc,message}){
   const linkMsg=(txt,type='info')=>message($('student-link-message'),txt,type);
   function studentSelect(row){
     studentLinkRecord=row;
+    emailCheck=null;
     $('student-link-result').hidden=false;
     $('student-link-reason').value='';
     $('student-link-selected').textContent=`${row.full_name||'—'} · ${row.class_code||'—'} · ${row.email||'Chưa có email'}`;
     $('student-link-unlink').disabled=!(row.account_status==='active'&&row.auth_user_id);
     $('student-reset-password').disabled=!(['active','provisioned'].includes(row.account_status)&&row.auth_user_id&&row.email);
     $('student-reset-result').hidden=true;$('student-reset-secret').textContent='';$('student-reset-reason').value='';
+    $('student-email-new').value='';$('student-email-reason').value='';$('student-email-verified').checked=false; $('student-email-apply').disabled=true;$('student-email-result').textContent='';
   }
   function renderStudents(){
     const visible=studentRows;
@@ -287,6 +289,45 @@ export function wireAccounts({state,$,esc,message}){
   $('student-link-rows').onclick=e=>{
     const btn=e.target.closest('[data-student-unlink]');if(!btn)return;
     const row=studentRows[Number(btn.dataset.studentUnlink)];if(row)studentSelect(row);
+  };
+  let emailCheck=null;
+  const emailResetCheck=()=>{emailCheck=null;$('student-email-apply').disabled=true;$('student-email-result').textContent='';};
+  ['student-email-new','student-email-reason'].forEach(id=>$(id).addEventListener('input',emailResetCheck));
+  $('student-email-verified').onchange=emailResetCheck;
+  async function studentEmailCall(actionName){
+    const row=studentLinkRecord;
+    if(!row||!row.auth_user_id||row.account_status!=='active')throw new Error('Chỉ hỗ trợ tài khoản học sinh đang active.');
+    const email=$('student-email-new').value.trim().toLowerCase(),reason=$('student-email-reason').value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)throw new Error('Email mới không hợp lệ.');
+    if(reason.length<10||reason.length>500)throw new Error('Lý do phải dài 10–500 ký tự.');
+    if(!$('student-email-verified').checked)throw new Error('Phải xác nhận đã kiểm tra danh tính và quyền sở hữu email.');
+    const {data,error}=await state.client.functions.invoke('student-admin-email-change',{body:{action:actionName,student_id:row.student_id,auth_user_id:row.auth_user_id,email,reason}});
+    if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể xử lý email.');
+    return data;
+  }
+  $('student-email-check').onclick=async()=>{
+    const btn=$('student-email-check');btn.disabled=true;emailResetCheck();
+    try{
+      const result=await studentEmailCall('check');
+      emailCheck={student_id:studentLinkRecord.student_id,auth_user_id:studentLinkRecord.auth_user_id,email:$('student-email-new').value.trim().toLowerCase(),check_token:result.check_token};
+      $('student-email-result').textContent='Email chưa bị tài khoản khác sử dụng. Có thể xác nhận thay đổi.';
+      $('student-email-apply').disabled=false;
+    }catch(e){$('student-email-result').textContent=e.message||String(e);linkMsg(e.message||String(e),'error')}
+    finally{btn.disabled=false}
+  };
+  $('student-email-apply').onclick=async()=>{
+    if(!emailCheck||!studentLinkRecord||emailCheck.student_id!==studentLinkRecord.student_id||emailCheck.auth_user_id!==studentLinkRecord.auth_user_id||emailCheck.email!==$('student-email-new').value.trim().toLowerCase())return;
+    if(!confirm('Xác nhận cập nhật email đăng nhập của đúng học sinh? Thao tác sẽ được ghi nhật ký.'))return;
+    const btn=$('student-email-apply');btn.disabled=true;
+    try{
+      const row=studentLinkRecord;
+      const result=await studentEmailCall('apply');
+      row.email=result.email;
+      $('student-link-selected').textContent=`${row.full_name||'—'} · ${row.class_code||'—'} · ${row.email}`;
+      $('student-email-result').textContent='Đã đổi email thành công. Học sinh đăng nhập và khôi phục mật khẩu qua email mới.';
+      linkMsg('Đã cập nhật email liên kết.','success');renderStudents();
+    }catch(e){$('student-email-result').textContent=e.message||String(e);linkMsg(e.message||String(e),'error')}
+    finally{emailCheck=null}
   };
   $('student-reset-hide').onclick=()=>{$('student-reset-secret').textContent='';$('student-reset-result').hidden=true};
   $('student-reset-password').onclick=async()=>{

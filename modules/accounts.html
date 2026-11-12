@@ -88,6 +88,15 @@
         <button id="student-reset-password" type="button" class="btn btn-light" disabled>Cấp mật khẩu tạm thời</button>
         <div id="student-reset-result" hidden style="margin-top:10px"><strong>Mật khẩu tạm thời (chỉ hiển thị lần này):</strong> <code id="student-reset-secret" style="user-select:all;overflow-wrap:anywhere"></code><p>Hãy bàn giao trực tiếp sau khi xác minh học sinh. Không gửi qua nhóm chat hoặc email công khai.</p><button id="student-reset-hide" type="button" class="btn btn-light">Ẩn mật khẩu</button></div>
       </div>
+      <div style="margin:12px 0;padding:12px;border:1px solid #d6e2f0;border-radius:8px">
+        <strong>Điều chỉnh email liên kết (quản trị viên)</strong>
+        <p>Chỉ thực hiện sau khi xác minh học sinh và quyền sử dụng email mới. Giữ nguyên tài khoản Auth, mã định danh và dữ liệu khảo thí. Email trùng tài khoản khác sẽ bị chặn và báo xung đột, không tự xóa tài khoản.</p>
+        <label>Email mới<input id="student-email-new" type="email" maxlength="254" autocomplete="off" placeholder="email-moi@example.com"></label>
+        <label>Lý do điều chỉnh (10–500 ký tự)<textarea id="student-email-reason" rows="2" maxlength="500"></textarea></label>
+        <label><input id="student-email-verified" type="checkbox"> Tôi đã xác minh đúng học sinh và quyền sử dụng email mới</label>
+        <div class="form-actions"><button id="student-email-check" type="button" class="btn btn-light">Kiểm tra xung đột</button><button id="student-email-apply" type="button" class="btn" disabled>Xác nhận đổi email</button></div>
+        <p id="student-email-result" role="status"></p>
+      </div>
       <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
   </section>
