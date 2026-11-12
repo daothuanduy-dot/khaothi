@@ -216,16 +216,38 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  await status();
 }
 tabs.forEach(t=>t.addEventListener('click',()=>{if(adminResetRequired||registrationRequired){selectTab('new-password');return;}if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
-$('register').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const student_code=$('reg-code').value.trim(),email=$('reg-email').value.trim();
- if(!student_code||student_code.length>64)throw new Error('Mã định danh không hợp lệ.');
- const {data,error}=await client.functions.invoke('student-claim',{body:{action:'register',student_code,email}});
- if(error){let detail=data;try{if(!detail&&error.context?.json)detail=await error.context.json();}catch{}throw new Error(detail?.error||error.message||'Không thể đăng ký.');}
- if(!data?.ok)throw new Error(data?.error||'Không thể đăng ký.');
- msg(data.message||'Nếu hồ sơ đủ điều kiện, liên kết thiết lập mật khẩu sẽ được gửi tới email.','success');selectTab('login');
-});});
+// v0.1.346: Direct registration, short-lived session; existing active accounts untouched.
+const REG_KEY='exam-direct-registration-v346';
+let regState=null;
+function regStep(n){for(let i=1;i<=3;i++)$('reg-step'+i).classList.toggle('hidden',i!==n);$('reg-code').required=n===1;}
+function regSave(){if(regState)sessionStorage.setItem(REG_KEY,JSON.stringify(regState));}
+function regReset(){regState=null;sessionStorage.removeItem(REG_KEY);regStep(1);$('reg-profile').textContent='';$('reg-accept').checked=false;}
+async function regInvoke(body){const {data,error}=await client.functions.invoke('student-claim',{body});if(error||!data?.ok){let details=data;try{if(!details&&error?.context?.json)details=await error.context.json();}catch{}throw new Error(details?.error||error?.message||'Không thể thực hiện yêu cầu.');}return data;}
+try{const stored=JSON.parse(sessionStorage.getItem(REG_KEY)||'null');if(stored?.code&&stored?.session&&stored?.email&&stored?.confirmedAt&&Date.now()-stored.confirmedAt<14*60*1000){regState=stored;regStep(3);}}catch{}
+$('register').addEventListener('submit',e=>e.preventDefault());
+$('reg-lookup').addEventListener('click',()=>busy($('register'),async()=>{
+ const code=$('reg-code').value.trim();if(!/^[0-9A-Za-z]{5,64}$/.test(code))throw new Error('Mã định danh không hợp lệ.');
+ const data=await regInvoke({action:'lookup',student_code:code});regState={code,session:data.session};
+ const profile=data.profile||{};$('reg-profile').replaceChildren();for(const [k,v] of [['Họ và tên',profile.name],['Ngày sinh',profile.dob],['Giới tính',profile.gender],['Dân tộc',profile.ethnicity],['Lớp',profile.class_code]]){const p=document.createElement('p');p.textContent=k+': '+(v||'—');$('reg-profile').append(p);}regStep(2);msg('Vui lòng đối chiếu thông tin cá nhân.');
+}));
+$('reg-back').addEventListener('click',()=>{regReset();msg('Nhập lại mã định danh để tra cứu.');});
+$('reg-confirm').addEventListener('click',()=>busy($('register'),async()=>{
+ if(!regState||!$('reg-accept').checked)throw new Error('Bạn cần xác nhận thông tin cá nhân.');
+ const email=$('reg-email').value.trim().toLowerCase();if(!$('reg-email').checkValidity())throw new Error('Email không hợp lệ.');
+ await regInvoke({action:'confirm',student_code:regState.code,session:regState.session,email,accepted:true});
+ regState.email=email;regState.confirmedAt=Date.now();regSave();regStep(3);msg('Đã ghi nhận thông tin. Vui lòng thiết lập mật khẩu.','success');
+}));
+$('reg-finish').addEventListener('click',()=>busy($('register'),async()=>{
+ if(!regState?.email)throw new Error('Phiên đăng ký không hợp lệ.');const password=$('reg-password').value;
+ if(password.length<12||password.length>128)throw new Error('Mật khẩu phải dài từ 12 đến 128 ký tự.');
+ if(password!==$('reg-password-confirm').value)throw new Error('Mật khẩu xác nhận không trùng khớp.');
+ await regInvoke({action:'finish',student_code:regState.code,session:regState.session,email:regState.email,password});
+ $('reg-password').value='';$('reg-password-confirm').value='';regReset();selectTab('login');msg('Đăng ký thành công. Bạn có thể đăng nhập bằng mã định danh hoặc email.','success');
+}));
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
- const loginPassword=$('login-password').value;const {error:loginError}=await client.auth.signInWithPassword({email:$('login-email').value.trim(),password:loginPassword});if(loginError)throw loginError;
+ const loginPassword=$('login-password').value;const identifier=$('login-email').value.trim();
+ if(identifier.includes('@')){const {error:loginError}=await client.auth.signInWithPassword({email:identifier,password:loginPassword});if(loginError)throw loginError;}
+ else {const data=await regInvoke({action:'login-code',student_code:identifier,password:loginPassword});const {error:sessionError}=await client.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token});if(sessionError)throw sessionError;}
  const u=await current();if(u?.app_metadata?.exam_admin_reset_required||u?.app_metadata?.exam_student_registration_required){adminResetRequired=!!u.app_metadata.exam_admin_reset_required;registrationRequired=!!u.app_metadata.exam_student_registration_required;adminTempPassword=loginPassword;selectTab('new-password');msg(registrationRequired?'Hãy thiết lập mật khẩu lần đầu.':'Bạn phải đổi mật khẩu tạm thời trước khi xem kết quả.');return;}
  await status();if(adminResetRequired||registrationRequired){selectTab('new-password');return;}clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
 });});
