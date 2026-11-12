@@ -289,7 +289,7 @@ export function wireAccounts({state,$,esc,message}){
     const btn=e.target.closest('[data-student-unlink]');if(!btn)return;
     const row=studentRows[Number(btn.dataset.studentUnlink)];if(row)studentSelect(row);
   };
-  // v0.1.352: một thao tác quản trị; kiểm tra xung đột và xác nhận ở phía máy chủ.
+  // v0.1.353: chỉ đổi email chưa được sử dụng; không giải phóng tài khoản Auth khác.
   $('student-email-update').onclick=async()=>{
     const row=studentLinkRecord,btn=$('student-email-update');
     if(!row||row.account_status!=='active'||!row.auth_user_id)return;
@@ -308,16 +308,10 @@ export function wireAccounts({state,$,esc,message}){
     try{
       const check=await call('check');
       if(check.conflict==='linked')throw new Error('Email đang liên kết với tài khoản khác. Không thể thay đổi.');
-      let result;
-      if(check.conflict==='unlinked'){
-        if(!check.can_resolve)throw new Error(`Email đang thuộc tài khoản Auth chưa liên kết nhưng không đủ điều kiện giải phóng: ${(check.blockers||[]).join(', ')||'Cần quản trị kỹ thuật kiểm tra'}`);
-        if(!confirm(`Email ${email} đang thuộc tài khoản Auth chưa liên kết. Nếu tiếp tục, tài khoản dư sẽ bị khóa và chuyển sang địa chỉ lưu trữ; tài khoản học sinh hiện tại vẫn giữ UUID và mật khẩu. Quản trị viên đã kiểm tra tài khoản dư không còn được sử dụng?`)){
-          status.textContent='Đã hủy thay đổi email.';return;
-        }
-        result=await call('resolve-unlinked',{confirmed_student_identity:true,confirmed_email_owner:true,confirmed_orphan_review:true,confirm_email:email});
-      }else{
-        result=await call('apply');
-      }
+      // v0.1.353: Never alter or quarantine another Auth account in a routine email change.
+      if(check.conflict==='unlinked' || check.available!==true)
+        throw new Error('Email đã được sử dụng bởi tài khoản khác. Vui lòng chọn email khác hoặc chuyển quản trị kỹ thuật kiểm tra.');
+      const result=await call('apply');
       row.email=result.email;
       $('student-email-current').value=result.email;
       $('student-email-new').value='';
