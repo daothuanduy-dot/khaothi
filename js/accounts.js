@@ -289,7 +289,7 @@ export function wireAccounts({state,$,esc,message}){
     const btn=e.target.closest('[data-student-unlink]');if(!btn)return;
     const row=studentRows[Number(btn.dataset.studentUnlink)];if(row)studentSelect(row);
   };
-  // v0.1.354: show conflicting Auth account details; never delete automatically.
+  // v0.1.356: administrator-supervised conflict resolution; server performs all safety checks.
   $('student-email-update').onclick=async()=>{
     const row=studentLinkRecord,btn=$('student-email-update');
     if(!row||row.account_status!=='active'||!row.auth_user_id)return;
@@ -299,8 +299,8 @@ export function wireAccounts({state,$,esc,message}){
     if(email===(row.email||'').trim().toLowerCase()){status.textContent='Email mới trùng email hiện tại.';return;}
     btn.disabled=true;status.textContent='Đang kiểm tra tài khoản sử dụng email...';
     const reason='Quản trị viên cập nhật email theo hồ sơ học sinh';
-    const call=async(action)=>{
-      const {data,error}=await state.client.functions.invoke('student-admin-email-change',{body:{action,student_id:row.student_id,auth_user_id:row.auth_user_id,email,reason}});
+    const call=async(action,extra={})=>{
+      const {data,error}=await state.client.functions.invoke('student-admin-email-change',{body:{action,student_id:row.student_id,auth_user_id:row.auth_user_id,email,reason,...extra}});
       if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể cập nhật email.');
       return data;
     };
@@ -310,8 +310,20 @@ export function wireAccounts({state,$,esc,message}){
         const details=check.linked
           ? `Học sinh: ${check.student_name||'Chưa rõ'}\nLớp: ${check.class_code||'Chưa rõ'}\nMã định danh: ${check.student_code||'Chưa rõ'}\nTrạng thái: ${check.account_status||'Chưa rõ'}`
           : `Chưa liên kết học sinh.\nHồ sơ người dùng: ${check.user_profile_count??'Chưa rõ'}\nEmail đã xác nhận: ${check.verified_email?'Có':'Không'}\nĐã đăng nhập: ${check.last_sign_in_at?'Có':'Chưa ghi nhận'}`;
-        status.textContent=`Email ${email} đã tồn tại.\n${details}\nKhông thể tự động xóa tài khoản này. Cần quản trị kỹ thuật xác minh chủ tài khoản và dữ liệu trước khi xử lý.`;
+        status.textContent=`Email ${email} đã tồn tại.\n${details}`;
         status.style.whiteSpace='pre-line';
+        if(check.linked){status.textContent+='\nTài khoản đã liên kết học sinh khác. Không cho xóa tự động.';return;}
+        if(!confirm(`Email ${email} đã có tài khoản Auth CHƯA LIÊN KẾT.\n${details}\n\nBạn xác nhận cả hai email đều thuộc ${row.full_name||row.student_code} và muốn HỦY VĨNH VIỄN tài khoản Auth chiếm email?`))return;
+        const typed=prompt(`Nhập chính xác email ${email} để xác nhận XÓA tài khoản Auth trùng.\nLưu ý: không thể khôi phục mật khẩu, phiên đăng nhập và hồ sơ của tài khoản bị xóa.`);
+        if(typed?.trim().toLowerCase()!==email){status.textContent+='\nĐã hủy xác nhận xóa.';return;}
+        if(!confirm('XÁC NHẬN LẦN CUỐI: Xóa vĩnh viễn tài khoản chưa liên kết và chuyển email sang tài khoản học sinh đang active?'))return;
+        const result=await call('resolve-unlinked',{confirmed_student_identity:true,confirmed_email_owner:true,confirmed_delete:true,confirm_email:typed});
+        row.email=result.email;
+        $('student-email-current').value=result.email;
+        $('student-email-new').value='';
+        $('student-link-selected').textContent=`${row.full_name||'—'} · ${row.class_code||'—'} · ${row.email}`;
+        status.textContent='Đã hủy tài khoản trùng và cập nhật email học sinh. Nhật ký: '+result.audit_id;
+        linkMsg('Đã giải phóng và cập nhật email liên kết.','success');renderStudents();
         return;
       }
       if(!confirm(`Xác nhận đã kiểm tra danh tính ${row.full_name||row.student_code} và cập nhật email từ ${row.email} sang ${email}?`))return;
