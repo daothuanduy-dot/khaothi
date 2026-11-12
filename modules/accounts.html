@@ -96,6 +96,15 @@
         <label><input id="student-email-verified" type="checkbox"> Tôi đã xác minh đúng học sinh và quyền sử dụng email mới</label>
         <div class="form-actions"><button id="student-email-check" type="button" class="btn btn-light">Kiểm tra xung đột</button><button id="student-email-apply" type="button" class="btn" disabled>Xác nhận đổi email</button></div>
         <p id="student-email-result" role="status"></p>
+        <div id="student-email-conflict" hidden style="margin-top:10px;padding:12px;border:1px solid #e4b860;border-radius:8px">
+          <strong>Xử lý email bị chiếm bởi Auth chưa liên kết</strong>
+          <p id="student-email-conflict-info"></p>
+          <p style="color:#9a3412">Chỉ xử lý sau khi đã kiểm tra độc lập quyền sở hữu email và xác minh tài khoản Auth dư không còn được sử dụng. Hệ thống chuyển tài khoản dư sang email lưu trữ thuộc tên miền nhà trường và khóa đăng nhập, không xóa tài khoản.</p>
+          <label><input id="student-email-owner-confirm" type="checkbox"> Đã xác minh người sở hữu email chính xác</label>
+          <label><input id="student-email-orphan-confirm" type="checkbox"> Đã rà soát tài khoản Auth dư, đồng ý lưu trữ và khóa tài khoản này</label>
+          <label>Nhập lại chính xác email cần giải phóng<input id="student-email-confirm-email" type="email" autocomplete="off"></label>
+          <button id="student-email-resolve" type="button" class="btn danger-btn" disabled>Giải phóng email và cập nhật tài khoản học sinh</button>
+        </div>
       </div>
       <div class="form-actions"><button id="student-link-unlink" type="button" class="btn danger-btn" disabled>Hủy liên kết sai</button><button id="student-link-cancel" type="button" class="btn btn-light">Đóng</button></div>
     </div>
