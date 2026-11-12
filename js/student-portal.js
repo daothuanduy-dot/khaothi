@@ -216,7 +216,7 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  await status();
 }
 tabs.forEach(t=>t.addEventListener('click',()=>{if(adminResetRequired||registrationRequired){selectTab('new-password');return;}if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
-// v0.1.347: Direct registration, short-lived session; existing active accounts untouched.
+// v0.1.348: Direct registration, short-lived session; existing active accounts untouched.
 const REG_KEY='exam-direct-registration-v346';
 let regState=null;
 function regStep(n){for(let i=1;i<=3;i++)$('reg-step'+i).classList.toggle('hidden',i!==n);$('reg-code').required=n===1;}
@@ -246,7 +246,7 @@ $('reg-finish').addEventListener('click',()=>busy($('register'),async()=>{
 }));
 $('login').addEventListener('submit',e=>{e.preventDefault();busy(e.currentTarget,async()=>{
  const loginPassword=$('login-password').value;const identifier=$('login-email').value.trim();
- if(identifier.includes('@')){const {error:loginError}=await client.auth.signInWithPassword({email:identifier,password:loginPassword});if(loginError)throw loginError;}
+ if(identifier.includes('@')){const {error:loginError}=await client.auth.signInWithPassword({email:identifier,password:loginPassword});if(loginError)throw new Error('Email hoặc mật khẩu không đúng. Nếu tài khoản đã được tạo nhưng chưa liên kết, hãy dùng Quên mật khẩu, đăng nhập lại, rồi liên kết hồ sơ bằng mã định danh.');}
  else {const data=await regInvoke({action:'login-code',student_code:identifier,password:loginPassword});const {error:sessionError}=await client.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token});if(sessionError)throw sessionError;}
  const u=await current();if(u?.app_metadata?.exam_admin_reset_required||u?.app_metadata?.exam_student_registration_required){adminResetRequired=!!u.app_metadata.exam_admin_reset_required;registrationRequired=!!u.app_metadata.exam_student_registration_required;adminTempPassword=loginPassword;selectTab('new-password');msg(registrationRequired?'Hãy thiết lập mật khẩu lần đầu.':'Bạn phải đổi mật khẩu tạm thời trước khi xem kết quả.');return;}
  await status();if(adminResetRequired||registrationRequired){selectTab('new-password');return;}clearPasswords();if(isActive){pendingClear();msg('','success');return;}selectTab('claim');msg('Đăng nhập thành công. Hãy nhập mã định danh Bộ GDĐT để liên kết hồ sơ.','success');
