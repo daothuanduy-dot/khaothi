@@ -205,7 +205,7 @@ async function status(){
 }
  $('identity').classList.add('hidden');return user;
 }
-async function busy(form,fn){const btn=form.querySelector('button[type="submit"]');btn.disabled=true;try{await fn()}catch(e){err(e)}finally{btn.disabled=false;}}
+async function busy(form,fn){const btn=form.querySelector('button[type="submit"]')||document.activeElement?.closest?.('button')||null;if(btn)btn.disabled=true;try{await fn()}catch(e){err(e)}finally{if(btn)btn.disabled=false;}}
 function redirect(){return new URL('./student-portal.html',location.href).href;}
 async function init(){if(!window.supabase?.createClient)throw new Error('Không tải được thư viện Supabase.');
  const {url,key}=validatePublicConfig(publicConfig);
@@ -216,7 +216,7 @@ async function init(){if(!window.supabase?.createClient)throw new Error('Không 
  await status();
 }
 tabs.forEach(t=>t.addEventListener('click',()=>{if(adminResetRequired||registrationRequired){selectTab('new-password');return;}if(t.dataset.tab==='claim'&&isActive)return;selectTab(t.dataset.tab);}));
-// v0.1.346: Direct registration, short-lived session; existing active accounts untouched.
+// v0.1.347: Direct registration, short-lived session; existing active accounts untouched.
 const REG_KEY='exam-direct-registration-v346';
 let regState=null;
 function regStep(n){for(let i=1;i<=3;i++)$('reg-step'+i).classList.toggle('hidden',i!==n);$('reg-code').required=n===1;}
