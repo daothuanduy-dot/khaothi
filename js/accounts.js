@@ -289,7 +289,7 @@ export function wireAccounts({state,$,esc,message}){
     const btn=e.target.closest('[data-student-unlink]');if(!btn)return;
     const row=studentRows[Number(btn.dataset.studentUnlink)];if(row)studentSelect(row);
   };
-  // v0.1.353: chỉ đổi email chưa được sử dụng; không giải phóng tài khoản Auth khác.
+  // v0.1.354: show conflicting Auth account details; never delete automatically.
   $('student-email-update').onclick=async()=>{
     const row=studentLinkRecord,btn=$('student-email-update');
     if(!row||row.account_status!=='active'||!row.auth_user_id)return;
@@ -297,26 +297,30 @@ export function wireAccounts({state,$,esc,message}){
     const status=$('student-email-result');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254){status.textContent='Địa chỉ email không hợp lệ.';return;}
     if(email===(row.email||'').trim().toLowerCase()){status.textContent='Email mới trùng email hiện tại.';return;}
-    if(!confirm(`Xác nhận đã kiểm tra danh tính ${row.full_name||row.student_code} và cập nhật email từ ${row.email} sang ${email}?`))return;
-    btn.disabled=true;status.textContent='Đang kiểm tra email và tài khoản liên kết...';
+    btn.disabled=true;status.textContent='Đang kiểm tra tài khoản sử dụng email...';
     const reason='Quản trị viên cập nhật email theo hồ sơ học sinh';
-    const call=async(action,extra={})=>{
-      const {data,error}=await state.client.functions.invoke('student-admin-email-change',{body:{action,student_id:row.student_id,auth_user_id:row.auth_user_id,email,reason,...extra}});
+    const call=async(action)=>{
+      const {data,error}=await state.client.functions.invoke('student-admin-email-change',{body:{action,student_id:row.student_id,auth_user_id:row.auth_user_id,email,reason}});
       if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không thể cập nhật email.');
       return data;
     };
     try{
       const check=await call('check');
-      if(check.conflict==='linked')throw new Error('Email đang liên kết với tài khoản khác. Không thể thay đổi.');
-      // v0.1.353: Never alter or quarantine another Auth account in a routine email change.
-      if(check.conflict==='unlinked' || check.available!==true)
-        throw new Error('Email đã được sử dụng bởi tài khoản khác. Vui lòng chọn email khác hoặc chuyển quản trị kỹ thuật kiểm tra.');
+      if(check.available!==true){
+        const details=check.linked
+          ? `Học sinh: ${check.student_name||'Chưa rõ'}\nLớp: ${check.class_code||'Chưa rõ'}\nMã định danh: ${check.student_code||'Chưa rõ'}\nTrạng thái: ${check.account_status||'Chưa rõ'}`
+          : `Chưa liên kết học sinh.\nHồ sơ người dùng: ${check.user_profile_count??'Chưa rõ'}\nEmail đã xác nhận: ${check.verified_email?'Có':'Không'}\nĐã đăng nhập: ${check.last_sign_in_at?'Có':'Chưa ghi nhận'}`;
+        status.textContent=`Email ${email} đã tồn tại.\n${details}\nKhông thể tự động xóa tài khoản này. Cần quản trị kỹ thuật xác minh chủ tài khoản và dữ liệu trước khi xử lý.`;
+        status.style.whiteSpace='pre-line';
+        return;
+      }
+      if(!confirm(`Xác nhận đã kiểm tra danh tính ${row.full_name||row.student_code} và cập nhật email từ ${row.email} sang ${email}?`))return;
       const result=await call('apply');
       row.email=result.email;
       $('student-email-current').value=result.email;
       $('student-email-new').value='';
       $('student-link-selected').textContent=`${row.full_name||'—'} · ${row.class_code||'—'} · ${row.email}`;
-      status.textContent=result.audit_pending?'Email đã cập nhật; cần kiểm tra hoàn tất nhật ký kỹ thuật.':'Đã cập nhật email. Học sinh có thể đăng nhập và khôi phục mật khẩu qua email mới.';
+      status.textContent=result.audit_pending?'Email đã cập nhật; cần kiểm tra nhật ký kỹ thuật.':'Đã cập nhật email. Học sinh có thể đăng nhập và khôi phục mật khẩu qua email mới.';
       linkMsg('Đã cập nhật email liên kết.','success');renderStudents();
     }catch(e){status.textContent=e.message||String(e);linkMsg(e.message||String(e),'error')}
     finally{btn.disabled=false}
