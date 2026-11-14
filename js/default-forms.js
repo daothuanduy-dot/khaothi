@@ -1,4 +1,4 @@
-const fields={stt:'STT',sbd:'Số báo danh',student_code:'Mã học sinh',student_name:'Họ và tên',date_of_birth:'Ngày sinh',gender:'Giới tính',class_code:'Lớp',room_code:'Phòng',blank:'Cột trống / ghi tay'};
+const fields={stt:'STT',sbd:'Số báo danh',student_code:'Mã định danh',student_name:'Họ và tên',date_of_birth:'Ngày sinh',gender:'Giới tính',class_code:'Lớp',room_code:'Phòng',blank:'Cột trống / ghi tay'};
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const roomLabel=value=>String(value||'').normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g,'').trim().replace(/^(?:phòng\s*)+/iu,'').trim();
 export function formatDefaultDOB(value){
@@ -115,9 +115,13 @@ export function wireDefaultForms({$,state,message,createPrintFrame}){
  }
  $('forms-default-type').onchange=()=>{render();$('forms-class-filter-wrap').classList.toggle('hidden',!['classrooms','receipt_classrooms'].includes(type()))};
  for(const id of ['forms-default-title','forms-default-font','forms-default-size'])$(id).oninput=()=>{const t=templates[type()];t.title=$('forms-default-title').value;t.font=$('forms-default-font').value;t.size=Number($('forms-default-size').value);persist()};
- $('forms-default-columns').onchange=event=>{const el=event.target,c=templates[type()].columns;for(const [attr,key] of [['defaultField','key'],['defaultLabel','label'],['defaultWidth','width']])if(el.dataset[attr]!==undefined)c[Number(el.dataset[attr])][key]=key==='width'?Number(el.value):el.value;persist()};
+ $('forms-default-columns').onchange=event=>{const el=event.target,c=templates[type()].columns;for(const [attr,key] of [['defaultField','key'],['defaultLabel','label'],['defaultWidth','width']])if(el.dataset[attr]!==undefined){const i=Number(el.dataset[attr]);if(key==='key'){const old=c[i].key,oldLabel=fields[old];c[i].key=el.value;if(c[i].label===oldLabel||c[i].label==='Mã học sinh'||(old==='blank'&&['Ghi chú','Cột trống / ghi tay'].includes(c[i].label)))c[i].label=fields[el.value]}else c[i][key]=key==='width'?Number(el.value):el.value;persist();if(key==='key')render();break}};
  $('forms-default-columns').onclick=event=>{const el=event.target.closest('button');if(!el)return;const columns=templates[type()].columns;for(const [attr,delta] of [['defaultUp',-1],['defaultDown',1]])if(el.dataset[attr]!==undefined){const i=Number(el.dataset[attr]),j=i+delta;if(j>=0&&j<columns.length)[columns[i],columns[j]]=[columns[j],columns[i]];persist();render();return}if(el.dataset.defaultRemove!==undefined){columns.splice(Number(el.dataset.defaultRemove),1);persist();render()}};
  $('forms-default-add').onclick=()=>{templates[type()].columns.push({key:'blank',label:'Ghi chú',width:12});persist();render()};
+ // Thêm mã định danh là tùy chọn của từng mẫu/kỳ thi; Bỏ cột đã hỗ trợ xóa.
+ const addIdentifier=document.createElement('button');addIdentifier.type='button';addIdentifier.id='forms-default-add-identifier';addIdentifier.textContent='+ Thêm mã định danh';addIdentifier.className=$('forms-default-add').className;
+ $('forms-default-add').insertAdjacentElement('afterend',addIdentifier);
+ addIdentifier.onclick=safe(()=>{const columns=templates[type()].columns;if(columns.length>=30)throw new Error('Mẫu chỉ hỗ trợ tối đa 30 cột.');if(columns.some(c=>c.key==='student_code'))throw new Error('Mẫu đã có cột Mã định danh. Bạn có thể đổi vị trí hoặc bỏ cột.');const after=columns.findIndex(c=>c.key==='sbd');columns.splice(after<0?columns.length:after+1,0,{key:'student_code',label:'Mã định danh',width:18});persist();render()});
  $('forms-default-reset').onclick=()=>{templates[type()]=defaultTemplate(type());persist();render()};
  $('forms-default-source').onchange=()=>{invalidate();try{localStorage.setItem(`default-form-room-source:${forms.examId}:${forms.roundNo}`,$('forms-default-source').value)}catch{}};
  $('forms-default-preview-button').onclick=safe(preview);$('forms-default-print').onclick=safe(print);
