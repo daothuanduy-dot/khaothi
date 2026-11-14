@@ -79,7 +79,15 @@ export function wireAccounts({state,$,esc,message}){
   }
   async function refresh(){
     const token=++generation,previousGroup=$('accounts-group-select').value;
-    const rows=await rpc('exam_manage_accounts');if(token!==generation)return;users=rows||[];const grants=await rpc('exam_admin_appeal_entry_permissions');const byId=new Map((grants||[]).map(x=>[x.user_id,x.enabled]));for(const u of users)u.can_enter_appeals=byId.get(u.user_id)||u.role==='appeal_entry';
+    // Server-verified staff allowlist; never infer identity from email or display name.
+    // Fail closed: do not expose student accounts in the teacher editor on RPC failure.
+    const staffIds=await rpc('exam_admin_staff_account_ids_v01369');
+    if(token!==generation)return;
+    const allowed=new Set((staffIds||[]).map(row=>typeof row==='string'?row:row.user_id).filter(Boolean));
+    const rows=await rpc('exam_manage_accounts');
+    if(token!==generation)return;
+    users=(rows||[]).filter(row=>allowed.has(row.user_id));
+    const grants=await rpc('exam_admin_appeal_entry_permissions');const byId=new Map((grants||[]).map(x=>[x.user_id,x.enabled]));for(const u of users)u.can_enter_appeals=byId.get(u.user_id)||u.role==='appeal_entry';
     renderUsers();
     await loadGroups();if(groups.some(group=>group.id===previousGroup)){$('accounts-group-select').value=previousGroup;renderGroup()}
   }

@@ -11,7 +11,7 @@ import {orderSbdGroups,sumPreviousResults} from './sbd-groups.js?v=154';
 import {orderElectiveRoomPlan,numberSavedElectiveRooms,adjustRoomPlanCount,allocateCandidatesToRoomPlan as baseAllocateRooms,isValidSbd,optimizeElectiveRooms as baseElectiveRooms,optimizeMandatoryRooms as baseMandatoryRooms,restoreRoomingPlan,roomExportRowPositions,SUBJECTS} from './rooming.js?v=0.1.212&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&subjectplan=203';
 import {loadTabModules} from './module-loader.js?v=0.1.352&choice=152&sbd=161&forms=163&statistics=168&manual=179&private=181&sbdoptions=182&choiceflow=183&layout=184&hallcontrols=185&excelhall=186&inheritrooms=187&blocks=188&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&corrections=194&averages=195&rankgroups=196&topstudents=199&templateexport=201&supplemental=202';
 import {wireOperations,createPrintFrame} from './operations.js?v=0.1.309&forms=163&precision=168&absences=189&resetrooming=190&absentscores=191&roomlabels=192&amendments=193&scriptrooms=203&scriptmatch=237';
-import {wireAccounts} from './accounts.js?v=0.1.357';
+import {wireAccounts} from './accounts.js?v=0.1.369';
 import {wireTeaching} from './teaching.js?v=0.1.212';
 import {wireScoreAssignments} from './score-assignments.js?v=0.1.267';
 import {wireRanking} from './ranking.js?v=0.1.212';
