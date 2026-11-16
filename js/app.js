@@ -25,7 +25,7 @@ import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
-const APP_VERSION='v0.1.378';
+const APP_VERSION='v0.1.379';
 const APP_BUILD='2026-11-02-bag-assignment-status-220';
 const $=id=>document.getElementById(id);
 const state={client:null,session:null,role:null,exams:[],candidates:[],selectedCandidateIds:[],selectedExam:null,preview:null,config:null,rosterCandidates:[],rosterRegs:[],rosterPage:0,rosterPageSize:50,rosterDirty:new Map(),formData:null,absenceRows:[],scriptRooms:[],scriptFinalizationId:null,graderWork:[],graderQueue:[],graderQueueIndex:0};
@@ -140,7 +140,7 @@ function showConnectionFailure(error){
   $('login-submit').disabled=true;$('google-login').disabled=true;
   message($('login-message'),`Chưa kết nối được hệ thống: ${detail}`,'error');
 }
-function updateVersionDisplay(){const label='v0.1.378';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
+function updateVersionDisplay(){const label='v0.1.379';const top=$('app-version');if(top)top.textContent=label;const foot=$('footer-version');if(foot)foot.textContent=`Khảo thí trực tuyến · ${label}`;document.documentElement.dataset.appVersion=APP_VERSION;}
 function updateSelectedExamTitle(){
   const exam=state.exams.find(item=>item.id===state.selectedExam);
   const title=exam?`Quản lý kỳ thi — ${exam.name} (${exam.school_year})`:'Quản lý kỳ thi';
@@ -3579,7 +3579,7 @@ async function boot(){
         nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
       nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
     }
-    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.314');
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.379');
     wireClassResultsExport({state,$,esc,message});
   }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();

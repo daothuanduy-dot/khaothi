@@ -84,7 +84,7 @@ export function wireClassResultsExport({state, $, esc, message}) {
     return {classSubjects,configuredClassCount:classSubjects.size};
   }
   $('class-results-read').onclick=async()=>{invalidate();const id=examId();if(!id){message($('class-results-message'),'Hãy chọn kỳ thi trước.','error');return;}const button=$('class-results-read');button.disabled=true;message($('class-results-message'),'Đang đọc danh sách và điểm các môn…','info');try{
-    const exam=state.exams.find(e=>e.id===id);if(exam?.exam_mode&&exam.exam_mode!=='default')throw Error('Chức năng này dành cho kỳ thi mặc định.');
+    const exam=state.exams.find(e=>e.id===id);if(!exam)throw Error('Không tìm thấy kỳ thi đã chọn. Hãy tải lại danh sách kỳ thi.');
     const candidates=[];for(let from=0;;from+=750){const {data,error}=await state.client.from('exam_candidates').select('*').eq('exam_id',id).range(from,from+749);if(error)throw error;candidates.push(...(data||[]));if((data||[]).length<750)break;}
     if(!candidates.length)throw Error('Kỳ thi không có thí sinh.');
     const config=await readGroupAndSubjects(id,candidates);
