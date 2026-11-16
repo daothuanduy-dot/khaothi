@@ -2154,7 +2154,7 @@ export function wireOperations({state,$,esc,message,selectAllPages,subjects,subj
     repairPreview=null;repairRun=null;
     const {data:run,error}=await state.client.from('exam_script_runs').select('*').eq('id',runId).single();
     if(error)throw new Error(error.message);
-    if(run.method!=='room'||run.absence_mode!=='compact'||run.status!=='locked')throw new Error('Chỉ hỗ trợ lượt đã khóa: Theo phòng + Dồn phách.');
+    if(run.method!=='room'||!['compact','gap'].includes(run.absence_mode)||run.status!=='locked')throw new Error('Chỉ hỗ trợ lượt đã khóa: Theo phòng + Dồn phách hoặc Cách phách.');
     repairRun=run;
     const records=await readPages(()=>state.client.from('exam_script_records').select('id,candidate_id,sbd,room_code,room_order,script_order,phach_code,is_absent').eq('run_id',runId).order('script_order'));
     repairRoomRows=records;
