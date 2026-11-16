@@ -15,7 +15,7 @@ function componentPair(r,type){
  const p=(Array.isArray(r.parts)?r.parts:[]).find(x=>x.component===type);
  return p?{old:p.old,new:p.new}: {old:null,new:null};
 }
-function reportHeader(){return ['TT','SBD','Lớp','Môn','TN cũ','TL cũ','Tổng cũ','TN mới','TL mới','Tổng mới','Người chấm (nhập)','Lý do thay đổi']}
+function reportHeader(){return ['TT','SBD','Họ tên','Lớp','Môn','TN cũ','TL cũ','Tổng cũ','TN mới','TL mới','Tổng mới','Người chấm (nhập)','Lý do thay đổi']}
 function reportRows(){return report.filter(r=>($('report-mode').value==='all'||Number(r.old_total)!==Number(r.new_total))&&(!selectedSubjects.size||selectedSubjects.has(r.subject_code))&&(!selectedClasses.size||selectedClasses.has(r.class_code))).sort((a,b)=>(sortAsc?1:-1)*(cmp(a.sbd,b.sbd)||cmp(a.subject_code,b.subject_code)||a.audit_id-b.audit_id))}
 function originalEssayName(r){const x=originalEntrants.get(r.candidate_id+'|'+r.subject_code);if(!x)return 'Chưa xác định người nhập điểm gốc';if(x.lookup_status==='ambiguous')return 'Cần đối chiếu nhiều lần đánh phách';if(x.lookup_status!=='ok')return 'Chưa xác định người nhập điểm gốc';return x.display_name}
 function reportValues(r,i){
@@ -24,15 +24,15 @@ function reportValues(r,i){
  const who=[...new Set(parts.map(p=>p.component==='mcq'?'Trắc nghiệm':p.component==='essay'?originalEssayName(r):'Chưa xác định thành phần'))];
  const reasons=[...new Set(parts.map(p=>String(p.note||'').trim()).filter(Boolean))];
  const tn=componentPair(r,'mcq'),tl=componentPair(r,'essay');
- return [i+1,r.sbd,r.class_code,labelSubject(r.subject_code),fmt(tn.old),fmt(tl.old),fmt(r.old_total),fmt(tn.new),fmt(tl.new),fmt(r.new_total),who.join('; '),reasons.join('; ')];
+ return [i+1,r.sbd,candidates.get(r.candidate_id)?.student_name||'—',r.class_code,labelSubject(r.subject_code),fmt(tn.old),fmt(tl.old),fmt(r.old_total),fmt(tn.new),fmt(tl.new),fmt(r.new_total),who.join('; '),reasons.join('; ')];
 }
 function showReport(){const body=$('report');body.replaceChildren();const rows=reportRows();$('report-count').textContent=`${rows.length} dòng / ${report.length} lần duyệt`;const all=$('report-mode').value==='all';$('report-heading').textContent=all?'Danh sách tổng hợp kết quả phúc khảo đã duyệt':'Danh sách thay đổi kết quả sau phúc khảo';$('report-description').textContent=all?'Hiển thị cả các lần duyệt không thay đổi tổng điểm.':'Chỉ hiển thị các lần duyệt làm thay đổi tổng điểm.';for(const [i,r] of rows.entries()){const tr=document.createElement('tr');const values=reportValues(r,i);
- for(let j=0;j<values.length;j++){const cell=td(values[j]);if((j===7&&values[4]!==values[7])||(j===8&&values[5]!==values[8])||(j===9&&values[6]!==values[9]))cell.style.fontWeight='bold';tr.append(cell)}body.append(tr)}}
+ for(let j=0;j<values.length;j++){const cell=td(values[j]);if((j===8&&values[5]!==values[8])||(j===9&&values[6]!==values[9])||(j===10&&values[7]!==values[10]))cell.style.fontWeight='bold';tr.append(cell)}body.append(tr)}}
 function redraw(){showDrafts();showReport()}
 function multiOptions(id,items,selected,caption){const box=$(id);box.replaceChildren();const all=document.createElement('label');const ac=document.createElement('input');ac.type='checkbox';ac.checked=!selected.size;ac.onchange=()=>{selected.clear();multiOptions(id,items,selected,caption);redraw()};all.append(ac,document.createTextNode(' Tất cả '+caption));box.append(all);for(const [code,name] of items){const l=document.createElement('label');const c=document.createElement('input');c.type='checkbox';c.checked=selected.has(code);c.onchange=()=>{if(c.checked)selected.add(code);else selected.delete(code);multiOptions(id,items,selected,caption);redraw()};l.append(c,document.createTextNode(' '+name));box.append(l)}}
 function toast(message,ok=true){const e=$('toast');e.textContent=message;e.className=ok?'toast success':'toast error';e.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>e.hidden=true,6500)}
 async function load(){if(loading)return;loading=true;const rid=++requestId;try{const examId=$('exam').value;if(!examId)return;note('Đang tải dữ liệu...');$('reload').disabled=true;
-const getCandidates=async()=>{const m=new Map();for(let i=0;i<100000;i+=500){const {data,error}=await client.from('exam_candidates').select('id,class_code').eq('exam_id',examId).order('id').range(i,i+499);if(error)throw error;for(const c of data)m.set(c.id,c);if(data.length<500)return m}throw Error('Danh sách học sinh vượt giới hạn')};
+const getCandidates=async()=>{const m=new Map();for(let i=0;i<100000;i+=500){const {data,error}=await client.from('exam_candidates').select('id,class_code,student_name').eq('exam_id',examId).order('id').range(i,i+499);if(error)throw error;for(const c of data)m.set(c.id,c);if(data.length<500)return m}throw Error('Danh sách học sinh vượt giới hạn')};
 const [raw,approved,people]=await Promise.all([allRpc('exam_admin_appeal_entry_rows_v2',{p_exam_id:examId,p_subject:null},['candidate_id','subject_code','component_type']),allRpc('exam_admin_appeal_approval_report',{p_exam_id:examId},['sbd','subject_code','audit_id']),getCandidates()]);if(rid!==requestId)return;drafts=raw;report=approved;candidates=people;originalEntrants=new Map();let nameWarning='';try{const entrants=await rpc('exam_admin_appeal_original_essay_entrants',{p_exam_id:examId});if(rid!==requestId)return;for(const x of entrants||[])originalEntrants.set(x.candidate_id+'|'+x.subject_code,x);const ambiguous=(entrants||[]).filter(x=>x.lookup_status==='ambiguous').length;if(ambiguous)nameWarning=` Có ${ambiguous} trường hợp nhiều lần đánh phách cần đối chiếu.`}catch(e){nameWarning=' Không tải được người nhập điểm gốc: '+e.message;}
 const subjects=[...new Set([...drafts.map(x=>x.subject_code),...report.map(x=>x.subject_code)])].sort((a,b)=>cmp(labelSubject(a),labelSubject(b))).map(x=>[x,labelSubject(x)]);const classes=[...new Set([...candidates.values()].map(x=>x.class_code).filter(Boolean))].sort(cmp).map(x=>[x,x]);for(const x of [...selectedSubjects])if(!subjects.some(([v])=>v===x))selectedSubjects.delete(x);for(const x of [...selectedClasses])if(!classes.some(([v])=>v===x))selectedClasses.delete(x);multiOptions('subjects-check',subjects,selectedSubjects,'môn');multiOptions('classes-check',classes,selectedClasses,'lớp');redraw();note(`Đã tải ${groups().length} học sinh-môn chờ duyệt và ${report.length} lần duyệt (bao gồm cả không đổi tổng điểm).${nameWarning}`)}catch(e){note('Lỗi tải dữ liệu: '+e.message);toast('Tải dữ liệu thất bại: '+e.message,false)}finally{loading=false;$('reload').disabled=false}}
 $('report-mode').onchange=showReport;
@@ -42,16 +42,16 @@ $('approve').onclick=async()=>{const items=[...$('drafts').querySelectorAll('inp
 $('print').onclick=()=>window.print();
 $('excel').onclick=()=>{
  if(!window.XLSX)return note('Không tải được thư viện Excel. Kiểm tra kết nối mạng.');
- const rows=[['TT','SBD','Lớp','Môn','Điểm cũ','','','Điểm mới','','','Người chấm (nhập)','Lý do thay đổi'],
-             ['','','','','TN','TL','Tổng','TN','TL','Tổng','','']];
+ const rows=[['TT','SBD','Họ tên','Lớp','Môn','Điểm cũ','','','Điểm mới','','','Người chấm (nhập)','Lý do thay đổi'],
+             ['','','','','','TN','TL','Tổng','TN','TL','Tổng','','']];
  for(const [i,r] of reportRows().entries()){
   const a=reportValues(r,i);a[1]=String(a[1]);
-  for(const j of [4,5,6,7,8,9])a[j]=a[j]==='—'?null:Number(String(a[j]).replace(/\\./g,'').replace(',','.'));
+  for(const j of [5,6,7,8,9,10])a[j]=a[j]==='—'?null:Number(String(a[j]).replace(/\\./g,'').replace(',','.'));
   rows.push(a);
  }
  const ws=window.XLSX.utils.aoa_to_sheet(rows);
- ws['!merges']=[{s:{r:0,c:0},e:{r:1,c:0}},{s:{r:0,c:1},e:{r:1,c:1}},{s:{r:0,c:2},e:{r:1,c:2}},{s:{r:0,c:3},e:{r:1,c:3}},{s:{r:0,c:4},e:{r:0,c:6}},{s:{r:0,c:7},e:{r:0,c:9}},{s:{r:0,c:10},e:{r:1,c:10}},{s:{r:0,c:11},e:{r:1,c:11}}];
- ws['!cols']=[{wch:6},{wch:16},{wch:12},{wch:16},...Array(6).fill({wch:12}),{wch:28},{wch:55}];
+ ws['!merges']=[{s:{r:0,c:0},e:{r:1,c:0}},{s:{r:0,c:1},e:{r:1,c:1}},{s:{r:0,c:2},e:{r:1,c:2}},{s:{r:0,c:3},e:{r:1,c:3}},{s:{r:0,c:4},e:{r:1,c:4}},{s:{r:0,c:5},e:{r:0,c:7}},{s:{r:0,c:8},e:{r:0,c:10}},{s:{r:0,c:11},e:{r:1,c:11}},{s:{r:0,c:12},e:{r:1,c:12}}];
+ ws['!cols']=[{wch:6},{wch:16},{wch:27},{wch:12},{wch:16},...Array(6).fill({wch:12}),{wch:28},{wch:55}];
  const wb=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(wb,ws,'Ket qua phuc khao');window.XLSX.writeFile(wb,`phuc-khao-${$('exam').value}.xlsx`);
 };
 (async()=>{try{const {url,key}=validatePublicConfig(publicConfig);client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{user},error}=await client.auth.getUser();if(error||!user)throw Error('Chưa đăng nhập.');exams=await rpc('exam_admin_appeal_exams_period',{});for(const e of exams)$('exam').add(new Option(`${e.exam_name} (${e.school_year||''})`,e.exam_id));const requested=new URLSearchParams(location.search).get('exam');if(exams.some(e=>e.exam_id===requested))$('exam').value=requested;$('app').style.display='block';await load()}catch(e){note(e.message)}})();
