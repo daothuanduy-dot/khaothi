@@ -40,7 +40,7 @@ function attachRuns(){
    g.runRecords=map.get(g.candidate_id+'|'+g.subject_code)||[];
    // Không ghi đè điểm gốc; chỉ bổ sung định danh phách để lọc.
    const preferred=g.runRecords.find(r=>r.run_id===g.run_id)||g.runRecords[0];
-   if(preferred){g.run_id=preferred.run_id;g.run_label=preferred.run_label||g.run_label;g.phach_code=preferred.phach_code||g.phach_code;}
+   if(preferred){g.run_id=preferred.run_id;g.run_label=preferred.run_label||g.run_label;g.phach_code=preferred.phach_code;}
  }
 }
 function selectedRunRecord(g,runId){
@@ -53,7 +53,7 @@ function refreshPrefixes(){
  fillOptions('prefix',prefixes,'Tất cả đầu phách');
 }
 function fillOptions(id,items,first){const el=$(id),old=el.value;el.replaceChildren(new Option(first,''));for(const [v,label] of items)el.add(new Option(label,v));if(items.some(([v])=>v===old))el.value=old;}
-async function load(){if(busy)return;const id=$('exam').value;if(!id)return;const config=await rpc('exam_admin_appeal_entry_settings',{p_exam_id:id});$('mode').value=config.entry_mode;$('opened').value=String(config.is_open);const ready=afterDeadline();$('save-settings').hidden=!ready;$('mode').disabled=!ready;$('opened').disabled=!ready;$('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';rows=await rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']);grouped=mergeRows(rows||[]);lockedRuns=await rpc('exam_admin_appeal_locked_runs',{p_exam_id:id})||[];runRecords=await rpcAll('exam_admin_appeal_run_records',{p_exam_id:id},['run_id','candidate_id','subject_code']);attachRuns();const configured=await rpc('exam_admin_appeal_subjects',{p_exam_id:id});const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);fillOptions('subject',subjects,'Tất cả môn');updateFilters();}
+async function load(){if(busy)return;const id=$('exam').value;if(!id)return;const config=await rpc('exam_admin_appeal_entry_settings',{p_exam_id:id});$('mode').value=config.entry_mode;$('opened').value=String(config.is_open);const ready=afterDeadline();$('save-settings').hidden=!ready;$('mode').disabled=!ready;$('opened').disabled=!ready;$('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';rows=await rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']);grouped=mergeRows(rows||[]);lockedRuns=await rpc('exam_admin_appeal_locked_runs',{p_exam_id:id})||[];runRecords=await rpcAll('exam_admin_appeal_run_records_eligible',{p_exam_id:id},['run_id','candidate_id','subject_code']);attachRuns();const configured=await rpc('exam_admin_appeal_subjects',{p_exam_id:id});const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);fillOptions('subject',subjects,'Tất cả môn');updateFilters();}
 function updateFilters(){
  const subj=$('subject').value;
  const runs=new Map();
@@ -81,7 +81,15 @@ function componentControls(r, sharedNote){
 }
 function render(){
  const subj=$('subject').value,run=$('run').value,head=$('prefix').value;
- const data=grouped.filter(g=>{if(subj&&g.subject_code!==subj)return false;const record=selectedRunRecord(g,run);if(run&&!record)return false;if(head&&prefix(record?.phach_code||g.phach_code)!==head)return false;return true;});
+ const data=grouped.filter(g=>{
+  if(subj&&g.subject_code!==subj)return false;
+  const record=selectedRunRecord(g,run);
+  // Khi chọn lượt/đầu phách, chỉ lấy bài có phách hợp lệ trong lượt tương ứng.
+  if((run||head)&&!record)return false;
+  if(head&&prefix(record?.phach_code)!==head)return false;
+  if($('mode').value==='all'&&!record)return false;
+  return true;
+ });
  const inventory=runRecords.filter(r=>(!subj||r.subject_code===subj)&&(!run||r.run_id===run)&&(!head||prefix(r.phach_code)===head));$('count').textContent=`${data.length} bài đủ điều kiện nhập · ${inventory.length} bản ghi phách trong phương án/bộ lọc. Mỗi dòng tương ứng một học sinh và một môn; chỉ lưu nháp.`;
  const tbody=$('rows');tbody.replaceChildren();const pending=[];
  for(const [i,g] of data.entries()){
@@ -101,7 +109,7 @@ function render(){
   const newMcq=td('');newMcq.append(mcq?c1.scoreInput:'—');
   const newEssay=td('');newEssay.append(essay?c2.scoreInput:'—');
   const noteCell=td('');noteCell.className='note';noteCell.append(note);
-  tr.append(td(i+1),td(labelSubject(g.subject_code)),td([g.sbd,g.student_name].filter(Boolean).join(' — ')),td(selectedRunRecord(g,run)?.phach_code||g.phach_code||'—'),td(mcq?num(mcq.old_score):'—'),newMcq,td(essay?num(essay.old_score):'—'),newEssay,td(num(oldTotal)),total,noteCell,td([mcq?.draft_status,essay?.draft_status].filter(Boolean).join(' / ')||'Chưa lưu'));
+  tr.append(td(i+1),td(labelSubject(g.subject_code)),td([g.sbd,g.student_name].filter(Boolean).join(' — ')),td(selectedRunRecord(g,run)?.phach_code||'—'),td(mcq?num(mcq.old_score):'—'),newMcq,td(essay?num(essay.old_score):'—'),newEssay,td(num(oldTotal)),total,noteCell,td([mcq?.draft_status,essay?.draft_status].filter(Boolean).join(' / ')||'Chưa lưu'));
   const button=document.createElement('button');button.textContent='Lưu bài';button.disabled=$('opened').value!=='true'||(!mcq&&!essay)||(mcq&&c1.locked)||(essay&&c2.locked);
   const action=td('');action.append(button);tr.append(action);tbody.append(tr);
   for(const input of [c1.scoreInput,c2.scoreInput].filter(Boolean))input.addEventListener('input',updateTotal);
@@ -121,7 +129,7 @@ function render(){
  }
  $('save-all').disabled=$('opened').value!=='true'||busy;window.__appealPending=pending;
 }
-$('subject').onchange=updateFilters;$('run').onchange=()=>{const selected=lockedRuns.find(r=>r.run_id===$('run').value);if(selected&&$('subject').value!==selected.subject_code){$('subject').value=selected.subject_code;updateFilters();$('run').value=selected.run_id;}refreshPrefixes();render();};$('prefix').onchange=render;
+$('mode').onchange=()=>{notice('Đã thay đổi lựa chọn phạm vi. Nhấn “Lưu cấu hình” để áp dụng vào danh sách và quyền lưu điểm.');};$('subject').onchange=updateFilters;$('run').onchange=()=>{const selected=lockedRuns.find(r=>r.run_id===$('run').value);if(selected&&$('subject').value!==selected.subject_code){$('subject').value=selected.subject_code;updateFilters();$('run').value=selected.run_id;}refreshPrefixes();render();};$('prefix').onchange=render;
 $('save-all').onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');if($('opened').value!=='true')throw Error('Chưa mở nhập điểm.');const entries=(window.__appealPending||[]).filter(x=>x.dirty());if(!entries.length){notice('Không có thay đổi cần lưu.');return;}busy=true;$('save-all').disabled=true;let ok=0,failed=0,parts=0;for(const entry of entries){try{parts+=await entry.save();ok++;entry.tr.classList.add('saved');entry.tr.classList.remove('failed');}catch(e){failed++;entry.tr.classList.add('failed');console.error('Lưu phúc khảo thất bại',entry.g.candidate_id,entry.g.subject_code,e);}}busy=false;notice(`Lưu hàng loạt: ${ok} bài thành công (${parts} thành phần), ${failed} bài lỗi. ${failed?'Các dòng lỗi được tô đỏ, hãy kiểm tra và lưu lại.':'Chưa cập nhật điểm chính thức.'}`);toast(`Lưu hàng loạt: ${ok} bài thành công, ${failed} bài lỗi.`,failed===0);if(!failed)await load();else $('save-all').disabled=false;}catch(e){busy=false;$('save-all').disabled=false;notice(e.message);}};
 $('exam').onchange=()=>load().catch(e=>notice(e.message));$('reload').onclick=()=>load().catch(e=>notice(e.message));$('save-settings').onclick=async()=>{try{if(!afterDeadline()&&$('opened').value==='true')throw Error('Chưa hết hạn nhận đơn.');await rpc('exam_admin_appeal_entry_configure',{p_exam_id:$('exam').value,p_mode:$('mode').value,p_open:$('opened').value==='true'});notice('Đã lưu cấu hình.');await load();}catch(e){notice(e.message);}};
 (async()=>{try{const {url,key}=validatePublicConfig(publicConfig);client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{user},error}=await client.auth.getUser();if(error||!user)throw Error('Vui lòng đăng nhập quản trị.');exams=await rpc('exam_admin_appeal_exams_period');$('exam').replaceChildren();for(const e of exams)$('exam').add(new Option(`${e.exam_name} (${e.school_year||''})`,e.exam_id));const requested=new URLSearchParams(location.search).get('exam');if(exams.some(e=>e.exam_id===requested))$('exam').value=requested;$('app').classList.remove('hidden');await load();notice('Đã tải danh sách. Điểm phúc khảo được lưu riêng dưới dạng nháp.');}catch(e){notice(e.message||String(e));}})();
