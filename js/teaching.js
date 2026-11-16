@@ -50,10 +50,13 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
   }
   function periodRequired(){if(!periodId)throw new Error('Hãy chọn hoặc tạo kỳ học trước.');}
   function mayDiscard(){return !draft.changes.size||confirm('Có phân công chưa lưu. Bỏ các thay đổi này?')}
+  const optionCache=new Map();
   function teacherOptions(value=''){
+    if(optionCache.has(value))return optionCache.get(value);
     const rows=teachers.map(row=>`<option value="${esc(row.user_id)}" ${row.user_id===value?'selected':''}>${esc([row.full_name||row.email,row.report_name?`(${row.report_name})`:''].filter(Boolean).join(' '))}</option>`).join('');
     const missing=value&&!teachers.some(row=>row.user_id===value)?`<option value="${esc(value)}" selected>Giáo viên ${esc(value)}</option>`:'';
-    return `<option value="">-- Chưa phân công --</option>${rows}${missing}`;
+    const html=`<option value="">-- Chưa phân công --</option>${rows}${missing}`;
+    optionCache.set(value,html);return html;
   }
   const visibleClasses=()=>classes.filter(row=>(!$('teaching-grade').value||row.grade_code===$('teaching-grade').value)
     &&row.class_code.toLocaleLowerCase('vi').includes($('teaching-search').value.trim().toLocaleLowerCase('vi'))
@@ -122,11 +125,33 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
     return {classes:results[0].value,assignments:results[1].value,homerooms:results[2].value};
   }
+  // Load only authorized staff accounts. Never use the entire Auth profile table as a teacher list.
+  let staffCache=null;
+  async function readTeachers(force=false){
+    if(staffCache&&!force)return staffCache;
+    const [roles,admins]=await Promise.all([
+      all('exam_account_roles','user_id',q=>q.eq('role','grader')),
+      all('exam_profiles','user_id',q=>q.eq('is_admin',true))
+    ]);
+    const ids=[...new Set([...roles,...admins].map(r=>r.user_id).filter(Boolean))];
+    if(!ids.length){staffCache=[];return staffCache;}
+    // Keep batches small; profiles for student accounts are never fetched.
+    const chunks=[];
+    for(let i=0;i<ids.length;i+=100){
+      chunks.push(checked(state.client.from('exam_user_profiles')
+        .select('user_id,full_name,email,report_name').in('user_id',ids.slice(i,i+100))));
+    }
+    const result=(await Promise.all(chunks)).flat();
+    const allowed=new Set(ids);
+    staffCache=result.filter(r=>allowed.has(r.user_id))
+      .sort((a,b)=>(a.full_name||a.email||'').localeCompare(b.full_name||b.email||'','vi'));
+    return staffCache;
+  }
   async function load(id=periodId,requestedExamId=sourceExamId,useLinkedPeriod=false){
     requireAdmin();
     const results=await Promise.allSettled([
       all('school_teaching_periods','id,school_year,semester',q=>q.order('school_year',{ascending:false}).order('semester',{ascending:false})),
-      all('exam_user_profiles','user_id,full_name,email,report_name',q=>q.order('user_id')),
+      readTeachers(),
       readPeriod(id)
     ]);
     const error=results.find(result=>result.status==='rejected');if(error)throw error.reason;
@@ -141,7 +166,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     }
     const nextCatalog=await readExamSubjects(exam);
     const data=nextId===id?results[2].value:await readPeriod(nextId);
-    periods=nextPeriods;catalog=nextCatalog;sourceExamId=exam?.id||'';teachers=results[1].value;
+    periods=nextPeriods;catalog=nextCatalog;sourceExamId=exam?.id||'';teachers=results[1].value;optionCache.clear();
     teachers.sort((a,b)=>(a.full_name||a.email).localeCompare(b.full_name||b.email,'vi'));
     if(periodId!==nextId){rosterClasses=[];selectedClasses.clear();$('teaching-class-picker').hidden=true}
     periodId=nextId;classes=data.classes;draft=createTeachingDraft(data.assignments,data.homerooms);
@@ -176,7 +201,7 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
     const input=event.target.closest('[data-teaching-class]');if(!input||busy)return;
     draft.set(input.dataset.teachingClass,input.dataset.teachingSubject,input.value);render();
   };
-  button('teaching-refresh',async()=>{if(mayDiscard())await load()});
+  button('teaching-refresh',async()=>{if(mayDiscard()){staffCache=null;await load()}});
   button('teaching-discard',async()=>{if(mayDiscard()){draft.changes.clear();render()}});
   button('teaching-save',async()=>{
     periodRequired();if(!draft.changes.size)return;
