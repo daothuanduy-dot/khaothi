@@ -113,27 +113,15 @@ async function connect(url,key){
   if(!key||key.length<20)throw new Error('Publishable/anon key đang trống hoặc quá ngắn. Sao chép khóa public/publishable hoặc anon trong Supabase → Settings → API Keys; không dùng service_role.');
   if(/^eyJ[a-zA-Z0-9_-]+\./.test(key)){/* legacy anon JWT is accepted */}
   else if(!key.startsWith('sb_publishable_'))throw new Error('Khóa không có định dạng publishable/anon được hỗ trợ. Hãy sao chép lại đúng khóa public/publishable hoặc anon của project.');
-  // Check Auth and a real database table separately so failures identify the
-  // service that prevented startup.
-  startupStep('Bước 3–4/5 · Supabase','Đang kiểm tra đồng thời Supabase Auth và cơ sở dữ liệu. Mạng chậm có thể cần thêm thời gian...');
-  const endpoints=[`${url}/auth/v1/health`,`${url}/rest/v1/exam_sessions?select=id&limit=0`];
-  const checks=await Promise.all(endpoints.map(async endpoint=>{
-    try{
-      const response=await fetch(endpoint,{method:'GET',headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'},cache:'no-store'});
-      if(response.ok)return null;
-      let detail='';try{detail=(await response.text()).slice(0,180)}catch{}
-      return `${new URL(endpoint).pathname}: HTTP ${response.status}${detail?` — ${detail}`:''}`;
-    }catch(error){return `${new URL(endpoint).pathname}: ${error?.message||'NetworkError'}`}
-  }));
-  const probeErrors=checks.filter(Boolean);
-  if(probeErrors.length)throw new Error('Không hoàn tất kiểm tra Supabase. '+probeErrors.join(' | '));
-  startupStep('Bước 5/5 · phiên đăng nhập','Bước 5/5: Auth và CSDL phản hồi thành công. Đang khởi tạo phiên đăng nhập...','info',true);
+  // Startup optimization: no redundant Auth health or REST database probes.
+  // Actual Auth session initialization and normal error handling remain enabled.
+  startupStep('Khởi tạo phiên Supabase','Đang khởi tạo phiên đăng nhập; bỏ qua truy vấn kiểm tra kết nối dư thừa...');
   const client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   state.client=client;
   const {data,error}=await waitForConnection(client.auth.getSession());
   if(error)throw new Error('Đã tới được Supabase nhưng không đọc được phiên xác thực trong trình duyệt: '+error.message);
   state.session=data.session||null;
-  startupStep('Đã kết nối Supabase','Đã hoàn tất kiểm tra Auth, truy vấn CSDL và phiên Supabase.','success',true);
+  startupStep('Đã kết nối Supabase','Đã khởi tạo phiên Supabase thành công.','success',true);
 }
 async function openConnectedApp(){
   if(state.session?.user)await enterApp(state.session.user);
@@ -3478,7 +3466,7 @@ function wireRoomingEditor(){
 async function boot(){
   showScreen('login-screen');
   $('login-submit').disabled=true;$('google-login').disabled=true;
-  startupStep('Bước 1/5 · bắt đầu','Bước 1/5: Ứng dụng đã khởi động, chuẩn bị kiểm tra cấu hình Supabase...');
+  startupStep('Khởi động ứng dụng','Đang chuẩn bị cấu hình Supabase...');
   try{
     const config=readConfig();
     await connect(config.url,config.key);
@@ -3486,7 +3474,7 @@ async function boot(){
     showConnectionFailure(error);
     return;
   }
-  startupStep('Bước 6/6 · giao diện','Bước 6/6: Kết nối CSDL thành công. Chuẩn bị tải 13 module giao diện...','info',true);
+  startupStep('Tải giao diện','Đang tải các module giao diện...','info',true);
   try{
     const moduleVersion=await loadTabModules({onProgress:({name,index,total})=>{
       startupStep(`Bước 6/6 · module ${index}/${total}`,`Đã kết nối Supabase. Đã tải ${index}/${total} module (mới nhất: ${name}). Đang tiếp tục tải các phần còn lại; mạng chậm có thể mất thêm thời gian.`,'info',true);
