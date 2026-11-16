@@ -129,21 +129,10 @@ export function wireTeaching({state,$,esc,message,subjects=[]}){
   let staffCache=null;
   async function readTeachers(force=false){
     if(staffCache&&!force)return staffCache;
-    const [roles,admins]=await Promise.all([
-      all('exam_account_roles','user_id',q=>q.eq('role','grader')),
-      all('exam_profiles','user_id',q=>q.eq('is_admin',true))
-    ]);
-    const ids=[...new Set([...roles,...admins].map(r=>r.user_id).filter(Boolean))];
-    if(!ids.length){staffCache=[];return staffCache;}
-    // Keep batches small; profiles for student accounts are never fetched.
-    const chunks=[];
-    for(let i=0;i<ids.length;i+=100){
-      chunks.push(checked(state.client.from('exam_user_profiles')
-        .select('user_id,full_name,email,report_name').in('user_id',ids.slice(i,i+100))));
-    }
-    const result=(await Promise.all(chunks)).flat();
-    const allowed=new Set(ids);
-    staffCache=result.filter(r=>allowed.has(r.user_id))
+    // Read a restricted, admin-only RPC rather than protected role tables from the browser.
+    const {data,error}=await state.client.rpc('exam_teaching_staff_list');
+    if(error)throw error;
+    staffCache=(Array.isArray(data)?data:[])
       .sort((a,b)=>(a.full_name||a.email||'').localeCompare(b.full_name||b.email||'','vi'));
     return staffCache;
   }
