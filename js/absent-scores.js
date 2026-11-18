@@ -3,9 +3,9 @@ export function absentScoreTotal(row,mcq,essay){
  const parse=value=>value==null||String(value).trim()===''?null:Number(String(value).replace(',','.'));
  const m=parse(mcq),e=parse(essay),needsM=['mcq','combined'].includes(row.score_mode),needsE=['essay','combined'].includes(row.score_mode);
  if(!['mcq','essay','combined'].includes(row.score_mode))throw new Error('Chưa cấu hình hình thức tính điểm.');
- for(const [required,value,max,step,label] of [[needsM,m,Number(row.mcq_max),0.001,'Trắc nghiệm'],[needsE,e,Number(row.essay_max),Number(row.essay_step),'Tự luận']]){
+ for(const [required,value,max,step,label] of [[needsM,m,Number(row.mcq_max),0.001,'Trắc nghiệm'],[needsE,e,Number(row.essay_max),row.essay_step==null?null:Number(row.essay_step),'Tự luận']]){
   if(!required){if(value!==null)throw new Error(label+': môn này không có thành phần này.');continue}
-  if(value===null||!Number.isFinite(value)||!Number.isFinite(max)||max<=0||value<0||value>max||!Number.isFinite(step)||step<=0||Math.abs(value/step-Math.round(value/step))>1e-7)throw new Error(label+': kiểm tra điểm, thang và bước điểm.');
+  if(value===null||!Number.isFinite(value)||!Number.isFinite(max)||max<=0||value<0||value>max||(step!==null&&(!Number.isFinite(step)||step<=0||Math.abs(value/step-Math.round(value/step))>1e-7)))throw new Error(label+': kiểm tra điểm, thang và bước điểm.');
  }
  if(needsE&&(!Number.isInteger(Number(row.decimal_places))||Math.abs(e-Number(e.toFixed(Number(row.decimal_places))))>1e-8))throw new Error('Tự luận: quá số chữ số lẻ cấu hình.');
  const total=(m??0)+(e??0);if(total>10+1e-8)throw new Error('Tổng bài thi không vượt quá 10.');
@@ -25,7 +25,7 @@ export async function openAbsentScores({state,examId='',subjectName=code=>code})
   if(['mcq','combined'].includes(mode)&&!(Number(r.mcq_max)>0))issues.push('thiếu thang điểm trắc nghiệm');
   if(['essay','combined'].includes(mode)){
    if(!(Number(r.essay_max)>0))issues.push('thiếu thang điểm tự luận');
-   if(r.essay_step==null||!(Number(r.essay_step)>0))issues.push('thiếu bước điểm tự luận');
+   if(r.essay_step!=null&&!(Number(r.essay_step)>0))issues.push('bước điểm tự luận không hợp lệ');
    if(r.decimal_places==null||!Number.isInteger(Number(r.decimal_places)))issues.push('thiếu số chữ số thập phân');
   }
   if(mode==='combined'&&Number(r.mcq_max)+Number(r.essay_max)>10)issues.push('tổng thang điểm thành phần vượt 10, cần kiểm tra cấu hình');
@@ -43,7 +43,7 @@ export async function openAbsentScores({state,examId='',subjectName=code=>code})
   if(data.settings?.period_id)$('[data-period]').value=data.settings.period_id;
   $('[data-enabled]').checked=data.settings?.enabled===true;
   $('[data-rows]').innerHTML=`<p>${rows.length} học sinh/môn vắng thuộc phạm vi của bạn. Thành phần điểm được đọc theo cấu hình riêng của kỳ thi và môn; cấu hình thiếu hoặc không hợp lệ sẽ khóa lưu và hiện lý do. ${data.settings?.enabled?'Đã bật nhập điểm.':'Chưa bật nhập điểm.'}</p><table style="width:100%;border-collapse:collapse"><thead><tr><th>SBD / Mã HS</th><th>Họ tên / lớp</th><th>Môn</th><th>Trắc nghiệm</th><th>Tự luận</th><th>Tổng</th><th>Lưu / trạng thái</th></tr></thead><tbody>${rows.map((r,i)=>{
-   const input=(kind,needed,max,step,value)=>needed?`<input data-${kind} type="number" min="0" max="${esc(max)}" step="${esc(step)}" value="${esc(value)}" ${r.can_edit&&!configIssue?'':'disabled'} style="width:95px"><small> / ${esc(max)}</small>`:'—';
+   const input=(kind,needed,max,step,value)=>needed?`<input data-${kind} type="number" min="0" max="${esc(max)}" step="${esc(step==null?'any':step)}" value="${esc(value)}" ${r.can_edit&&!configIssue?'':'disabled'} style="width:95px"><small> / ${esc(max)}${kind==='essay'&&step==null?' · nhập tự do':''}</small>`:'—';
    const configIssue=describeConfig(r);
    let total='—';if(!configIssue){try{total=absentScoreTotal(r,r.mcq_score,r.essay_score).total_score}catch{}}
    return `<tr data-row="${i}"><td>${esc(r.sbd)}<br>${esc(r.student_code)}</td><td>${esc(r.student_name)}<br>${esc(r.class_code)}</td><td>${esc(subjectName(r.subject_code))}${configIssue?`<div style="color:#b91c1c;font-size:12px;max-width:240px" title="${esc(configIssue)}">${esc(configIssue)}</div>`:''}</td><td>${input('mcq',['mcq','combined'].includes(r.score_mode),r.mcq_max,0.001,r.mcq_score)}</td><td>${input('essay',['essay','combined'].includes(r.score_mode),r.essay_max,r.essay_step,r.essay_score)}</td><td data-total>${total}</td><td><button type="button" data-save="${i}" ${r.can_edit&&!configIssue?'':'disabled'}>Lưu</button><button type="button" data-history-row="${i}">Lịch sử</button><span data-status>${r.version?'Đã lưu · '+esc(r.updated_at):configIssue?'Chưa cấu hình hợp lệ':r.can_edit?'Chưa nhập':'Chưa được phân công nhập'}</span></td></tr>`;
