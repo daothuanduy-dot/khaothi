@@ -153,14 +153,28 @@ async function openCorrection(g,approvedParts){
     p_exam_id:$('exam').value,p_candidate_id:g.candidate_id,p_subject_code:g.subject_code,
     p_component_type:c.type,p_new_score:next,p_reason:explanation,p_expected_revision:current.revision
    });
+   // Cập nhật ngay trạng thái trên bảng, không đợi toàn bộ RPC tải lại.
+   const latestScores=current.scores.slice();
+   latestScores[c.no-1]=next;
+   const latestTotal=latestScores.reduce((sum,v)=>sum+Number(v),0);
+   const latestParts={};
+   for(const part of config.components||[])latestParts[part.type]=latestScores[part.no-1];
+   currentScores.set(g.candidate_id+'|'+g.subject_code,{...current,scores:latestScores,total_score:latestTotal,revision:current.revision+1,parts:latestParts});
+   const savedScroll=$('score-scroll')?.scrollTop||0;
+   const savedHorizontal=$('score-scroll')?.scrollLeft||0;
    close();busy=false;
+   render();
+   if($('score-scroll')){$('score-scroll').scrollTop=savedScroll;$('score-scroll').scrollLeft=savedHorizontal;}
    toast(`Đã lưu đính chính. Tổng chính thức: ${num(result.new_total)}. Nhật ký #${result.audit_id}`);
    notice(`Đã đính chính ${g.sbd} / ${g.subject_code}; nhật ký #${result.audit_id}.`);
-   await load();
+   // Đồng bộ nền từ server; nếu lỗi tải lại, điểm đã lưu vẫn hiện ngay trên bảng.
+   try{await load();if($('score-scroll')){$('score-scroll').scrollTop=savedScroll;$('score-scroll').scrollLeft=savedHorizontal;}}
+   catch(refreshError){notice('Đã lưu điểm nhưng không tải lại được danh sách: '+refreshError.message);}
   }catch(err){busy=false;saveButton.disabled=false;error.textContent=err.message||String(err);}
  };
  dialog.showModal();
 }
+function approvedResult(g){return [g.parts.mcq,g.parts.essay].some(r=>r?.draft_status==='approved');}
 function render(){
  const subj=$('subject').value,run=$('run').value,head=$('prefix').value;
  const data=grouped.filter(g=>{
@@ -190,13 +204,13 @@ function render(){
   const officialTotal=td(official?.total_score==null?'—':num(official.total_score));
   const updateTotal=()=>{
     const score=(r,c)=>{if(!r)return 0;if(c.scoreInput?.value.trim()){try{return valueFrom(c.scoreInput)}catch{return NaN}}return Number(r.new_score??r.old_score??0)};
-    const sum=score(mcq,c1)+score(essay,c2);total.textContent=official?.total_score!=null && [mcq,essay].filter(Boolean).every(r=>r.draft_status==='approved')?num(official.total_score):(Number.isFinite(sum)?num(sum):'Điểm chưa hợp lệ');
+    const sum=score(mcq,c1)+score(essay,c2);total.textContent=official?.total_score!=null && approvedResult(g)?num(official.total_score):(Number.isFinite(sum)?num(sum):'Điểm chưa hợp lệ');
     tr.classList.toggle('changed',isDirty());
   };
   const isDirty=()=>((!c1.locked)&&c1.dirty())||((!c2.locked)&&c2.dirty())||((!c1.locked||!c2.locked)&&note.value!==initialNote);
   // Approved inputs show the official score, not the stale approved draft.
   for(const [r,control,type] of [[mcq,c1,'mcq'],[essay,c2,'essay']]){
-    if(r?.draft_status==='approved' && control.scoreInput && officialScore(type)!=null){
+    if(approvedResult(g) && r && control.scoreInput && officialScore(type)!=null){
       control.scoreInput.value=String(officialScore(type));
       control.scoreInput.title='Điểm chính thức hiện hành; điểm duyệt lần đầu: '+num(r.new_score);
     }
