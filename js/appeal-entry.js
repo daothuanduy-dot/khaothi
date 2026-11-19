@@ -3,12 +3,6 @@ const $=id=>document.getElementById(id);
 const names={TOAN:'Toán',VAN:'Ngữ văn',ANH:'Tiếng Anh',N1:'Ngoại ngữ 1',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',GDKTPL:'Giáo dục kinh tế và pháp luật',KTPL:'Giáo dục kinh tế và pháp luật'};
 const labelSubject=code=>names[code]||code;
 let client,rows=[],exams=[],grouped=[],lockedRuns=[],runRecords=[],busy=false;
-let lastSavedFailures=[];
-const pendingRows=()=>window.__appealPending||[];
-const dirtyRows=()=>pendingRows().filter(x=>x.dirty());
-const confirmDiscard=()=>!dirtyRows().length||window.confirm(`Có ${dirtyRows().length} bài đang chỉnh sửa nhưng chưa lưu. Nếu tiếp tục, các thay đổi này sẽ bị mất. Bạn có muốn tiếp tục?`);
-const summary=()=>{const all=pendingRows(),dirty=dirtyRows().length,failed=all.filter(x=>x.tr.classList.contains('failed')).length;const saved=all.filter(x=>x.hasDraft).length,approved=all.filter(x=>x.hasApproved).length,notEntered=all.filter(x=>!x.hasDraft&&!x.hasApproved).length;const el=$('save-summary');if(el)el.textContent=`Đang hiển thị: ${all.length} bài · Có bản nháp: ${saved} · Có thành phần đã duyệt: ${approved} · Chưa có nháp/duyệt: ${notEntered} · Chưa lưu: ${dirty} · Lưu lỗi: ${failed}. (Số liệu trong bộ lọc hiện tại; một bài có thể thuộc nhiều nhóm.)`;};
-const setRowError=(entry,msg)=>{entry.tr.classList.add('failed');entry.tr.classList.remove('saved');entry.error.textContent=`Lỗi lưu: ${msg}`;entry.error.hidden=false;summary();};
 const natural=(a,b)=>String(a||'').localeCompare(String(b||''),'vi',{numeric:true,sensitivity:'base'});
 const notice=s=>$('notice').textContent=s;const toast=(message,ok=true)=>{const el=$('save-toast');if(!el)return;el.textContent=message;el.className='save-toast '+(ok?'success':'error');el.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.hidden=true,6500)};
 const exam=()=>exams.find(x=>x.exam_id===$('exam').value);
@@ -71,11 +65,11 @@ function valueFrom(input){const s=input.value.trim().replace(',','.');if(!/^(?:\
 function componentControls(r, sharedNote){
   if(!r)return {dirty:()=>false,read:()=>null,locked:false,scoreInput:null};
   const input=document.createElement('input');input.className='score';input.type='text';input.inputMode='decimal';input.placeholder='Nhập điểm';input.value=r.new_score??'';
-  let initial=input.value;
+  const initial=input.value;
   const dirty=()=>input.value!==initial;
   const locked=!!r.draft_status&&r.draft_status!=='draft';
   input.disabled=locked;
-  return {dirty,locked,scoreInput:input,commit:()=>{initial=input.value;},read:()=>{
+  return {dirty,locked,scoreInput:input,read:()=>{
     const newScore=input.value.trim()?valueFrom(input):(r.new_score??r.old_score);
     if(newScore==null)throw Error('Chưa có điểm gốc để lưu');
     const oldScore=Number(r.old_score);
@@ -102,46 +96,84 @@ function render(){
   const tr=document.createElement('tr'),mcq=g.parts.mcq,essay=g.parts.essay;
   const note=document.createElement('input');note.className='shared-note';note.placeholder='Ghi chú chung cho bài thi';
   note.value=essay?.detail_note||mcq?.detail_note||'';
-  let initialNote=note.value;
+  const initialNote=note.value;
   const c1=componentControls(mcq,note),c2=componentControls(essay,note);
   const oldTotal=(mcq?.old_score==null?0:Number(mcq.old_score))+(essay?.old_score==null?0:Number(essay.old_score));
   const total=td('—');
   const updateTotal=()=>{
     const score=(r,c)=>{if(!r)return 0;if(c.scoreInput?.value.trim()){try{return valueFrom(c.scoreInput)}catch{return NaN}}return Number(r.new_score??r.old_score??0)};
     const sum=score(mcq,c1)+score(essay,c2);total.textContent=Number.isFinite(sum)?num(sum):'Điểm chưa hợp lệ';
-    tr.classList.toggle('changed',isDirty());summary();
+    tr.classList.toggle('changed',isDirty());
   };
   const isDirty=()=>c1.dirty()||c2.dirty()||note.value!==initialNote;
-  const error=document.createElement('div');error.className='row-error';error.hidden=true;error.setAttribute('role','alert');
   const newMcq=td('');newMcq.append(mcq?c1.scoreInput:'—');
   const newEssay=td('');newEssay.append(essay?c2.scoreInput:'—');
   const noteCell=td('');noteCell.className='note';noteCell.append(note);
   tr.append(td(i+1),td(labelSubject(g.subject_code)),td([g.sbd,g.student_name].filter(Boolean).join(' — ')),td(selectedRunRecord(g,run)?.phach_code||'—'),td(mcq?num(mcq.old_score):'—'),newMcq,td(essay?num(essay.old_score):'—'),newEssay,td(num(oldTotal)),total,noteCell,td([mcq?.draft_status,essay?.draft_status].filter(Boolean).join(' / ')||'Chưa lưu'));
-  const button=document.createElement('button');button.textContent='Lưu bài';button.disabled=$('opened').value!=='true'||(!mcq&&!essay)||([c1,c2].every(c=>c.locked||!c.scoreInput));
-  const action=td('');action.append(button,error);tr.append(action);tbody.append(tr);
+  const button=document.createElement('button');button.textContent='Lưu bài';button.disabled=$('opened').value!=='true'||(!mcq&&!essay)||(mcq&&c1.locked)||(essay&&c2.locked);
+  const action=td('');action.append(button);
+  // Corrections are separate transactions; approved drafts remain immutable.
+  const approvedParts=[mcq,essay].filter(r=>r?.draft_status==='approved');
+  if(approvedParts.length){
+    const correction=document.createElement('button');
+    correction.type='button';correction.textContent='Đính chính';
+    correction.style.marginLeft='6px';correction.style.background='#8a4b0f';
+    correction.onclick=async()=>{
+      if(busy)return;
+      try{
+        busy=true;correction.disabled=true;
+        const currentRows=await rpc('exam_regrade_get_current',{p_exam_id:$('exam').value,p_subject_code:g.subject_code});
+        const current=(currentRows||[]).find(x=>x.candidate_id===g.candidate_id);
+        if(!current)throw Error('Không tìm thấy kết quả phúc khảo hiện hành.');
+        const config=await rpc('exam_regrade_get_config',{p_exam_id:$('exam').value,p_subject_code:g.subject_code});
+        const components=config?.components||[];
+        const eligible=components.filter(c=>approvedParts.some(r=>r.component_type===c.type));
+        if(!eligible.length)throw Error('Không có thành phần đã duyệt để đính chính.');
+        const selected=eligible.length===1?eligible[0]:eligible.find(c=>c.type===window.prompt('Chọn thành phần đính chính: mcq (trắc nghiệm) hoặc essay (tự luận)','essay')?.trim().toLowerCase());
+        if(!selected){busy=false;correction.disabled=false;return;}
+        const oldScore=Number(current.scores[selected.no-1]);
+        const raw=window.prompt(`Điểm ${selected.name} hiện hành: ${num(oldScore)}. Nhập điểm đúng (0–${selected.maximum}):`,String(oldScore));
+        if(raw===null){busy=false;correction.disabled=false;return;}
+        const newScore=raw.trim().replace(',','.');
+        if(!/^\d+(?:\.\d+)?$/.test(newScore))throw Error('Điểm nhập không hợp lệ.');
+        const reason=window.prompt('Nhập lý do đính chính (ít nhất 5 ký tự):','');
+        if(reason===null){busy=false;correction.disabled=false;return;}
+        if(reason.trim().length<5)throw Error('Lý do phải có ít nhất 5 ký tự.');
+        if(!window.confirm(`Xác nhận đính chính ${g.sbd} / ${g.subject_code} / ${selected.name}: ${num(oldScore)} → ${newScore}?\nThao tác cập nhật điểm chính thức ngay và ghi nhật ký.`)){
+          busy=false;correction.disabled=false;return;
+        }
+        const result=await rpc('exam_admin_appeal_correct_approved',{
+          p_exam_id:$('exam').value,p_candidate_id:g.candidate_id,
+          p_subject_code:g.subject_code,p_component_type:selected.type,
+          p_new_score:Number(newScore),p_reason:reason.trim(),
+          p_expected_revision:current.revision
+        });
+        busy=false;toast(`Đính chính thành công. Tổng mới: ${num(result.new_total)}. Mã nhật ký: ${result.audit_id}`);
+        notice(`Đã đính chính ${g.sbd}, môn ${g.subject_code}; mã nhật ký ${result.audit_id}.`);
+        await load();
+      }catch(e){busy=false;correction.disabled=false;notice('Không thể đính chính: '+e.message);toast('Đính chính thất bại: '+e.message,false);}
+    };
+    action.append(correction);
+  }
+  tr.append(action);tbody.append(tr);
   for(const input of [c1.scoreInput,c2.scoreInput].filter(Boolean))input.addEventListener('input',updateTotal);
   note.addEventListener('input',updateTotal);updateTotal();
   const save=async()=>{
     if(!isDirty())return 0;
-    error.hidden=true;error.textContent='';
     let count=0;
-    // Chỉ ghi thành phần có thay đổi. Tuyệt đối không ghi lại thành phần approved.
+    // Ghi chú chung được ghi vào cả hai thành phần đang có để giữ đồng nhất.
     for(const [r,c] of [[mcq,c1],[essay,c2]]){
-      if(!r||c.locked||!c.dirty()&&note.value===initialNote)continue;
-      // Ghi chú dùng chung, nhưng chỉ cập nhật thành phần nháp hoặc đang sửa.
-      try{await rpc('exam_admin_appeal_draft_save',c.read());}
-      catch(e){throw Error(`${r.component_type==='essay'?'Tự luận':'Trắc nghiệm'}: ${e.message||String(e)}`);}
-      c.commit();count++;
+      if(!r||c.locked)continue;
+      await rpc('exam_admin_appeal_draft_save',c.read());count++;
     }
-    initialNote=note.value;updateTotal();return count;
+    return count;
   };
-  const entry={g,save,dirty:isDirty,tr,error,hasDraft:[mcq,essay].some(x=>x?.draft_status==='draft'),hasApproved:[mcq,essay].some(x=>x?.draft_status==='approved')};
-  button.onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');busy=true;button.disabled=true;const n=await save();notice(`Đã lưu ${n} thành phần điểm của ${g.student_name||g.sbd}. Chưa cập nhật điểm chính thức.`);toast(`Lưu thành công ${n} thành phần điểm của ${g.student_name||g.sbd}.`);busy=false;await load();}catch(e){busy=false;button.disabled=false;notice('Lỗi lưu bài: '+e.message);toast('Lưu điểm thất bại: '+e.message,false);setRowError(entry,e.message);}};
-  pending.push(entry);
+  button.onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');busy=true;button.disabled=true;const n=await save();notice(`Đã lưu ${n} thành phần điểm của ${g.student_name||g.sbd}. Chưa cập nhật điểm chính thức.`);toast(`Lưu thành công ${n} thành phần điểm của ${g.student_name||g.sbd}.`);busy=false;await load();}catch(e){busy=false;button.disabled=false;notice('Lỗi lưu bài: '+e.message);toast('Lưu điểm thất bại: '+e.message,false);}};
+  pending.push({g,save,dirty:isDirty,tr});
  }
- $('save-all').disabled=$('opened').value!=='true'||busy;window.__appealPending=pending;summary();
+ $('save-all').disabled=$('opened').value!=='true'||busy;window.__appealPending=pending;
 }
-$('mode').onchange=()=>{if(!confirmDiscard()){$('mode').value=$('mode').dataset.previous||'registered';return;}$('mode').dataset.previous=$('mode').value;notice('Đã thay đổi lựa chọn phạm vi. Nhấn “Lưu cấu hình” để áp dụng vào danh sách và quyền lưu điểm.');};$('subject').addEventListener('focus',()=>{$('subject').dataset.previous=$('subject').value;});$('subject').onchange=()=>{if(!confirmDiscard()){$('subject').value=$('subject').dataset.previous||'';return;}updateFilters();};$('run').addEventListener('focus',()=>{$('run').dataset.previous=$('run').value;});$('run').onchange=()=>{if(!confirmDiscard()){$('run').value=$('run').dataset.previous||'';return;}const selected=lockedRuns.find(r=>r.run_id===$('run').value);if(selected&&$('subject').value!==selected.subject_code){$('subject').value=selected.subject_code;updateFilters();$('run').value=selected.run_id;}refreshPrefixes();render();};$('prefix').addEventListener('focus',()=>{$('prefix').dataset.previous=$('prefix').value;});$('prefix').onchange=()=>{if(!confirmDiscard()){$('prefix').value=$('prefix').dataset.previous||'';return;}render();};
-$('save-all').onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');if($('opened').value!=='true')throw Error('Chưa mở nhập điểm.');const entries=(window.__appealPending||[]).filter(x=>x.dirty());if(!entries.length){notice('Không có thay đổi cần lưu.');return;}busy=true;$('save-all').disabled=true;let ok=0,failed=0,parts=0;for(const entry of entries){try{parts+=await entry.save();ok++;entry.tr.classList.add('saved');entry.tr.classList.remove('failed');}catch(e){failed++;setRowError(entry,e.message||String(e));console.error('Lưu phúc khảo thất bại',entry.g.candidate_id,entry.g.subject_code,e);}}busy=false;notice(`Lưu hàng loạt: ${ok} bài thành công (${parts} thành phần), ${failed} bài lỗi. ${failed?'Các dòng lỗi được tô đỏ, hãy kiểm tra và lưu lại.':'Chưa cập nhật điểm chính thức.'}`);toast(`Lưu hàng loạt: ${ok} bài thành công, ${failed} bài lỗi.`,failed===0);if(!failed)await load();else {$('save-all').disabled=false;summary();}}catch(e){busy=false;$('save-all').disabled=false;notice(e.message);}};
-$('exam').addEventListener('focus',()=>{$('exam').dataset.previous=$('exam').value;});$('exam').onchange=()=>{if(!confirmDiscard()){$('exam').value=$('exam').dataset.previous||$('exam').value;return;}load().catch(e=>notice(e.message));};$('reload').onclick=()=>{if(confirmDiscard())load().catch(e=>notice(e.message));};window.addEventListener('beforeunload',e=>{if(dirtyRows().length){e.preventDefault();e.returnValue='';}});$('save-settings').onclick=async()=>{try{if(!afterDeadline()&&$('opened').value==='true')throw Error('Chưa hết hạn nhận đơn.');await rpc('exam_admin_appeal_entry_configure',{p_exam_id:$('exam').value,p_mode:$('mode').value,p_open:$('opened').value==='true'});notice('Đã lưu cấu hình.');await load();}catch(e){notice(e.message);}};
+$('mode').onchange=()=>{notice('Đã thay đổi lựa chọn phạm vi. Nhấn “Lưu cấu hình” để áp dụng vào danh sách và quyền lưu điểm.');};$('subject').onchange=updateFilters;$('run').onchange=()=>{const selected=lockedRuns.find(r=>r.run_id===$('run').value);if(selected&&$('subject').value!==selected.subject_code){$('subject').value=selected.subject_code;updateFilters();$('run').value=selected.run_id;}refreshPrefixes();render();};$('prefix').onchange=render;
+$('save-all').onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');if($('opened').value!=='true')throw Error('Chưa mở nhập điểm.');const entries=(window.__appealPending||[]).filter(x=>x.dirty());if(!entries.length){notice('Không có thay đổi cần lưu.');return;}busy=true;$('save-all').disabled=true;let ok=0,failed=0,parts=0;for(const entry of entries){try{parts+=await entry.save();ok++;entry.tr.classList.add('saved');entry.tr.classList.remove('failed');}catch(e){failed++;entry.tr.classList.add('failed');console.error('Lưu phúc khảo thất bại',entry.g.candidate_id,entry.g.subject_code,e);}}busy=false;notice(`Lưu hàng loạt: ${ok} bài thành công (${parts} thành phần), ${failed} bài lỗi. ${failed?'Các dòng lỗi được tô đỏ, hãy kiểm tra và lưu lại.':'Chưa cập nhật điểm chính thức.'}`);toast(`Lưu hàng loạt: ${ok} bài thành công, ${failed} bài lỗi.`,failed===0);if(!failed)await load();else $('save-all').disabled=false;}catch(e){busy=false;$('save-all').disabled=false;notice(e.message);}};
+$('exam').onchange=()=>load().catch(e=>notice(e.message));$('reload').onclick=()=>load().catch(e=>notice(e.message));$('save-settings').onclick=async()=>{try{if(!afterDeadline()&&$('opened').value==='true')throw Error('Chưa hết hạn nhận đơn.');await rpc('exam_admin_appeal_entry_configure',{p_exam_id:$('exam').value,p_mode:$('mode').value,p_open:$('opened').value==='true'});notice('Đã lưu cấu hình.');await load();}catch(e){notice(e.message);}};
 (async()=>{try{const {url,key}=validatePublicConfig(publicConfig);client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{user},error}=await client.auth.getUser();if(error||!user)throw Error('Vui lòng đăng nhập quản trị.');exams=await rpc('exam_admin_appeal_exams_period');$('exam').replaceChildren();for(const e of exams)$('exam').add(new Option(`${e.exam_name} (${e.school_year||''})`,e.exam_id));const requested=new URLSearchParams(location.search).get('exam');if(exams.some(e=>e.exam_id===requested))$('exam').value=requested;$('app').classList.remove('hidden');await load();notice('Đã tải danh sách. Điểm phúc khảo được lưu riêng dưới dạng nháp.');}catch(e){notice(e.message||String(e));}})();
