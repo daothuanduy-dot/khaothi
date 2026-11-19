@@ -16,7 +16,7 @@ function componentPair(r,type){
  return p?{old:p.old,new:p.new}: {old:null,new:null};
 }
 function reportHeader(){return ['TT','SBD','Họ tên','Lớp','Môn','TN cũ','TL cũ','Tổng cũ','TN mới','TL mới','Tổng mới','Người chấm (nhập)','Lý do thay đổi']}
-function reportRows(){return report.filter(r=>($('report-mode').value==='all'||Number(r.old_total)!==Number(r.new_total))&&(!selectedSubjects.size||selectedSubjects.has(r.subject_code))&&(!selectedClasses.size||selectedClasses.has(r.class_code))).sort((a,b)=>(sortAsc?1:-1)*(cmp(a.sbd,b.sbd)||cmp(a.subject_code,b.subject_code)||a.audit_id-b.audit_id))}
+function reportRows(){return report.filter(r=>($('report-mode').value==='all'||Number(r.old_total)!==Number(r.new_total))&&(!selectedSubjects.size||selectedSubjects.has(r.subject_code))&&(!selectedClasses.size||selectedClasses.has(r.class_code))).sort((a,b)=>cmp(labelSubject(a.subject_code),labelSubject(b.subject_code))||cmp(a.subject_code,b.subject_code)||cmp(a.sbd,b.sbd)||Number(a.audit_id||0)-Number(b.audit_id||0))}
 function originalEssayName(r){const x=originalEntrants.get(r.candidate_id+'|'+r.subject_code);if(!x)return 'Chưa xác định người nhập điểm gốc';if(x.lookup_status==='ambiguous')return 'Cần đối chiếu nhiều lần đánh phách';if(x.lookup_status!=='ok')return 'Chưa xác định người nhập điểm gốc';return x.display_name}
 function reportValues(r,i){
  const changed=changeParts(r.parts);
