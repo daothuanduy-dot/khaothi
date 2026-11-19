@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);
 const names={TOAN:'Toán',VAN:'Ngữ văn',ANH:'Tiếng Anh',N1:'Ngoại ngữ 1',LY:'Vật lý',HOA:'Hóa học',SINH:'Sinh học',TIN:'Tin học',SU:'Lịch sử',DIA:'Địa lý',GDKTPL:'Giáo dục kinh tế và pháp luật',KTPL:'Giáo dục kinh tế và pháp luật'};
 const labelSubject=code=>names[code]||code;
 let client,rows=[],exams=[],grouped=[],lockedRuns=[],runRecords=[],busy=false;
+let currentScores=new Map();
 const natural=(a,b)=>String(a||'').localeCompare(String(b||''),'vi',{numeric:true,sensitivity:'base'});
 const notice=s=>$('notice').textContent=s;const toast=(message,ok=true)=>{const el=$('save-toast');if(!el)return;el.textContent=message;el.className='save-toast '+(ok?'success':'error');el.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.hidden=true,6500)};
 const exam=()=>exams.find(x=>x.exam_id===$('exam').value);
@@ -53,7 +54,20 @@ function refreshPrefixes(){
  fillOptions('prefix',prefixes,'Tất cả đầu phách');
 }
 function fillOptions(id,items,first){const el=$(id),old=el.value;el.replaceChildren(new Option(first,''));for(const [v,label] of items)el.add(new Option(label,v));if(items.some(([v])=>v===old))el.value=old;}
-async function load(){if(busy)return;const id=$('exam').value;if(!id)return;const config=await rpc('exam_admin_appeal_entry_settings',{p_exam_id:id});$('mode').value=config.entry_mode;$('opened').value=String(config.is_open);const ready=afterDeadline();$('save-settings').hidden=!ready;$('mode').disabled=!ready;$('opened').disabled=!ready;$('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';rows=await rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']);grouped=mergeRows(rows||[]);lockedRuns=await rpc('exam_admin_appeal_locked_runs',{p_exam_id:id})||[];runRecords=await rpcAll('exam_admin_appeal_run_records_eligible',{p_exam_id:id},['run_id','candidate_id','subject_code']);attachRuns();const configured=await rpc('exam_admin_appeal_subjects',{p_exam_id:id});const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);fillOptions('subject',subjects,'Tất cả môn');updateFilters();}
+async function load(){if(busy)return;const id=$('exam').value;if(!id)return;const config=await rpc('exam_admin_appeal_entry_settings',{p_exam_id:id});$('mode').value=config.entry_mode;$('opened').value=String(config.is_open);const ready=afterDeadline();$('save-settings').hidden=!ready;$('mode').disabled=!ready;$('opened').disabled=!ready;$('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';rows=await rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']);grouped=mergeRows(rows||[]);lockedRuns=await rpc('exam_admin_appeal_locked_runs',{p_exam_id:id})||[];runRecords=await rpcAll('exam_admin_appeal_run_records_eligible',{p_exam_id:id},['run_id','candidate_id','subject_code']);attachRuns();
+ // Đọc điểm chính thức từ nguồn có hiệu lực sau đính chính, không dùng điểm bản nháp đã duyệt.
+ currentScores=new Map();
+ for(const subject of [...new Set(grouped.map(g=>g.subject_code))]){
+   const current=await rpc('exam_regrade_get_current',{p_exam_id:id,p_subject_code:subject});
+   if(!(current||[]).length)continue;
+   const cfg=await rpc('exam_regrade_get_config',{p_exam_id:id,p_subject_code:subject});
+   for(const item of current){
+     const parts={};
+     for(const c of cfg.components||[])parts[c.type]=item.scores?.[c.no-1];
+     currentScores.set(item.candidate_id+'|'+subject,{...item,parts});
+   }
+ }
+ const configured=await rpc('exam_admin_appeal_subjects',{p_exam_id:id});const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);fillOptions('subject',subjects,'Tất cả môn');updateFilters();}
 function updateFilters(){
  const subj=$('subject').value;
  const runs=new Map();
@@ -94,22 +108,35 @@ function render(){
  const tbody=$('rows');tbody.replaceChildren();const pending=[];
  for(const [i,g] of data.entries()){
   const tr=document.createElement('tr'),mcq=g.parts.mcq,essay=g.parts.essay;
+  const official=currentScores.get(g.candidate_id+'|'+g.subject_code);
+  // Thành phần được lưu theo thứ tự cấu hình phúc khảo (không suy luận vị trí TN/TL).
+  const currentParts=official?.parts||{};
+  const officialScore=type=>currentParts[type]??null;
+
   const note=document.createElement('input');note.className='shared-note';note.placeholder='Ghi chú chung cho bài thi';
   note.value=essay?.detail_note||mcq?.detail_note||'';
   const initialNote=note.value;
   const c1=componentControls(mcq,note),c2=componentControls(essay,note);
   const oldTotal=(mcq?.old_score==null?0:Number(mcq.old_score))+(essay?.old_score==null?0:Number(essay.old_score));
   const total=td('—');
+  const officialTotal=td(official?.total_score==null?'—':num(official.total_score));
   const updateTotal=()=>{
     const score=(r,c)=>{if(!r)return 0;if(c.scoreInput?.value.trim()){try{return valueFrom(c.scoreInput)}catch{return NaN}}return Number(r.new_score??r.old_score??0)};
-    const sum=score(mcq,c1)+score(essay,c2);total.textContent=Number.isFinite(sum)?num(sum):'Điểm chưa hợp lệ';
+    const sum=score(mcq,c1)+score(essay,c2);total.textContent=official?.total_score!=null && [mcq,essay].filter(Boolean).every(r=>r.draft_status==='approved')?num(official.total_score):(Number.isFinite(sum)?num(sum):'Điểm chưa hợp lệ');
     tr.classList.toggle('changed',isDirty());
   };
-  const isDirty=()=>c1.dirty()||c2.dirty()||note.value!==initialNote;
+  const isDirty=()=>((!c1.locked)&&c1.dirty())||((!c2.locked)&&c2.dirty())||((!c1.locked||!c2.locked)&&note.value!==initialNote);
+  // Approved inputs show the official score, not the stale approved draft.
+  for(const [r,control,type] of [[mcq,c1,'mcq'],[essay,c2,'essay']]){
+    if(r?.draft_status==='approved' && control.scoreInput && officialScore(type)!=null){
+      control.scoreInput.value=String(officialScore(type));
+      control.scoreInput.title='Điểm chính thức hiện hành; điểm duyệt lần đầu: '+num(r.new_score);
+    }
+  }
   const newMcq=td('');newMcq.append(mcq?c1.scoreInput:'—');
   const newEssay=td('');newEssay.append(essay?c2.scoreInput:'—');
   const noteCell=td('');noteCell.className='note';noteCell.append(note);
-  tr.append(td(i+1),td(labelSubject(g.subject_code)),td([g.sbd,g.student_name].filter(Boolean).join(' — ')),td(selectedRunRecord(g,run)?.phach_code||'—'),td(mcq?num(mcq.old_score):'—'),newMcq,td(essay?num(essay.old_score):'—'),newEssay,td(num(oldTotal)),total,noteCell,td([mcq?.draft_status,essay?.draft_status].filter(Boolean).join(' / ')||'Chưa lưu'));
+  tr.append(td(i+1),td(labelSubject(g.subject_code)),td([g.sbd,g.student_name].filter(Boolean).join(' — ')),td(selectedRunRecord(g,run)?.phach_code||'—'),td(mcq?num(mcq.old_score):'—'),newMcq,td(essay?num(essay.old_score):'—'),newEssay,td(num(oldTotal)),total,officialTotal,noteCell,td([mcq?.draft_status,essay?.draft_status].filter(Boolean).join(' / ')||'Chưa lưu'));
   const button=document.createElement('button');button.textContent='Lưu bài';button.disabled=$('opened').value!=='true'||(!mcq&&!essay)||(mcq&&c1.locked)||(essay&&c2.locked);
   const action=td('');action.append(button);
   // Corrections are separate transactions; approved drafts remain immutable.
