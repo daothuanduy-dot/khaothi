@@ -31,10 +31,51 @@ function showReport(){const body=$('report');body.replaceChildren();const rows=r
 function redraw(){showDrafts();showReport()}
 function multiOptions(id,items,selected,caption){const box=$(id);box.replaceChildren();const all=document.createElement('label');const ac=document.createElement('input');ac.type='checkbox';ac.checked=!selected.size;ac.onchange=()=>{selected.clear();multiOptions(id,items,selected,caption);redraw()};all.append(ac,document.createTextNode(' Tất cả '+caption));box.append(all);for(const [code,name] of items){const l=document.createElement('label');const c=document.createElement('input');c.type='checkbox';c.checked=selected.has(code);c.onchange=()=>{if(c.checked)selected.add(code);else selected.delete(code);multiOptions(id,items,selected,caption);redraw()};l.append(c,document.createTextNode(' '+name));box.append(l)}}
 function toast(message,ok=true){const e=$('toast');e.textContent=message;e.className=ok?'toast success':'toast error';e.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>e.hidden=true,6500)}
-async function load(){if(loading)return;loading=true;const rid=++requestId;try{const examId=$('exam').value;if(!examId)return;note('Đang tải dữ liệu...');$('reload').disabled=true;
-const getCandidates=async()=>{const m=new Map();for(let i=0;i<100000;i+=500){const {data,error}=await client.from('exam_candidates').select('id,class_code,student_name').eq('exam_id',examId).order('id').range(i,i+499);if(error)throw error;for(const c of data)m.set(c.id,c);if(data.length<500)return m}throw Error('Danh sách học sinh vượt giới hạn')};
-const [raw,approved,people]=await Promise.all([allRpc('exam_admin_appeal_entry_rows_v2',{p_exam_id:examId,p_subject:null},['candidate_id','subject_code','component_type']),allRpc('exam_admin_appeal_approval_report',{p_exam_id:examId},['sbd','subject_code','audit_id']),getCandidates()]);if(rid!==requestId)return;drafts=raw;report=approved;candidates=people;originalEntrants=new Map();let nameWarning='';try{const entrants=await rpc('exam_admin_appeal_original_essay_entrants',{p_exam_id:examId});if(rid!==requestId)return;for(const x of entrants||[])originalEntrants.set(x.candidate_id+'|'+x.subject_code,x);const ambiguous=(entrants||[]).filter(x=>x.lookup_status==='ambiguous').length;if(ambiguous)nameWarning=` Có ${ambiguous} trường hợp nhiều lần đánh phách cần đối chiếu.`}catch(e){nameWarning=' Không tải được người nhập điểm gốc: '+e.message;}
-const subjects=[...new Set([...drafts.map(x=>x.subject_code),...report.map(x=>x.subject_code)])].sort((a,b)=>cmp(labelSubject(a),labelSubject(b))).map(x=>[x,labelSubject(x)]);const classes=[...new Set([...candidates.values()].map(x=>x.class_code).filter(Boolean))].sort(cmp).map(x=>[x,x]);for(const x of [...selectedSubjects])if(!subjects.some(([v])=>v===x))selectedSubjects.delete(x);for(const x of [...selectedClasses])if(!classes.some(([v])=>v===x))selectedClasses.delete(x);multiOptions('subjects-check',subjects,selectedSubjects,'môn');multiOptions('classes-check',classes,selectedClasses,'lớp');redraw();note(`Đã tải ${groups().length} học sinh-môn chờ duyệt và ${report.length} lần duyệt (bao gồm cả không đổi tổng điểm).${nameWarning}`)}catch(e){note('Lỗi tải dữ liệu: '+e.message);toast('Tải dữ liệu thất bại: '+e.message,false)}finally{loading=false;$('reload').disabled=false}}
+const candidateCache=new Map();
+async function getRelevantCandidates(examId,ids){
+ const cache=candidateCache.get(examId)||new Map();
+ const missing=[...new Set(ids.filter(Boolean))].filter(id=>!cache.has(id));
+ // Chi tai hoc sinh xuat hien trong danh sach, thay vi toan bo thi sinh cua ky thi.
+ const chunks=[];for(let i=0;i<missing.length;i+=150)chunks.push(missing.slice(i,i+150));
+ const results=await Promise.all(chunks.map(async ids=>{
+   const {data,error}=await client.from('exam_candidates').select('id,class_code,student_name').eq('exam_id',examId).in('id',ids);
+   if(error)throw error;return data||[];
+ }));
+ for(const rows of results)for(const c of rows)cache.set(c.id,c);
+ candidateCache.set(examId,cache);return cache;
+}
+async function load(){
+ const rid=++requestId;const examId=$('exam').value;if(!examId)return;
+ loading=true;note('Đang tải dữ liệu...');$('reload').disabled=true;
+ try{
+  const [raw,approved]=await Promise.all([
+   allRpc('exam_admin_appeal_entry_rows_v2',{p_exam_id:examId,p_subject:null},['candidate_id','subject_code','component_type']),
+   allRpc('exam_admin_appeal_approval_report',{p_exam_id:examId},['sbd','subject_code','audit_id'])
+  ]);
+  if(rid!==requestId)return;
+  const ids=[...raw.map(x=>x.candidate_id),...approved.map(x=>x.candidate_id)];
+  const people=await getRelevantCandidates(examId,ids);
+  if(rid!==requestId)return;
+  drafts=raw;report=approved;candidates=people;
+  // Hien thi bang ngay; du lieu nguoi nhap diem goc tai sau, khong chan bang.
+  originalEntrants=new Map();
+  const subjects=[...new Set([...drafts.map(x=>x.subject_code),...report.map(x=>x.subject_code)])].sort((a,b)=>cmp(labelSubject(a),labelSubject(b))).map(x=>[x,labelSubject(x)]);
+  const classes=[...new Set(ids.map(id=>people.get(id)?.class_code).filter(Boolean))].sort(cmp).map(x=>[x,x]);
+  for(const x of [...selectedSubjects])if(!subjects.some(([v])=>v===x))selectedSubjects.delete(x);
+  for(const x of [...selectedClasses])if(!classes.some(([v])=>v===x))selectedClasses.delete(x);
+  multiOptions('subjects-check',subjects,selectedSubjects,'môn');multiOptions('classes-check',classes,selectedClasses,'lớp');
+  redraw();note(`Đã tải ${groups().length} học sinh-môn chờ duyệt và ${report.length} lần duyệt.`);
+  // Tai ten nguoi nhap diem goc sau khi bang da san sang.
+  rpc('exam_admin_appeal_original_essay_entrants',{p_exam_id:examId}).then(entrants=>{
+   if(rid!==requestId)return;
+   for(const x of entrants||[])originalEntrants.set(x.candidate_id+'|'+x.subject_code,x);
+   showReport();
+   const ambiguous=(entrants||[]).filter(x=>x.lookup_status==='ambiguous').length;
+   if(ambiguous)note(`Đã tải ${groups().length} học sinh-môn chờ duyệt và ${report.length} lần duyệt. Có ${ambiguous} trường hợp cần đối chiếu người nhập điểm gốc.`);
+  }).catch(e=>{if(rid===requestId)note(`Đã tải danh sách; chưa lấy được thông tin người nhập điểm gốc: ${e.message}`)});
+ }catch(e){if(rid===requestId){note('Lỗi tải dữ liệu: '+e.message);toast('Tải dữ liệu thất bại: '+e.message,false)}}
+ finally{if(rid===requestId){loading=false;$('reload').disabled=false}}
+}
 $('report-mode').onchange=showReport;
 $('sort').onclick=()=>{sortAsc=!sortAsc;$('sort').textContent=sortAsc?'SBD ↑ tăng dần':'SBD ↓ giảm dần';redraw()};$('reload').onclick=load;$('exam').onchange=load;
 $('checkall').onchange=e=>{for(const c of $('drafts').querySelectorAll('input[type=checkbox]'))c.checked=e.target.checked};
