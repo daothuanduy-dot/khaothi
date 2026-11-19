@@ -107,8 +107,11 @@ async function openCorrection(g,approvedParts){
   config=cfg;
   if(!current)throw Error('Không tìm thấy điểm chính thức hiện hành.');
  }finally{busy=false;}
- const eligible=(config?.components||[]).filter(c=>approvedParts.some(r=>r.component_type===c.type));
- if(!eligible.length)throw Error('Không có thành phần đã duyệt để đính chính.');
+ // The approval applies to the student-subject result, not only to draft components.
+ // A previously unchanged component may also need correction after approval.
+ if(!approvedParts.length)throw Error('Chưa có kết quả phúc khảo được duyệt.');
+ const eligible=(config?.components||[]).filter(c=>['mcq','essay'].includes(c.type) && Number.isInteger(Number(c.no)) && Number(c.no)>=1 && Number(c.no)<=current.scores.length);
+ if(!eligible.length)throw Error('Không có thành phần điểm hợp lệ để đính chính.');
  const dialog=$('correction-dialog'),form=$('correction-form'),parts=$('correction-component');
  parts.replaceChildren();
  for(const c of eligible)parts.add(new Option(`${c.type==='mcq'?'Trắc nghiệm':'Tự luận'} (tối đa ${num(c.maximum)})`,c.type));
