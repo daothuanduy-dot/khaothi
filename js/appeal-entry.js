@@ -93,6 +93,71 @@ function componentControls(r, sharedNote){
     return {p_exam_id:$('exam').value,p_candidate_id:r.candidate_id,p_subject_code:r.subject_code,p_component_type:r.component_type,p_new_score:Number(newScore),p_reason:changed?'other':'unchanged',p_detail_note:note};
   }};
 }
+// Cửa sổ đính chính độc lập: chỉ thay đổi thành phần được chọn.
+async function openCorrection(g,approvedParts){
+ if(busy)return;
+ busy=true;
+ let current,config;
+ try{
+  const [items,cfg]=await Promise.all([
+   rpc('exam_regrade_get_current',{p_exam_id:$('exam').value,p_subject_code:g.subject_code}),
+   rpc('exam_regrade_get_config',{p_exam_id:$('exam').value,p_subject_code:g.subject_code})
+  ]);
+  current=(items||[]).find(x=>x.candidate_id===g.candidate_id);
+  config=cfg;
+  if(!current)throw Error('Không tìm thấy điểm chính thức hiện hành.');
+ }finally{busy=false;}
+ const eligible=(config?.components||[]).filter(c=>approvedParts.some(r=>r.component_type===c.type));
+ if(!eligible.length)throw Error('Không có thành phần đã duyệt để đính chính.');
+ const dialog=$('correction-dialog'),form=$('correction-form'),parts=$('correction-component');
+ parts.replaceChildren();
+ for(const c of eligible)parts.add(new Option(`${c.type==='mcq'?'Trắc nghiệm':'Tự luận'} (tối đa ${num(c.maximum)})`,c.type));
+ const scoreInput=$('correction-score'),old=$('correction-old'),total=$('correction-total'),reason=$('correction-reason'),error=$('correction-error'),saveButton=$('correction-save');
+ $('correction-student').textContent=`${g.sbd||''} — ${g.student_name||''} · ${labelSubject(g.subject_code)}`;
+ reason.value='';error.textContent='';saveButton.disabled=false;
+ const getSelected=()=>eligible.find(c=>c.type===parts.value);
+ const update=()=>{
+  const c=getSelected();if(!c)return;
+  const oldScore=Number(current.scores[c.no-1]);
+  old.textContent=num(oldScore);
+  scoreInput.value=String(oldScore);
+  scoreInput.max=String(c.maximum);
+  scoreInput.step='any';
+  total.textContent=num(current.total_score);
+  $('correction-range').textContent=`Điểm mới (0–${num(c.maximum)}, tối đa ${c.decimals??c.decimal_places??3} chữ số thập phân)`;
+ };
+ parts.onchange=update;update();
+ const close=()=>{dialog.close();form.onsubmit=null;parts.onchange=null;};
+ $('correction-cancel').onclick=close;
+ dialog.oncancel=e=>{e.preventDefault();close();};
+ form.onsubmit=async e=>{
+  e.preventDefault();if(busy)return;
+  error.textContent='';
+  try{
+   const c=getSelected();if(!c)throw Error('Chọn thành phần điểm cần đính chính.');
+   const raw=scoreInput.value.trim().replace(',','.');
+   if(!/^\d+(?:\.\d+)?$/.test(raw))throw Error('Điểm mới phải là số hợp lệ.');
+   const next=Number(raw),previous=Number(current.scores[c.no-1]);
+   if(!Number.isFinite(next)||next<0||next>Number(c.maximum))throw Error('Điểm vượt ngoài thang điểm thành phần.');
+   const decimals=c.decimals??c.decimal_places??3;
+   if(raw.split('.')[1]?.length>Number(decimals))throw Error(`Điểm chỉ được tối đa ${decimals} chữ số thập phân.`);
+   if(next===previous)throw Error('Điểm mới phải khác điểm hiện hành.');
+   const explanation=reason.value.trim();
+   if(explanation.length<5)throw Error('Nguyên nhân đính chính phải có ít nhất 5 ký tự.');
+   if(!window.confirm(`Xác nhận đính chính ${g.sbd} / ${g.subject_code}\n${c.type==='mcq'?'Trắc nghiệm':'Tự luận'}: ${num(previous)} → ${num(next)}\nTổng mới dự kiến: ${num(Number(current.total_score)-previous+next)}\nNguyên nhân: ${explanation}\n\nĐiểm chính thức sẽ được cập nhật ngay.`))return;
+   busy=true;saveButton.disabled=true;
+   const result=await rpc('exam_admin_appeal_correct_approved',{
+    p_exam_id:$('exam').value,p_candidate_id:g.candidate_id,p_subject_code:g.subject_code,
+    p_component_type:c.type,p_new_score:next,p_reason:explanation,p_expected_revision:current.revision
+   });
+   close();busy=false;
+   toast(`Đã lưu đính chính. Tổng chính thức: ${num(result.new_total)}. Nhật ký #${result.audit_id}`);
+   notice(`Đã đính chính ${g.sbd} / ${g.subject_code}; nhật ký #${result.audit_id}.`);
+   await load();
+  }catch(err){busy=false;saveButton.disabled=false;error.textContent=err.message||String(err);}
+ };
+ dialog.showModal();
+}
 function render(){
  const subj=$('subject').value,run=$('run').value,head=$('prefix').value;
  const data=grouped.filter(g=>{
@@ -145,41 +210,7 @@ function render(){
     const correction=document.createElement('button');
     correction.type='button';correction.textContent='Đính chính';
     correction.style.marginLeft='6px';correction.style.background='#8a4b0f';
-    correction.onclick=async()=>{
-      if(busy)return;
-      try{
-        busy=true;correction.disabled=true;
-        const currentRows=await rpc('exam_regrade_get_current',{p_exam_id:$('exam').value,p_subject_code:g.subject_code});
-        const current=(currentRows||[]).find(x=>x.candidate_id===g.candidate_id);
-        if(!current)throw Error('Không tìm thấy kết quả phúc khảo hiện hành.');
-        const config=await rpc('exam_regrade_get_config',{p_exam_id:$('exam').value,p_subject_code:g.subject_code});
-        const components=config?.components||[];
-        const eligible=components.filter(c=>approvedParts.some(r=>r.component_type===c.type));
-        if(!eligible.length)throw Error('Không có thành phần đã duyệt để đính chính.');
-        const selected=eligible.length===1?eligible[0]:eligible.find(c=>c.type===window.prompt('Chọn thành phần đính chính: mcq (trắc nghiệm) hoặc essay (tự luận)','essay')?.trim().toLowerCase());
-        if(!selected){busy=false;correction.disabled=false;return;}
-        const oldScore=Number(current.scores[selected.no-1]);
-        const raw=window.prompt(`Điểm ${selected.name} hiện hành: ${num(oldScore)}. Nhập điểm đúng (0–${selected.maximum}):`,String(oldScore));
-        if(raw===null){busy=false;correction.disabled=false;return;}
-        const newScore=raw.trim().replace(',','.');
-        if(!/^\d+(?:\.\d+)?$/.test(newScore))throw Error('Điểm nhập không hợp lệ.');
-        const reason=window.prompt('Nhập lý do đính chính (ít nhất 5 ký tự):','');
-        if(reason===null){busy=false;correction.disabled=false;return;}
-        if(reason.trim().length<5)throw Error('Lý do phải có ít nhất 5 ký tự.');
-        if(!window.confirm(`Xác nhận đính chính ${g.sbd} / ${g.subject_code} / ${selected.name}: ${num(oldScore)} → ${newScore}?\nThao tác cập nhật điểm chính thức ngay và ghi nhật ký.`)){
-          busy=false;correction.disabled=false;return;
-        }
-        const result=await rpc('exam_admin_appeal_correct_approved',{
-          p_exam_id:$('exam').value,p_candidate_id:g.candidate_id,
-          p_subject_code:g.subject_code,p_component_type:selected.type,
-          p_new_score:Number(newScore),p_reason:reason.trim(),
-          p_expected_revision:current.revision
-        });
-        busy=false;toast(`Đính chính thành công. Tổng mới: ${num(result.new_total)}. Mã nhật ký: ${result.audit_id}`);
-        notice(`Đã đính chính ${g.sbd}, môn ${g.subject_code}; mã nhật ký ${result.audit_id}.`);
-        await load();
-      }catch(e){busy=false;correction.disabled=false;notice('Không thể đính chính: '+e.message);toast('Đính chính thất bại: '+e.message,false);}
-    };
+    correction.onclick=()=>openCorrection(g,approvedParts).catch(e=>{notice('Không thể mở đính chính: '+e.message);toast(e.message,false);});
     action.append(correction);
   }
   tr.append(action);tbody.append(tr);
