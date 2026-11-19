@@ -54,20 +54,64 @@ function refreshPrefixes(){
  fillOptions('prefix',prefixes,'Tất cả đầu phách');
 }
 function fillOptions(id,items,first){const el=$(id),old=el.value;el.replaceChildren(new Option(first,''));for(const [v,label] of items)el.add(new Option(label,v));if(items.some(([v])=>v===old))el.value=old;}
-async function load(){if(busy)return;const id=$('exam').value;if(!id)return;const config=await rpc('exam_admin_appeal_entry_settings',{p_exam_id:id});$('mode').value=config.entry_mode;$('opened').value=String(config.is_open);const ready=afterDeadline();$('save-settings').hidden=!ready;$('mode').disabled=!ready;$('opened').disabled=!ready;$('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';rows=await rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']);grouped=mergeRows(rows||[]);lockedRuns=await rpc('exam_admin_appeal_locked_runs',{p_exam_id:id})||[];runRecords=await rpcAll('exam_admin_appeal_run_records_eligible',{p_exam_id:id},['run_id','candidate_id','subject_code']);attachRuns();
- // Đọc điểm chính thức từ nguồn có hiệu lực sau đính chính, không dùng điểm bản nháp đã duyệt.
+// Cache only identical in-flight requests within a single load; never cache across edits.
+async function load(){
+ if(busy)return;
+ const id=$('exam').value;
+ if(!id)return;
+ const started=performance.now();
+ notice('Đang tải danh sách phúc khảo...');
+ // Independent data sources run concurrently instead of serial round trips.
+ const [config,entryRows,runs,records,configured]=await Promise.all([
+  rpc('exam_admin_appeal_entry_settings',{p_exam_id:id}),
+  rpcAll('exam_admin_appeal_entry_rows_v2',{p_exam_id:id,p_subject:null},['candidate_id','subject_code','component_type']),
+  rpc('exam_admin_appeal_locked_runs',{p_exam_id:id}),
+  rpcAll('exam_admin_appeal_run_records_eligible',{p_exam_id:id},['run_id','candidate_id','subject_code']),
+  rpc('exam_admin_appeal_subjects',{p_exam_id:id})
+ ]);
+ if($('exam').value!==id)return;
+ $('mode').value=config.entry_mode;
+ $('opened').value=String(config.is_open);
+ const ready=afterDeadline();
+ $('save-settings').hidden=!ready;
+ $('mode').disabled=!ready;
+ $('opened').disabled=!ready;
+ $('deadline-hint').textContent=ready?'Đã hết hạn nhận đơn. Quản trị viên có thể mở nhập điểm.':'Chưa hết thời hạn nhận đơn: không được mở nhập điểm.';
+ rows=entryRows;
+ grouped=mergeRows(rows||[]);
+ lockedRuns=runs||[];
+ runRecords=records||[];
+ attachRuns();
+ const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);
+ fillOptions('subject',subjects,'Tất cả môn');
+ // Show usable rows before loading the supplementary official-score overlays.
  currentScores=new Map();
- for(const subject of [...new Set(grouped.map(g=>g.subject_code))]){
+ updateFilters();
+ notice(`Đã tải ${grouped.length} bài; đang đối chiếu điểm chính thức...`);
+ const codes=[...new Set(grouped.filter(g=>g.parts.mcq?.draft_status==='approved'||g.parts.essay?.draft_status==='approved').map(g=>g.subject_code))];
+ // Only approved rows need official overlays. Fetch by subject, with bounded concurrency.
+ const result=new Map();
+ let cursor=0;
+ const worker=async()=>{
+  while(cursor<codes.length){
+   const subject=codes[cursor++];
    const current=await rpc('exam_regrade_get_current',{p_exam_id:id,p_subject_code:subject});
    if(!(current||[]).length)continue;
    const cfg=await rpc('exam_regrade_get_config',{p_exam_id:id,p_subject_code:subject});
    for(const item of current){
-     const parts={};
-     for(const c of cfg.components||[])parts[c.type]=item.scores?.[c.no-1];
-     currentScores.set(item.candidate_id+'|'+subject,{...item,parts});
+    const parts={};
+    for(const c of cfg.components||[])parts[c.type]=item.scores?.[c.no-1];
+    result.set(item.candidate_id+'|'+subject,{...item,parts});
    }
- }
- const configured=await rpc('exam_admin_appeal_subjects',{p_exam_id:id});const subjects=[...new Set([...(configured||[]).map(x=>x.subject_code),...grouped.map(g=>g.subject_code)])].sort((a,b)=>natural(labelSubject(a),labelSubject(b))).map(c=>[c,labelSubject(c)]);fillOptions('subject',subjects,'Tất cả môn');updateFilters();}
+  }
+ };
+ await Promise.all(Array.from({length:Math.min(4,codes.length)},()=>worker()));
+ if($('exam').value!==id)return;
+ currentScores=result;
+ updateFilters();
+ notice(`Đã tải danh sách và đối chiếu điểm chính thức (${Math.round(performance.now()-started)} ms).`);
+}
+
 function updateFilters(){
  const subj=$('subject').value;
  const runs=new Map();
@@ -257,4 +301,4 @@ function render(){
 $('mode').onchange=()=>{notice('Đã thay đổi lựa chọn phạm vi. Nhấn “Lưu cấu hình” để áp dụng vào danh sách và quyền lưu điểm.');};$('subject').onchange=updateFilters;$('run').onchange=()=>{const selected=lockedRuns.find(r=>r.run_id===$('run').value);if(selected&&$('subject').value!==selected.subject_code){$('subject').value=selected.subject_code;updateFilters();$('run').value=selected.run_id;}refreshPrefixes();render();};$('prefix').onchange=render;
 $('save-all').onclick=async()=>{if(busy)return;try{if(!afterDeadline())throw Error('Chưa hết thời hạn nhận đơn.');if($('opened').value!=='true')throw Error('Chưa mở nhập điểm.');const entries=(window.__appealPending||[]).filter(x=>x.dirty());if(!entries.length){notice('Không có thay đổi cần lưu.');return;}busy=true;$('save-all').disabled=true;let ok=0,failed=0,parts=0;const errors=[];for(const entry of entries){try{parts+=await entry.save();ok++;entry.tr.classList.add('saved');entry.tr.classList.remove('failed');}catch(e){failed++;entry.tr.classList.add('failed');errors.push(`${entry.g.sbd||entry.g.student_name}: ${e.message||String(e)}`);entry.tr.title=e.message||String(e);console.error('Lưu phúc khảo thất bại',entry.g.candidate_id,entry.g.subject_code,e);}}busy=false;notice(`Lưu hàng loạt: ${ok} bài thành công (${parts} thành phần), ${failed} bài lỗi. ${failed?errors.slice(0,5).join(' | '):'Chưa cập nhật điểm chính thức.'}`);toast(`Lưu hàng loạt: ${ok} bài thành công, ${failed} bài lỗi.`,failed===0);if(!failed)await load();else $('save-all').disabled=false;}catch(e){busy=false;$('save-all').disabled=false;notice(e.message);}};
 $('exam').onchange=()=>load().catch(e=>notice(e.message));$('reload').onclick=()=>load().catch(e=>notice(e.message));$('save-settings').onclick=async()=>{try{if(!afterDeadline()&&$('opened').value==='true')throw Error('Chưa hết hạn nhận đơn.');await rpc('exam_admin_appeal_entry_configure',{p_exam_id:$('exam').value,p_mode:$('mode').value,p_open:$('opened').value==='true'});notice('Đã lưu cấu hình.');await load();}catch(e){notice(e.message);}};
-(async()=>{try{const {url,key}=validatePublicConfig(publicConfig);client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{user},error}=await client.auth.getUser();if(error||!user)throw Error('Vui lòng đăng nhập quản trị.');exams=await rpc('exam_admin_appeal_exams_period');$('exam').replaceChildren();for(const e of exams)$('exam').add(new Option(`${e.exam_name} (${e.school_year||''})`,e.exam_id));const requested=new URLSearchParams(location.search).get('exam');if(exams.some(e=>e.exam_id===requested))$('exam').value=requested;$('app').classList.remove('hidden');await load();notice('Đã tải danh sách. Điểm phúc khảo được lưu riêng dưới dạng nháp.');}catch(e){notice(e.message||String(e));}})();
+(async()=>{try{const {url,key}=validatePublicConfig(publicConfig);client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{user},error}=await client.auth.getUser();if(error||!user)throw Error('Vui lòng đăng nhập quản trị.');exams=await rpc('exam_admin_appeal_exams_period');$('exam').replaceChildren();for(const e of exams)$('exam').add(new Option(`${e.exam_name} (${e.school_year||''})`,e.exam_id));const requested=new URLSearchParams(location.search).get('exam');if(exams.some(e=>e.exam_id===requested))$('exam').value=requested;$('app').classList.remove('hidden');await load();}catch(e){notice(e.message||String(e));}})();
