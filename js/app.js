@@ -3579,7 +3579,7 @@ async function boot(){
         nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
       nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
     }
-    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.399');
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.400');
     wireClassResultsExport({state,$,esc,message});
   }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();

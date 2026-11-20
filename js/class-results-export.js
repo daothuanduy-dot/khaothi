@@ -136,10 +136,14 @@ export function wireClassResultsExport({state, $, esc, message}) {
     for(const c of payload.candidates){const codes=[...(payload.countedSubjects.get(c.class_code)||[])];
       const points=codes.map(code=>payload.scores[code]?.get(c.id)?.total_score);
       const valid=codes.length>0&&points.every(v=>v!=null&&Number.isFinite(Number(v)));
-      const total=valid?points.reduce((a,v)=>a+Number(v),0):null;
-      ranked.set(c.id,{...c,total,average:valid?total/codes.length:null,rankClass:null,rankBan:null});}
+      // Work in integer hundredths to avoid IEEE-754 artifacts in sum and ties.
+      // Official subject scores have two decimal places in this report.
+      const totalHundredths=valid?points.reduce((sum,v)=>sum+Math.round((Number(v)+Number.EPSILON)*100),0):null;
+      const total=valid?totalHundredths/100:null;
+      const average=valid?Math.round((totalHundredths/codes.length)+Number.EPSILON)/100:null;
+      ranked.set(c.id,{...c,total,average,totalHundredths,rankClass:null,rankBan:null});}
     const rank=(key,field)=>{const groups=new Map();for(const s of ranked.values()){const g=key(s);if(!g||s.total==null)continue;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(s);}
-      for(const arr of groups.values()){arr.sort((a,b)=>b.total-a.total||String(a.sbd||'').localeCompare(String(b.sbd||'')));let pos=0,prev=null;arr.forEach((s,i)=>{if(i===0||s.total!==prev)pos=i+1;s[field]=pos;prev=s.total;});}};
+      for(const arr of groups.values()){arr.sort((a,b)=>b.totalHundredths-a.totalHundredths||String(a.sbd||'').localeCompare(String(b.sbd||'')));let pos=0,prev=null;arr.forEach((s,i)=>{if(i===0||s.totalHundredths!==prev)pos=i+1;s[field]=pos;prev=s.totalHundredths;});}};
     rank(s=>s.class_code,'rankClass');rank(s=>banFor(s.class_code),'rankBan');payload.ranked=ranked;
   }
   function grouped(){const groups=new Map();for(const c of rows()){const key=c.class_code||'Chưa phân lớp';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}return groups;}
