@@ -19,10 +19,10 @@ import {wireViolations} from './violations.js?v=0.1.212';
 import {createStudentPicker} from './student-picker.js?v=0.1.212';
 import {wireScoreControl} from './score-control.js?v=0.1.212&absentscores=191&roomlabels=192&amendments=193';
 import {wireClassReport} from './class-report.js?v=0.1.304&classreport=304';
-import {wireTopStudents} from './top-students.js?v=0.1.398';
+import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=263';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
-import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=168';
+import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=399';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
 import {publicConfig,validatePublicConfig} from './public-config.js?v=0.1.148';
 const APP_VERSION='v0.1.382';
@@ -3579,7 +3579,7 @@ async function boot(){
         nav.querySelectorAll('[data-forms-section]').forEach(b=>{const on=b.dataset.formsSection===section;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));});}
       nav.addEventListener('click',e=>{const b=e.target.closest('[data-forms-section]');if(b)activate(b.dataset.formsSection);});activate('forms');
     }
-    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.382');
+    const {wireClassResultsExport}=await import('./class-results-export.js?v=0.1.399');
     wireClassResultsExport({state,$,esc,message});
   }catch(error){console.error('Không khởi tạo được xuất kết quả về lớp:',error);message($('forms-message'),error.message,'error');}
   renderSubjects();updateVersionDisplay();
