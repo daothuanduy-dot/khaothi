@@ -1,4 +1,4 @@
-// v0.1.404 - Include compulsory and registered electives in choice-mode reports.
+// v0.1.405 - Report all assigned-subject scores regardless of elective registration.
 // Official totals come from the dedicated penalty-adjusted RPC; never recompute deductions in JavaScript.
 export function wireScoreAuditExport({state,$,esc,message}) {
   const panel=$('template-export-panel');
@@ -46,8 +46,7 @@ export function wireScoreAuditExport({state,$,esc,message}) {
     for(const [cls,set] of byClass)byClass.set(cls,new Set([...set].sort((a,b)=>{
       const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b);
     })));
-    const participates=(c,code)=>exam.exam_mode!=='choice'||code==='TOAN'||code==='VAN'||registered.get(String(c.id))?.has(code);
-    const defs=new Map();for(const d of (componentPayload?.components||[])){const code=norm(d.subject_code);if(!defs.has(code))defs.set(code,[]);defs.get(code).push(d);}for(const v of defs.values())v.sort((a,b)=>Number(a.display_order||0)-Number(b.display_order||0));
+      const defs=new Map();for(const d of (componentPayload?.components||[])){const code=norm(d.subject_code);if(!defs.has(code))defs.set(code,[]);defs.get(code).push(d);}for(const v of defs.values())v.sort((a,b)=>Number(a.display_order||0)-Number(b.display_order||0));
     const componentMap=new Map();for(const s of (componentPayload?.scores||[]))componentMap.set(`${s.candidate_id}|${norm(s.subject_code)}|${s.component_id}`,s.score);
     const absent=new Set(absences.map(a=>`${a.candidate_id}|${norm(a.subject_code)}`));
     const subjects=[...new Set([...byClass.values()].flatMap(s=>[...s]))];if(!subjects.length)throw new Error('Chưa có môn được gán cho lớp. Không thể kiểm tra hoặc xuất báo cáo.');
@@ -61,11 +60,11 @@ export function wireScoreAuditExport({state,$,esc,message}) {
     cache=loaded;return loaded;
   }
   const score=(p,c,code)=>p.official.get(code)?.get(String(c.id));
-  const officialValue=(p,c,code)=>{if(p.exam.exam_mode==='choice' && code!=='TOAN' && code!=='VAN' && !p.registered.get(String(c.id))?.has(code))return '';const s=score(p,c,code);if(p.absent.has(`${c.id}|${code}`)||s?.is_absent)return 'Vắng';return s?.official_total_score==null?'':number(s.official_total_score);};
+  const officialValue=(p,c,code)=>{const s=score(p,c,code);if(p.absent.has(`${c.id}|${code}`)||s?.is_absent)return 'Vắng';return s?.official_total_score==null?'':number(s.official_total_score);};
   const classGroups=p=>{const map=new Map();for(const c of p.students){if(!map.has(c.class_code))map.set(c.class_code,[]);map.get(c.class_code).push(c);}return [...map.entries()].sort(([a],[b])=>String(a).localeCompare(String(b),'vi',{numeric:true})).map(([cls,rows])=>[cls,rows.sort((a,b)=>String(a.student_name).localeCompare(String(b.student_name),'vi')||String(a.sbd).localeCompare(String(b.sbd)))]);};
   function issues(p){const out=[];let checked=0,absent=0,complete=0,missing=0,unconfigured=0;
     for(const c of p.students){const subjects=p.byClass.get(c.class_code);if(!subjects?.size){out.push([c.sbd,c.student_name,c.class_code,'—','Lớp chưa được gán môn']);unconfigured++;continue;}
-      for(const code of subjects){if(p.exam.exam_mode==='choice' && code!=='TOAN' && code!=='VAN' && !p.registered.get(String(c.id))?.has(code))continue;checked++;const key=`${c.id}|${code}`,s=score(p,c,code);
+      for(const code of subjects){checked++;const key=`${c.id}|${code}`,s=score(p,c,code);
         if(p.absent.has(key)||s?.is_absent){absent++;continue;}
         const defs=p.defs.get(code)||[];
         // Older subjects can use the assessment configuration without component rows.
