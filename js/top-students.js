@@ -1,5 +1,6 @@
 import {topReportHtml,topReportTable,styleTopReportWorksheet,topTemplateCss} from './top-students-template.js?v=199';
-export function topStudentsByGroup(students,rows,groups){
+export function topStudentsByGroup(students,rows,groups,options={}){
+ const choice=options.examMode==='choice';
  const seen=new Set(),known=new Set(students.map(s=>s.class_code));
  for(const group of groups)for(const code of group){if(!known.has(code))throw new Error(`Lớp ${code} không có trong kỳ thi.`);if(seen.has(code))throw new Error(`Lớp ${code} bị trùng nhóm.`);seen.add(code);}
  const byStudent=new Map();
@@ -10,12 +11,32 @@ export function topStudentsByGroup(students,rows,groups){
   if(scores.has(r.subject_code))throw new Error('Dữ liệu trùng học sinh–môn; không thể xếp hạng.');
   scores.set(r.subject_code,Number(r.statistics_score));
  }
+ // Only choice exams use the four-subject ranking rule.
+ const electiveByStudent=new Map();
+ if(choice){
+  for(const r of options.registrations||[]){
+   if(!r.candidate_id||!r.subject_code||r.subject_code==='TOAN'||r.subject_code==='VAN')continue;
+   if(!electiveByStudent.has(r.candidate_id))electiveByStudent.set(r.candidate_id,new Set());
+   electiveByStudent.get(r.candidate_id).add(r.subject_code);
+  }
+ }
  const nameParts=s=>{const p=String(s.student_name||'').trim().split(/\s+/);return [p.at(-1)||'',p.slice(1,-1).join(' '),p[0]||''].join('|');};
  return groups.map((group,index)=>{
   const members=new Set(group);
-  const ranked=students.filter(s=>members.has(s.class_code)&&byStudent.get(s.candidate_id)?.size).map(s=>{
-   const scores=[...byStudent.get(s.candidate_id).values()];return {...s,total:scores.reduce((a,b)=>a+b,0),paper_count:scores.length};
-  }).sort((a,b)=>b.total-a.total||nameParts(a).localeCompare(nameParts(b),'vi')||String(a.student_code||a.candidate_id).localeCompare(String(b.student_code||b.candidate_id)));
+  const ranked=(choice
+   ? students.filter(s=>members.has(s.class_code)).map(s=>{
+      const electives=[...(electiveByStudent.get(s.candidate_id)||[])];
+      if(electives.length!==2)return null;
+      const required=['TOAN','VAN',...electives],actual=byStudent.get(s.candidate_id);
+      if(!actual||required.some(code=>!actual.has(code)))return null;
+      const values=required.map(code=>actual.get(code));
+      if(values.some(score=>score<0||score>10))return null;
+      return {...s,total:values.reduce((a,b)=>a+b,0),paper_count:4};
+     }).filter(Boolean)
+   : students.filter(s=>members.has(s.class_code)&&byStudent.get(s.candidate_id)?.size).map(s=>{
+      const scores=[...byStudent.get(s.candidate_id).values()];return {...s,total:scores.reduce((a,b)=>a+b,0),paper_count:scores.length};
+     })
+  ).sort((a,b)=>b.total-a.total||nameParts(a).localeCompare(nameParts(b),'vi')||String(a.student_code||a.candidate_id).localeCompare(String(b.student_code||b.candidate_id)));
   let rank=0,last;
   ranked.forEach((s,i)=>{if(i===0||s.total!==last)rank=i+1;s.rank=rank;last=s.total;});
   return {index,classes:[...group],students:ranked.filter(s=>s.rank<=3)};
@@ -33,7 +54,7 @@ export function wireTopStudents({state,$,esc,message,createPrintFrame}){
  const context=()=>JSON.stringify([state.selectedExam,state.statisticsRevision||0]);
  const storageKey=()=>`top-students-groups:${state.selectedExam}`;
  function clear(){request++;payload=null;key='';$('top-students-results').innerHTML='';$('top-students-excel').disabled=true;$('top-students-pdf').disabled=true;}
- function blocks(){if(!payload||key!==context())throw new Error('Tải lại dữ liệu Top 3 của kỳ thi đang chọn.');return topStudentsByGroup(payload.students,payload.rows,groups).map((g,i)=>({...g,name:groupNames[i]||`Nhóm ${i+1}`})).filter(g=>g.classes.length);}
+ function blocks(){if(!payload||key!==context())throw new Error('Tải lại dữ liệu Top 3 của kỳ thi đang chọn.');return topStudentsByGroup(payload.students,payload.rows,groups,{examMode:payload.exam.exam_mode,registrations:payload.registrations}).map((g,i)=>({...g,name:groupNames[i]||`Nhóm ${i+1}`})).filter(g=>g.classes.length);}
  const table=rows=>`<table><thead><tr>${rows[0].map(v=>`<th>${esc(v)}</th>`).join('')}</tr></thead><tbody>${rows.slice(1).map(r=>`<tr>${r.map((v,i)=>`<td>${esc(i===6?Number(v).toFixed(3):v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
  const body=()=>`<style>${topTemplateCss}</style>`+topReportHtml(blocks(),reportHeader(),esc);
  function render(){
@@ -57,19 +78,19 @@ export function wireTopStudents({state,$,esc,message,createPrintFrame}){
     pages('exam_candidates',q=>q.eq('exam_id',exam.id).order('id')),
     pages('exam_candidate_subjects',q=>q.eq('exam_id',exam.id).order('candidate_id').order('subject_code')),
     pages('exam_subject_class_configs',q=>q.eq('exam_id',exam.id).order('class_code').order('subject_code'))]);
-   const codes=[...new Set((exam.exam_mode==='default'?configs.filter(c=>c.is_counted):[...registrations,...(exam.exam_mode==='choice'?configs:[])]).map(r=>r.subject_code))];
+   const codes=[...new Set((exam.exam_mode==='choice'?[{subject_code:'TOAN'},{subject_code:'VAN'},...registrations.filter(r=>r.subject_code!=='TOAN'&&r.subject_code!=='VAN')]:exam.exam_mode==='default'?configs.filter(c=>c.is_counted):registrations).map(r=>r.subject_code))];
    const rows=[];
    // Sequential per-subject requests avoid overloading the database and fail closed on missing configurations.
    for(const code of codes){const {data,error}=await state.client.rpc('exam_get_subject_statistics',{p_exam_id:exam.id,p_subject_code:code,p_include_absent:false,p_include_violations:false});if(error)throw new Error(`${code}: ${error.message}`);rows.push(...(data.rows||[]).filter(r=>exam.exam_mode!=='default'||configs.some(c=>c.class_code===r.class_code&&c.subject_code===code&&c.is_counted)).map(r=>({...r,subject_code:code})));}
    if(captured!==context()||token!==request)return;
-   payload={exam,students:candidates.map(c=>({...c,candidate_id:c.id})),rows,classes:[...new Set(candidates.map(c=>c.class_code).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))};key=captured;
+   payload={exam,registrations:exam.exam_mode==='choice'?registrations:[],students:candidates.map(c=>({...c,candidate_id:c.id})),rows,classes:[...new Set(candidates.map(c=>c.class_code).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}))};key=captured;
    try{const saved=JSON.parse(globalThis.localStorage?.getItem(storageKey())||'[]'),used=new Set(),items=Array.isArray(saved)?saved.filter(g=>Array.isArray(g)||Array.isArray(g?.classes)):[];groupNames=items.map(g=>typeof g.name==='string'?g.name.slice(0,80):'');groups=items.map(g=>(Array.isArray(g)?g:g.classes).filter(c=>payload.classes.includes(c)&&!used.has(c)&&(used.add(c),true)));}catch{groups=[];groupNames=[];}
    const grades=[...new Set(candidates.map(c=>String(c.grade_code||'').trim()).filter(Boolean))];
    if(grades.length>1)throw new Error('Mẫu Top 3 chỉ dùng một khối trong kỳ thi. Kỳ thi này đang có nhiều khối.');
    const defaults={authority:exam.managing_authority||'',institution:exam.institution_name||'',exam_title:exam.form_exam_title||exam.name,school_year:exam.school_year||'',title:'DANH SÁCH HỌC SINH ĐẠT TOP 3',grade:grades[0]||''};
    let savedHeader={};try{savedHeader=JSON.parse(globalThis.localStorage?.getItem(storageKey()+':header')||'{}')||{};}catch{}
    for(const f of headerFields)if($('top-header-'+f))$('top-header-'+f).value=typeof savedHeader[f]==='string'?savedHeader[f]:defaults[f];
-   editor();render();notify('Top 3 theo tổng điểm; đồng hạng 1,1,3 và lấy đầy đủ học sinh ở hạng ≤ 3. Bỏ môn vắng, vi phạm bị loại và môn chưa có điểm; điểm 0 được tính. Học sinh chưa có môn hợp lệ không xếp hạng.','info');
+   editor();render();notify(exam.exam_mode==='choice'?'Kỳ lựa chọn: Top 3 tính đúng Toán, Văn và 2 môn đăng ký; yêu cầu đủ 4 điểm. Giữ nguyên quy tắc đồng hạng.':'Top 3 theo tổng điểm; đồng hạng 1,1,3 và lấy đầy đủ học sinh ở hạng ≤ 3. Bỏ môn vắng, vi phạm bị loại và môn chưa có điểm; điểm 0 được tính. Học sinh chưa có môn hợp lệ không xếp hạng.','info');
   }catch(error){if(token===request){clear();notify(error.message,'error');}}finally{$('top-students-load').disabled=false;}
  };
  $('top-students-groups').onclick=e=>{const b=e.target.closest('button');if(!b||!payload)return;if(b.hasAttribute('data-top-add')){groups.push([]);groupNames.push('');}else if(b.hasAttribute('data-top-delete')){groups.splice(Number(b.dataset.topDelete),1);groupNames.splice(Number(b.dataset.topDelete),1);}else return;changed();};

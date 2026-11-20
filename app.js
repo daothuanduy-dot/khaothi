@@ -18,7 +18,7 @@ import {wireViolations} from './violations.js?v=0.1.207';
 import {createStudentPicker} from './student-picker.js?v=0.1.207';
 import {wireScoreControl} from './score-control.js?v=0.1.207&absentscores=191&roomlabels=192&amendments=193';
 import {wireClassReport} from './class-report.js?v=0.1.207&classreport=197';
-import {wireTopStudents} from './top-students.js?v=199';
+import {wireTopStudents} from './top-students.js?v=0.1.398';
 import {wireTemplateExport} from './template-export.js?v=202';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.207&choice=151&precision=168';
