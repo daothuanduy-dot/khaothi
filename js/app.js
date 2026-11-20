@@ -21,6 +21,7 @@ import {wireScoreControl} from './score-control.js?v=0.1.212&absentscores=191&ro
 import {wireClassReport} from './class-report.js?v=0.1.304&classreport=304';
 import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=263';
+import {wireScoreAuditExport} from './score-audit-export.js?v=0.1.401';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=399';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
@@ -3509,6 +3510,7 @@ async function boot(){
   try{classReport=wireClassReport({state,$,esc,message,createPrintFrame})}catch(error){message($('class-report-message'),error.message,'error')}
   try{topStudents=wireTopStudents({state,$,esc,message,createPrintFrame})}catch(error){message($('top-students-message'),error.message,'error')}
   try{templateExport=wireTemplateExport({state,$,esc,message,subjectName})}catch(error){message($('template-export-message'),error.message,'error')}
+  try{wireScoreAuditExport({state,$,esc,message})}catch(error){message($('template-export-message'),error.message,'error')}
   try{supplementalSubjects=wireSupplementalSubjects({state,$,esc,message,subjects:SUBJECTS})}catch(error){message($('supplemental-message'),error.message,'error')}
   try{scoreControl=wireScoreControl({state,$,esc,message,subjectName,onScoresCleared:()=>{operations?.invalidateCombinedScores();classReport?.invalidate();choiceReports?.invalidate()}})}
   catch(error){console.error('Không khởi tạo được kiểm soát điểm:',error);message($('score-control-message'),error.message,'error')}
