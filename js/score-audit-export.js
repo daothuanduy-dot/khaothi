@@ -1,5 +1,5 @@
-// v0.1.401 - Read-only class-assigned subject score audit and roster export.
-// Scores come from the existing official export RPC; never recompute disciplinary deductions.
+// v0.1.402 - Restricted component audit and penalty-adjusted official export.
+// Official totals come from the dedicated penalty-adjusted RPC; never recompute deductions in JavaScript.
 export function wireScoreAuditExport({state,$,esc,message}) {
   const panel=$('template-export-panel');
   if(!panel)return;
@@ -9,7 +9,7 @@ export function wireScoreAuditExport({state,$,esc,message}) {
   const number=v=>v===null||v===undefined||v===''?'':Number.isFinite(Number(v))?Number(v):'';
   const controls=document.createElement('fieldset');
   controls.style.cssText='margin:18px 0;padding:14px;border:1px solid #cbd5e1;border-radius:10px';
-  controls.innerHTML='<legend style="font-weight:700">Kiểm tra và xuất điểm theo môn được gán cho lớp</legend><p>Chỉ đọc dữ liệu. Điểm xuất lấy từ RPC xuất kết quả hiện có, không tính lại tỷ lệ trừ vi phạm. Cần xác minh RPC đã áp dụng quyết định vi phạm và phúc khảo trước khi công bố.</p><div class="form-actions"><button type="button" class="btn btn-primary" data-audit>Kiểm tra thành phần điểm</button><button type="button" class="btn btn-light" data-export>Xuất dữ liệu</button><select data-format aria-label="Định dạng xuất"><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF (in / lưu PDF)</option></select></div><div data-status class="notice hidden" role="status"></div><div data-result class="table-wrap" style="max-height:420px;overflow:auto"></div>';
+  controls.innerHTML='<legend style="font-weight:700">Kiểm tra và xuất điểm theo môn được gán cho lớp</legend><p>Chỉ đọc dữ liệu. Điểm xuất lấy từ RPC điểm chính thức sau xử lý vi phạm. Kiểm tra thành phần dựa trên cấu hình và nguồn điểm thực tế.</p><div class="form-actions"><button type="button" class="btn btn-primary" data-audit>Kiểm tra thành phần điểm</button><button type="button" class="btn btn-light" data-export>Xuất dữ liệu</button><select data-format aria-label="Định dạng xuất"><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF (in / lưu PDF)</option></select></div><div data-status class="notice hidden" role="status"></div><div data-result class="table-wrap" style="max-height:420px;overflow:auto"></div>';
   panel.appendChild(controls);
   const status=controls.querySelector('[data-status]'),result=controls.querySelector('[data-result]');
   const auditBtn=controls.querySelector('[data-audit]'),exportBtn=controls.querySelector('[data-export]');
@@ -23,20 +23,19 @@ export function wireScoreAuditExport({state,$,esc,message}) {
     const exam=state.exams.find(e=>e.id===id);
     if(!exam)throw new Error('Không tìm thấy kỳ thi đang chọn.');
     if(!['default','choice','subject'].includes(exam.exam_mode))throw new Error('Chỉ hỗ trợ kỳ thi mặc định, lựa chọn hoặc theo môn.');
-    const [students,configs,definitions,componentScores,absences]=await Promise.all([
+    const [students,configs,componentPayload,absences]=await Promise.all([
       allRows(state.client.from('exam_candidates').select('id,sbd,student_code,student_name,class_code,date_of_birth').eq('exam_id',id),'Danh sách học sinh'),
       allRows(state.client.from('exam_subject_class_configs').select('class_code,subject_code').eq('exam_id',id),'Cấu hình môn theo lớp'),
-      allRows(state.client.from('exam_score_components').select('*').eq('exam_id',id),'Cấu hình thành phần điểm'),
-      allRows(state.client.from('exam_candidate_component_scores').select('candidate_id,subject_code,component_id,score').eq('exam_id',id),'Điểm thành phần'),
+      state.client.rpc('exam_score_audit_component_data',{p_exam_id:id}).then(({data,error})=>{if(error)throw new Error('Không đọc được cấu hình thành phần điểm: '+error.message);return data;}),
       allRows(state.client.from('exam_absences').select('candidate_id,subject_code').eq('exam_id',id),'Danh sách vắng')
     ]);
     const byClass=new Map();for(const c of configs){const cls=String(c.class_code||'').trim(),code=norm(c.subject_code);if(!cls||!code)continue;if(!byClass.has(cls))byClass.set(cls,new Set());byClass.get(cls).add(code);}
-    const defs=new Map();for(const d of definitions){const code=norm(d.subject_code);if(!defs.has(code))defs.set(code,[]);defs.get(code).push(d);}for(const v of defs.values())v.sort((a,b)=>Number(a.component_no||0)-Number(b.component_no||0));
-    const componentMap=new Map();for(const s of componentScores)componentMap.set(`${s.candidate_id}|${norm(s.subject_code)}|${s.component_id}`,s.score);
+    const defs=new Map();for(const d of (componentPayload?.components||[])){const code=norm(d.subject_code);if(!defs.has(code))defs.set(code,[]);defs.get(code).push(d);}for(const v of defs.values())v.sort((a,b)=>Number(a.display_order||0)-Number(b.display_order||0));
+    const componentMap=new Map();for(const s of (componentPayload?.scores||[]))componentMap.set(`${s.candidate_id}|${norm(s.subject_code)}|${s.component_id}`,s.score);
     const absent=new Set(absences.map(a=>`${a.candidate_id}|${norm(a.subject_code)}`));
     const subjects=[...new Set([...byClass.values()].flatMap(s=>[...s]))];if(!subjects.length)throw new Error('Chưa có môn được gán cho lớp. Không thể kiểm tra hoặc xuất báo cáo.');
     const official=new Map();for(const code of subjects){
-      const {data,error}=await state.client.rpc('exam_get_subject_results_for_export',{p_exam_id:id,p_subject_code:code});
+      const {data,error}=await state.client.rpc('exam_get_official_subject_results_for_export',{p_exam_id:id,p_subject_code:code});
       if(error)throw new Error(`Không lấy được điểm chính thức môn ${code}: ${error.message}`);
       official.set(code,new Map((data||[]).map(s=>[String(s.candidate_id||''),s])));
     }
@@ -45,7 +44,7 @@ export function wireScoreAuditExport({state,$,esc,message}) {
     cache=loaded;return loaded;
   }
   const score=(p,c,code)=>p.official.get(code)?.get(String(c.id));
-  const officialValue=(p,c,code)=>{const s=score(p,c,code);if(p.absent.has(`${c.id}|${code}`)||s?.is_absent)return 'Vắng';return s?.total_score==null?'':number(s.total_score);};
+  const officialValue=(p,c,code)=>{const s=score(p,c,code);if(p.absent.has(`${c.id}|${code}`)||s?.is_absent)return 'Vắng';return s?.official_total_score==null?'':number(s.official_total_score);};
   const classGroups=p=>{const map=new Map();for(const c of p.students){if(!map.has(c.class_code))map.set(c.class_code,[]);map.get(c.class_code).push(c);}return [...map.entries()].sort(([a],[b])=>String(a).localeCompare(String(b),'vi',{numeric:true})).map(([cls,rows])=>[cls,rows.sort((a,b)=>String(a.student_name).localeCompare(String(b.student_name),'vi')||String(a.sbd).localeCompare(String(b.sbd)))]);};
   function issues(p){const out=[];let checked=0,absent=0,complete=0,missing=0,unconfigured=0;
     for(const c of p.students){const subjects=p.byClass.get(c.class_code);if(!subjects?.size){out.push([c.sbd,c.student_name,c.class_code,'—','Lớp chưa được gán môn']);unconfigured++;continue;}
@@ -53,9 +52,20 @@ export function wireScoreAuditExport({state,$,esc,message}) {
         if(p.absent.has(key)||s?.is_absent){absent++;continue;}
         const defs=p.defs.get(code)||[];
         if(!defs.length){unconfigured++;out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,'Chưa có cấu hình thành phần trong exam_score_components']);continue;}
-        const missingComponents=defs.filter(d=>{const v=p.componentMap.get(`${key}|${d.id}`);return v===null||v===undefined||v==='';});
+        const active=defs.filter(d=>d.is_active);
+        const missingComponents=active.filter(d=>{
+          const stored=p.componentMap.get(`${key}|${d.id}`);
+          if(stored!==null&&stored!==undefined&&stored!=='')return false;
+          const kind=String(d.component_code||'').toUpperCase();
+          // Existing score channels remain authoritative for MCQ and essay components.
+          if(kind==='MCQ')return s?.mcq_score===null||s?.mcq_score===undefined;
+          if(kind==='ESSAY'||kind==='TL')return s?.essay_score===null||s?.essay_score===undefined;
+          // Do not silently classify unknown components as missing: their entry_source may be external.
+          return false;
+        });
         const missingTotal=s?.total_score===null||s?.total_score===undefined||s?.total_score==='';
-        if(missingComponents.length||missingTotal){missing++;const names=missingComponents.map(d=>d.component_name||d.name||`Thành phần ${d.component_no||d.id}`);out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,[...(names.length?[`Thiếu: ${names.join(', ')}`]:[]),...(missingTotal?['Chưa có điểm môn chính thức']:[])].join('; ')]);}else complete++;
+        const unknown=active.filter(d=>!['MCQ','ESSAY','TL'].includes(String(d.component_code||'').toUpperCase()) && p.componentMap.get(`${key}|${d.id}`)==null);
+        if(missingComponents.length||missingTotal||unknown.length){missing++;const names=missingComponents.map(d=>d.component_name||d.name||`Thành phần ${d.component_no||d.id}`);out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,[...(names.length?[`Thiếu: ${names.join(', ')}`]:[]),...(missingTotal?['Chưa có điểm môn']:[]),...(unknown.length?[`Chưa xác minh nguồn: ${unknown.map(d=>d.component_name||d.component_code).join(', ')}`]:[])].join('; ')]);}else complete++;
       }
     }return {out,checked,absent,complete,missing,unconfigured};
   }
@@ -74,7 +84,7 @@ export function wireScoreAuditExport({state,$,esc,message}) {
       const sections=groups.map(([cls,list])=>`<section><h3>${esc(p.exam.name||'Kết quả kỳ thi')} — LỚP ${esc(cls)}</h3><table><thead><tr>${headers(cls).map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows(cls,list).map(row=>`<tr>${row.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`).join('');
       const w=window.open('','_blank');if(!w)throw new Error('Trình duyệt chặn cửa sổ in.');w.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Điểm theo lớp</title><style>@page{size:A3 landscape;margin:12mm}body{font:10pt Arial,sans-serif}h3{text-align:center}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #555;padding:4px;text-align:center;overflow-wrap:anywhere}section{break-after:page}section:last-child{break-after:auto}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body>${sections}</body></html>`);w.document.close();w.focus();w.print();
     }
-    notify(`Đã chuẩn bị ${format==='xlsx'?'Excel':'bản in PDF'} cho ${groups.length} lớp. Điểm lấy từ hàm xuất kết quả chính thức, không trừ vi phạm lại.`,'success');
+    notify(`Đã chuẩn bị ${format==='xlsx'?'Excel':'bản in PDF'} cho ${groups.length} lớp. Điểm lấy từ RPC đã xử lý vi phạm, không trừ lại trên trình duyệt.`,'success');
   });
   return {invalidate(){cache=null;result.innerHTML='';}};
 }

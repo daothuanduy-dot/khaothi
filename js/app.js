@@ -21,7 +21,7 @@ import {wireScoreControl} from './score-control.js?v=0.1.212&absentscores=191&ro
 import {wireClassReport} from './class-report.js?v=0.1.304&classreport=304';
 import {wireTopStudents} from './top-students.js?v=199';
 import {wireTemplateExport} from './template-export.js?v=263';
-import {wireScoreAuditExport} from './score-audit-export.js?v=0.1.401';
+import {wireScoreAuditExport} from './score-audit-export.js?v=0.1.402';
 import {wireSupplementalSubjects} from './supplemental-subjects.js?v=202';
 import {wireChoiceReports} from './choice-report.js?v=0.1.212&choice=151&precision=399';
 import {loadExamRounds} from './rounds.js?v=0.1.212';
