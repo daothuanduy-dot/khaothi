@@ -1,4 +1,4 @@
-// v0.1.402 - Restricted component audit and penalty-adjusted official export.
+// v0.1.403 - Audit fallback for subjects without component definitions.
 // Official totals come from the dedicated penalty-adjusted RPC; never recompute deductions in JavaScript.
 export function wireScoreAuditExport({state,$,esc,message}) {
   const panel=$('template-export-panel');
@@ -51,7 +51,20 @@ export function wireScoreAuditExport({state,$,esc,message}) {
       for(const code of subjects){checked++;const key=`${c.id}|${code}`,s=score(p,c,code);
         if(p.absent.has(key)||s?.is_absent){absent++;continue;}
         const defs=p.defs.get(code)||[];
-        if(!defs.length){unconfigured++;out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,'Chưa có cấu hình thành phần trong exam_score_components']);continue;}
+        // Older subjects can use the assessment configuration without component rows.
+        // The official RPC returns the authoritative score mode and missing flags.
+        if(!defs.length){
+          if(!s){missing++;out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,'Không có dữ liệu điểm môn từ RPC']);continue;}
+          const mode=String(s.score_mode||'').toLowerCase();
+          const gaps=[];
+          if(mode==='mcq'||mode==='combined')if(s.mcq_missing||s.mcq_score==null)gaps.push('Trắc nghiệm');
+          if(mode==='essay'||mode==='combined')if(s.essay_missing||s.essay_score==null)gaps.push('Tự luận');
+          if(!['mcq','essay','combined'].includes(mode)){
+            unconfigured++;out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,'Chưa xác định được hình thức điểm môn']);continue;
+          }
+          if(gaps.length||s.total_score==null){missing++;out.push([c.sbd,c.student_name,c.class_code,codes[code]||code,[...(gaps.length?[`Thiếu: ${gaps.join(', ')}`]:[]),...(s.total_score==null?['Chưa có điểm môn']:[])].join('; ')]);}else complete++;
+          continue;
+        }
         const active=defs.filter(d=>d.is_active);
         const missingComponents=active.filter(d=>{
           const stored=p.componentMap.get(`${key}|${d.id}`);
