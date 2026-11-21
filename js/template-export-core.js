@@ -29,7 +29,8 @@ export function inspectSheet(ws,XLSX,period){
  const lastStudentRow=studentRows.at(-1)||null;
  return {enabled:!!id,idColumn,nameColumn:name?colName(name.c):'',classColumn:cls?colName(cls.c):'',classCode:classLine?classLine.text.replace(/^\s*Lớp\s*:\s*/i,'').trim():'',subject:identifySubject(subjectCell?.text),target:target.length===1?colName(target[0].c):'',firstRow:firstStudentRow||headerEnd+2,lastRow:lastStudentRow||Math.max(range.e.r+1,physicalLastRow),detectedStudentRows:studentRows.length,metadata,subjectText:subjectCell?.text||'',headers:labels.filter(c=>c.r===id?.r).map(c=>`${colName(c.c)}: ${c.text}`).join('; ')};
 }
-export function buildTemplatePlan(mappings,sources,{includeAbsent=false,decimals='keep'}={}){
+export function buildTemplatePlan(mappings,sources,{includeAbsent=false,decimals='keep',writeMode='blank'}={}){
+ if(!['blank','overwrite'].includes(writeMode))throw new Error('Chế độ ghi Excel không hợp lệ.');
  const writes=[],issues=[],summary=[],destinations=new Set(),covered=new Set(),sourceMaps=new Map();
  for(const [code,rows] of Object.entries(sources)){
   const map=new Map();for(const r of rows){const id=String(r.student_code??'').trim();if(!id){issues.push({subject:code,status:'Mã nguồn trống',id:'',sheet:'',file:'',cell:''});continue;}if(map.has(id))map.set(id,null);else map.set(id,r);}sourceMaps.set(code,map);
@@ -43,11 +44,9 @@ export function buildTemplatePlan(mappings,sources,{includeAbsent=false,decimals
  for(const [k,n] of identityCounts)if(n>1)duplicateTargets.add(k);
  for(const m of mappings.filter(m=>m.enabled)){
   const source=sourceMaps.get(m.subject);if(!source)throw new Error(`Chưa tải kết quả môn ${m.subject}.`);
-  const stats={file:m.fileName,sheet:m.sheetName,subject:m.subject,target:m.target,writes:0,skipped:0};summary.push(stats);
+  const stats={file:m.fileName,sheet:m.sheetName,subject:m.subject,target:m.target,writes:0,overwrites:0,skipped:0};summary.push(stats);
   const issue=(status,row,id,old='',score='')=>{stats.skipped++;issues.push({file:m.fileName,sheet:m.sheetName,subject:m.subject,cell:m.target+row,id,status,old,score});};
   const idCol=m.idColumn.toUpperCase(),target=m.target.toUpperCase();
-  const occupied=Object.entries(m.ws).find(([address,cell])=>address.match(/^([A-Z]+)(\d+)$/)?.[1]===target&&Number(address.match(/\d+/)[0])>=Math.min(Number(m.firstRow),m.detectedFirstRow||Number(m.firstRow))&&(cell.f!=null||(cell.v!=null&&cell.v!=='')));
-  if(occupied){stats.blocked=true;issue('CHẶN: cột đích đã có dữ liệu hoặc công thức; không ghi cả cột',Number(occupied[0].match(/\d+/)[0]),'',occupied[1].v??occupied[1].f);continue;}
   if((m.ws['!merges']||[]).some(r=>colIndex(target)>=r.s.c&&colIndex(target)<=r.e.c&&r.e.r>=Number(m.firstRow)-1))throw new Error(`${m.sheetName}: cột điểm có ô gộp trong vùng học sinh.`);
   for(let row=Number(m.firstRow);row<=m.lastRow;row++){
    const cell=m.ws[idCol+row],id=cell?.v==null?'':String(cell.v).trim();
@@ -64,9 +63,12 @@ export function buildTemplatePlan(mappings,sources,{includeAbsent=false,decimals
    if(decimals!=='keep'){const d=Number(decimals);if(![0,1,2,3].includes(d))throw new Error('Số chữ số thập phân không hợp lệ.');score=Math.round((score+Number.EPSILON)*10**d)/10**d;}
    const address=target+row,old=m.ws[address];
    if(old?.f){issue('Giữ ô công thức',row,id,old.f,score);continue;}
-   if(old?.v!=null&&old.v!==''){issue('CHẶN: ô đã có dữ liệu',row,id,old.v,score);continue;}
+   const hasValue=old?.v!=null&&old.v!=='';
+   if(hasValue&&writeMode==='blank'){issue('Giữ nguyên ô đã có dữ liệu',row,id,old.v,score);continue;}
+   if(hasValue&&!Number.isFinite(Number(old.v))){issue('CHẶN: ô có dữ liệu không phải điểm số',row,id,old.v,score);continue;}
+   if(hasValue&&Number(old.v)===score){issue('Điểm hiện tại đã trùng điểm nguồn',row,id,old.v,score);continue;}
    const key=`${m.fileIndex}|${m.sheetName}|${address}`;if(destinations.has(key))throw new Error('Hai ánh xạ ghi vào cùng ô.');destinations.add(key);
-   writes.push({fileIndex:m.fileIndex,sheetName:m.sheetName,address,score,old:old?.v??'',id,subject:m.subject});stats.writes++;
+   writes.push({fileIndex:m.fileIndex,sheetName:m.sheetName,address,score,old:old?.v??'',id,subject:m.subject,overwrite:hasValue});stats.writes++;if(hasValue)stats.overwrites++;
   }
  }
  for(const [code,map] of sourceMaps)for(const [id,r] of map)if(r&&r.total_score!=null&&!covered.has(`${code}|${id}`))issues.push({file:'',sheet:'',subject:code,id,cell:'',status:'Kết quả nguồn chưa đối chiếu được với mẫu',score:r.total_score,old:''});

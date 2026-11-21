@@ -1,4 +1,4 @@
-import {inspectSheet,buildTemplatePlan,colIndex,normalized} from './template-export-core.js?v=263';
+import {inspectSheet,buildTemplatePlan,colIndex,normalized} from './template-export-core.js?v=412';
 import {saveDirectFiles} from './template-direct-write.js?v=201';
 const codes=['TOAN','VAN','LY','HOA','SINH','SU','DIA','KTPL','N1','N2','N3','N4','N5','N6','N7','ANH','TIN','CN','CONGNGHE','GDKT','GDDP','GDQP','GDKTPL'];
 export function wireTemplateExport({state,$,esc,message,subjectName}){
@@ -16,13 +16,18 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   note.textContent=detail||(directory?'Đã chọn thư mục. Nhấn “1. Đọc và xác định cột/môn” để đọc tệp.':'Chưa chọn thư mục.');
  }
 
- const settings=()=>({includeAbsent:!!$('template-export-absent').checked,decimals:$('template-export-decimals').value});
+ const modeBox=document.createElement('div');
+ modeBox.id='template-export-write-mode-wrap';
+ modeBox.style.cssText='margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:8px';
+ modeBox.innerHTML='<label for="template-export-write-mode" style="display:block;font-weight:600;margin-bottom:6px">Chế độ ghi điểm vào Excel</label><select id="template-export-write-mode" style="width:100%;max-width:520px;padding:9px;border:1px solid #cbd5e1;border-radius:6px"><option value="blank">Chỉ ghi vào ô trống (mặc định, an toàn)</option><option value="overwrite">Ghi bổ sung và ghi đè điểm đã có (không ghi đè công thức)</option></select><div style="font-size:13px;margin-top:6px;color:#64748b">Chế độ ghi đè chỉ cập nhật ô điểm số; ô công thức và dữ liệu không phải điểm vẫn bị chặn. Hãy sao lưu các tệp Excel trước khi ghi.</div>';
+ $('template-export-read').insertAdjacentElement('beforebegin',modeBox);
+ const settings=()=>({includeAbsent:!!$('template-export-absent').checked,decimals:$('template-export-decimals').value,writeMode:$('template-export-write-mode').value});
  const context=()=>JSON.stringify([state.selectedExam,state.statisticsRevision||0,revision,$('template-export-period').value,settings(),mappings.map(({enabled,subject,target,idColumn,classColumn,classCode,firstRow})=>({enabled,subject,target,idColumn,classColumn,classCode,firstRow}))]);
  function invalidate(){plan=null;previewContext='';$('template-export-write').disabled=true;$('template-export-final').checked=false;$('template-export-preview').innerHTML='';}
  function reset(){revision++;files=[];mappings=[];invalidate();$('template-export-mappings').innerHTML='';$('template-export-mapping-confirm').checked=false;$('template-export-check').disabled=true;}
  function guard(){if(state.role!=='admin'||!state.selectedExam)throw new Error('Chọn kỳ thi với quyền Admin.');if(!['default','choice','subject'].includes(state.exams.find(e=>e.id===state.selectedExam)?.exam_mode))throw new Error('Chức năng hiện dùng kết quả kỳ mặc định/lựa chọn/theo môn; kỳ thủ công có nguồn điểm riêng.');if(!window.XLSX||!window.JSZip)throw new Error('Chưa tải thư viện Excel/ZIP. Tải lại trang.');}
  function safePath(file){const path=String(file.webkitRelativePath||file.name).replace(/\\/g,'/');if(path.startsWith('/')||path.split('/').some(p=>p==='..'||p==='.')||!path.toLowerCase().endsWith('.xlsx'))throw new Error('Đường dẫn tệp không hợp lệ.');return path;}
- async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){folderStatus(directory?'Đã hủy chọn lại; vẫn giữ thư mục trước đó.':'Đã hủy chọn thư mục.');notify('Đã hủy chọn thư mục; thư mục đã chọn trước đó (nếu có) vẫn được giữ nguyên.','info');}else{invalidate();folderStatus(directory?'Thư mục đã chọn vẫn được giữ. Thao tác vừa rồi thất bại: '+(e?.message||String(e)):'Chưa chọn được thư mục: '+(e?.message||String(e)));notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
+ async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals','template-export-write-mode'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){folderStatus(directory?'Đã hủy chọn lại; vẫn giữ thư mục trước đó.':'Đã hủy chọn thư mục.');notify('Đã hủy chọn thư mục; thư mục đã chọn trước đó (nếu có) vẫn được giữ nguyên.','info');}else{invalidate();folderStatus(directory?'Thư mục đã chọn vẫn được giữ. Thao tác vừa rồi thất bại: '+(e?.message||String(e)):'Chưa chọn được thư mục: '+(e?.message||String(e)));notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals','template-export-write-mode'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
  function renderMappings(){
   const option=(v,text,current)=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(text)}</option>`;
   const subjects=[...new Set([...codes,...mappings.map(m=>m.subject).filter(Boolean)])];
@@ -91,14 +96,15 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   }
   const captured=context(),sources=await getSources();if(captured!==context())return;
   plan=buildTemplatePlan(mappings,sources,settings());previewContext=captured;previewSources=JSON.stringify(sources);
-  $('template-export-preview').innerHTML=`<p><b>${plan.writes.length} ô dự kiến ghi</b>; ${plan.issues.length} mục giữ nguyên/cần đối chiếu. Không sửa tiêu đề, dữ liệu học sinh hoặc các cột khác. Điểm nguồn là điểm chính thức sau xử lý vi phạm, có xét điểm phúc khảo hiện hành; không lọc theo môn lựa chọn.</p>`+table(['Tệp','Sheet','Môn','Cột','Sẽ ghi','Giữ nguyên / lỗi'],plan.summary.map(s=>[s.file,s.sheet,s.subject,s.target,s.writes,s.skipped]))+`<h4>Chi tiết ô sẽ ghi (tối đa 200 dòng hiển thị)</h4>`+table(['Tệp','Sheet','Ô','Mã định danh','Điểm cũ','Điểm mới'],plan.writes.slice(0,200).map(w=>[files[w.fileIndex].path,w.sheetName,w.address,w.id,w.old,w.score]))+`<h4>Đối chiếu (đầy đủ, giữ nguyên các mục bị chặn)</h4>`+table(['Tệp','Sheet','Môn','Ô','Mã','Trạng thái'],plan.issues.map(i=>[i.file,i.sheet,i.subject,i.cell,i.id,i.status]));
+  $('template-export-preview').innerHTML=`<p><b>${plan.writes.length} ô dự kiến ghi</b> (trong đó ${plan.writes.filter(w=>w.overwrite).length} ô ghi đè điểm cũ); ${plan.issues.length} mục giữ nguyên/cần đối chiếu. Không sửa tiêu đề, dữ liệu học sinh hoặc các cột khác. Điểm nguồn là điểm chính thức sau xử lý vi phạm, có xét điểm phúc khảo hiện hành; không lọc theo môn lựa chọn.</p>`+table(['Tệp','Sheet','Môn','Cột','Sẽ ghi','Ghi đè','Giữ nguyên / lỗi'],plan.summary.map(s=>[s.file,s.sheet,s.subject,s.target,s.writes,s.overwrites,s.skipped]))+`<h4>Chi tiết ô sẽ ghi (tối đa 200 dòng hiển thị)</h4>`+table(['Tệp','Sheet','Ô','Mã định danh','Điểm cũ','Điểm mới','Thao tác'],plan.writes.slice(0,200).map(w=>[files[w.fileIndex].path,w.sheetName,w.address,w.id,w.old,w.score,w.overwrite?'Ghi đè':'Ghi ô trống']))+`<h4>Đối chiếu (đầy đủ, giữ nguyên các mục bị chặn)</h4>`+table(['Tệp','Sheet','Môn','Ô','Mã','Trạng thái'],plan.issues.map(i=>[i.file,i.sheet,i.subject,i.cell,i.id,i.status]));
   notify('Xem trước hoàn tất. Chỉ các ô hợp lệ trong danh sách sẽ được ghi; các dòng lỗi/không khớp được giữ nguyên. Chưa ghi vào tệp.');
  }
  async function write(){
   guard();if(!plan||previewContext!==context())throw new Error('Dữ liệu/lựa chọn đã đổi; kiểm tra lại trước khi ghi.');
   if(!$('template-export-final').checked)throw new Error('Tích xác nhận ghi trực tiếp theo bản xem trước.');
-  if(!plan.writes.length)throw new Error('Không có ô hợp lệ cần ghi; cột có dữ liệu bị chặn.');
-  const captured=context(),current=await getSources();
+  if(!plan.writes.length)throw new Error('Không có ô hợp lệ cần ghi. Hãy xem danh sách đối chiếu để biết các ô bị giữ nguyên hoặc không khớp.');
+  if(settings().writeMode==='overwrite'&&plan.writes.some(w=>w.overwrite)){if(!window.confirm(`Bạn sắp GHI ĐÈ ${plan.writes.filter(w=>w.overwrite).length} ô điểm đã có trong Excel. Hành động này thay đổi tệp gốc và không tạo bản sao. Bạn đã sao lưu và đồng ý tiếp tục?`))return;}
+ const captured=context(),current=await getSources();
   if(captured!==context()||JSON.stringify(current)!==previewSources)throw new Error('Điểm nguồn đã thay đổi. Hãy xem trước lại.');
   const confirmed=plan,check=()=>{if(captured!==context()||plan!==confirmed||!$('template-export-final').checked||!$('template-export-mapping-confirm').checked)throw new Error('Ngữ cảnh/xác nhận đã thay đổi; dừng ghi.');};
   const saved=await saveDirectFiles(files,confirmed.writes,window.JSZip,{check,onSaved:path=>notify('Đã ghi: '+path)});
@@ -107,7 +113,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
  $('template-export-read').onclick=()=>action(read);$('template-export-check').onclick=()=>action(preview);$('template-export-write').onclick=()=>action(write);
  $('template-export-mappings').onchange=e=>{const el=e.target,m=mappings[Number(el.dataset.map)];if(!m||!el.dataset.field)return;m[el.dataset.field]=el.dataset.field==='enabled'?el.checked:el.value;revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
  $('template-export-files').onclick=()=>action(selectDirectory);
- for(const id of ['template-export-period','template-export-absent','template-export-decimals'])$(id).onchange=()=>{revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
+ for(const id of ['template-export-period','template-export-absent','template-export-decimals','template-export-write-mode'])$(id).onchange=()=>{revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
  $('template-export-mapping-confirm').onchange=()=>{if(!$('template-export-mapping-confirm').checked)invalidate();};
  return {invalidate(){reset();},refresh(){if(previewContext&&previewContext!==context())invalidate();}};
 }
