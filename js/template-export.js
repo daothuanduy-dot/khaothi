@@ -17,9 +17,20 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   $('template-export-mappings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Dùng</th><th>Tệp / sheet</th><th>Thông tin mẫu</th><th>Môn nguồn</th><th>Cột điểm đích</th><th>Cột mã</th><th>Cột lớp</th><th>Lớp nếu không có cột</th><th>Dòng bắt đầu</th></tr></thead><tbody>${mappings.map((m,i)=>`<tr><td><input type="checkbox" data-map="${i}" data-field="enabled" ${m.enabled?'checked':''}></td><td>${esc(m.fileName)}<br><b>${esc(m.sheetName)}</b></td><td>${esc(m.metadata)}<br>${esc(m.subjectText)}<br><small>${esc(m.headers)}</small></td><td><select data-map="${i}" data-field="subject">${option('','Chọn môn',m.subject)}${subjects.map(code=>option(code,`${subjectName(code)} (${code})`,m.subject)).join('')}</select></td>${['target','idColumn','classColumn','classCode','firstRow'].map(field=>`<td><input data-map="${i}" data-field="${field}" value="${esc(m[field]??'')}" ${field==='firstRow'?'type="number" min="1" max="1048576"':'maxlength="'+(field==='classCode'?40:3)+'"'} style="min-width:65px;max-width:120px"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
  }
  async function read(){
-  guard();reset();const token=revision,examId=state.selectedExam;
+  // Select the directory before clearing the previous mapping/preview state.
+  // showDirectoryPicker must be invoked directly within the user click flow.
+  guard();
   if(typeof window.showDirectoryPicker!=='function')throw new Error('Ghi trực tiếp cần Chrome/Edge hỗ trợ chọn thư mục có quyền ghi, trên HTTPS hoặc localhost.');
-  if(!directory)directory=await window.showDirectoryPicker({mode:'readwrite'});
+  let selectedDirectory=directory;
+  if(!selectedDirectory) selectedDirectory=await window.showDirectoryPicker({mode:'readwrite'});
+  if(typeof selectedDirectory.queryPermission==='function'){
+    let permission=await selectedDirectory.queryPermission({mode:'readwrite'});
+    if(permission!=='granted' && typeof selectedDirectory.requestPermission==='function')
+      permission=await selectedDirectory.requestPermission({mode:'readwrite'});
+    if(permission!=='granted') throw new Error('Chưa được cấp quyền đọc/ghi thư mục. Hãy chọn lại và cho phép quyền truy cập.');
+  }
+  directory=selectedDirectory;
+  reset();const token=revision,examId=state.selectedExam;
   const selected=[];
   async function walk(dir,prefix){for await(const [name,handle] of dir.entries()){if(handle.kind==='directory')await walk(handle,prefix+name+'/');else if(/\.xlsx$/i.test(name)&&!name.startsWith('~$')){const file=await handle.getFile();selected.push({file,handle,path:prefix+name});}}}
   await walk(directory,directory.name+'/');
@@ -71,7 +82,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
  }
  $('template-export-read').onclick=()=>action(read);$('template-export-check').onclick=()=>action(preview);$('template-export-write').onclick=()=>action(write);
  $('template-export-mappings').onchange=e=>{const el=e.target,m=mappings[Number(el.dataset.map)];if(!m||!el.dataset.field)return;m[el.dataset.field]=el.dataset.field==='enabled'?el.checked:el.value;revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
- $('template-export-files').onclick=()=>{const previousDirectory=directory;directory=null;return action(async()=>{try{await read();}catch(e){if(e?.name==='AbortError')directory=previousDirectory;throw e;}});};
+ $('template-export-files').onclick=()=>{const previousDirectory=directory;directory=null;return action(async()=>{try{await read();}catch(e){directory=previousDirectory;throw e;}});};
  for(const id of ['template-export-period','template-export-absent','template-export-decimals'])$(id).onchange=()=>{revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
  $('template-export-mapping-confirm').onchange=()=>{if(!$('template-export-mapping-confirm').checked)invalidate();};
  return {invalidate(){reset();},refresh(){if(previewContext&&previewContext!==context())invalidate();}};
