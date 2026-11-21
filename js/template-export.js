@@ -1,5 +1,5 @@
 import {inspectSheet,buildTemplatePlan,colIndex,normalized} from './template-export-core.js?v=412';
-import {saveDirectFiles} from './template-direct-write.js?v=413';
+import {saveDirectFiles} from './template-direct-write.js?v=414';
 const codes=['TOAN','VAN','LY','HOA','SINH','SU','DIA','KTPL','N1','N2','N3','N4','N5','N6','N7','ANH','TIN','CN','CONGNGHE','GDKT','GDDP','GDQP','GDKTPL'];
 export function wireTemplateExport({state,$,esc,message,subjectName}){
  let files=[],mappings=[],plan=null,previewContext='',previewSources='',busy=false,revision=0,directory=null;
@@ -107,7 +107,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
  const captured=context(),current=await getSources();
   if(captured!==context()||JSON.stringify(current)!==previewSources)throw new Error('Điểm nguồn đã thay đổi. Hãy xem trước lại.');
   const confirmed=plan,check=()=>{if(captured!==context()||plan!==confirmed||!$('template-export-final').checked||!$('template-export-mapping-confirm').checked)throw new Error('Ngữ cảnh/xác nhận đã thay đổi; dừng ghi.');};
-  const saved=await saveDirectFiles(files,confirmed.writes,window.JSZip,{check,onSaved:path=>notify('Đã ghi: '+path)});
+  const saved=await saveDirectFiles(files,confirmed.writes,window.JSZip,{check,directory,onSaved:path=>notify('Đã ghi: '+path)});
   reset();notify('Đã ghi trực tiếp '+saved.length+' tệp trong thư mục đã chọn. Không tạo ZIP hoặc bản sao; CSDL không thay đổi. Đọc lại thư mục để kiểm tra kết quả.','success');
  }
  $('template-export-read').onclick=()=>action(read);$('template-export-check').onclick=()=>action(preview);$('template-export-write').onclick=()=>action(write);
