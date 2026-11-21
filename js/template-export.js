@@ -10,26 +10,36 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
  function reset(){revision++;files=[];mappings=[];invalidate();$('template-export-mappings').innerHTML='';$('template-export-mapping-confirm').checked=false;$('template-export-check').disabled=true;}
  function guard(){if(state.role!=='admin'||!state.selectedExam)throw new Error('Chọn kỳ thi với quyền Admin.');if(!['default','choice','subject'].includes(state.exams.find(e=>e.id===state.selectedExam)?.exam_mode))throw new Error('Chức năng hiện dùng kết quả kỳ mặc định/lựa chọn/theo môn; kỳ thủ công có nguồn điểm riêng.');if(!window.XLSX||!window.JSZip)throw new Error('Chưa tải thư viện Excel/ZIP. Tải lại trang.');}
  function safePath(file){const path=String(file.webkitRelativePath||file.name).replace(/\\/g,'/');if(path.startsWith('/')||path.split('/').some(p=>p==='..'||p==='.')||!path.toLowerCase().endsWith('.xlsx'))throw new Error('Đường dẫn tệp không hợp lệ.');return path;}
- async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){notify('Chưa chọn được thư mục. Nếu đã bấm Hủy hoặc đóng hộp thoại, hãy chọn lại thư mục chứa tệp Excel. Nếu đã bấm Chọn mà vẫn gặp lỗi, kiểm tra quyền truy cập thư mục của trình duyệt.','info');}else{invalidate();notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
+ async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){notify('Đã hủy chọn thư mục; thư mục đã chọn trước đó (nếu có) vẫn được giữ nguyên.','info');}else{invalidate();notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
  function renderMappings(){
   const option=(v,text,current)=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(text)}</option>`;
   const subjects=[...new Set([...codes,...mappings.map(m=>m.subject).filter(Boolean)])];
   $('template-export-mappings').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Dùng</th><th>Tệp / sheet</th><th>Thông tin mẫu</th><th>Môn nguồn</th><th>Cột điểm đích</th><th>Cột mã</th><th>Cột lớp</th><th>Lớp nếu không có cột</th><th>Dòng bắt đầu</th></tr></thead><tbody>${mappings.map((m,i)=>`<tr><td><input type="checkbox" data-map="${i}" data-field="enabled" ${m.enabled?'checked':''}></td><td>${esc(m.fileName)}<br><b>${esc(m.sheetName)}</b></td><td>${esc(m.metadata)}<br>${esc(m.subjectText)}<br><small>${esc(m.headers)}</small></td><td><select data-map="${i}" data-field="subject">${option('','Chọn môn',m.subject)}${subjects.map(code=>option(code,`${subjectName(code)} (${code})`,m.subject)).join('')}</select></td>${['target','idColumn','classColumn','classCode','firstRow'].map(field=>`<td><input data-map="${i}" data-field="${field}" value="${esc(m[field]??'')}" ${field==='firstRow'?'type="number" min="1" max="1048576"':'maxlength="'+(field==='classCode'?40:3)+'"'} style="min-width:65px;max-width:120px"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
  }
- async function read(){
-  // Select the directory before clearing the previous mapping/preview state.
-  // showDirectoryPicker must be invoked directly within the user click flow.
+ async function selectDirectory(){
   guard();
-  if(typeof window.showDirectoryPicker!=='function')throw new Error('Ghi trực tiếp cần Chrome/Edge hỗ trợ chọn thư mục có quyền ghi, trên HTTPS hoặc localhost.');
-  let selectedDirectory=directory;
-  if(!selectedDirectory) selectedDirectory=await window.showDirectoryPicker({mode:'readwrite'});
-  if(typeof selectedDirectory.queryPermission==='function'){
-    let permission=await selectedDirectory.queryPermission({mode:'readwrite'});
-    if(permission!=='granted' && typeof selectedDirectory.requestPermission==='function')
-      permission=await selectedDirectory.requestPermission({mode:'readwrite'});
-    if(permission!=='granted') throw new Error('Chưa được cấp quyền đọc/ghi thư mục. Hãy chọn lại và cho phép quyền truy cập.');
+  if(typeof window.showDirectoryPicker!=='function')throw new Error('Cần Chrome/Edge trên HTTPS hoặc localhost để chọn thư mục có quyền ghi.');
+  // Must be invoked directly during a user gesture, before any await.
+  const selected=await window.showDirectoryPicker({mode:'readwrite'});
+  if(typeof selected.queryPermission==='function'){
+    let permission=await selected.queryPermission({mode:'readwrite'});
+    if(permission!=='granted' && typeof selected.requestPermission==='function')
+      permission=await selected.requestPermission({mode:'readwrite'});
+    if(permission!=='granted')throw new Error('Chưa được cấp quyền đọc/ghi thư mục.');
   }
-  directory=selectedDirectory;
+  directory=selected;
+  reset();
+  notify('Đã chọn thư mục: '+directory.name+'. Nhấn “1. Đọc và xác định cột/môn” để quét các tệp Excel.','success');
+ }
+ async function read(){
+  guard();
+  if(!directory)throw new Error('Chưa chọn thư mục. Hãy nhấn “Chọn thư mục có quyền ghi” trước.');
+  if(typeof directory.queryPermission==='function'){
+    let permission=await directory.queryPermission({mode:'readwrite'});
+    if(permission!=='granted' && typeof directory.requestPermission==='function')
+      permission=await directory.requestPermission({mode:'readwrite'});
+    if(permission!=='granted')throw new Error('Thư mục chưa được cấp quyền đọc/ghi. Hãy chọn lại thư mục.');
+  }
   reset();const token=revision,examId=state.selectedExam;
   const selected=[];
   async function walk(dir,prefix){for await(const [name,handle] of dir.entries()){if(handle.kind==='directory')await walk(handle,prefix+name+'/');else if(/\.xlsx$/i.test(name)&&!name.startsWith('~$')){const file=await handle.getFile();selected.push({file,handle,path:prefix+name});}}}
@@ -82,7 +92,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
  }
  $('template-export-read').onclick=()=>action(read);$('template-export-check').onclick=()=>action(preview);$('template-export-write').onclick=()=>action(write);
  $('template-export-mappings').onchange=e=>{const el=e.target,m=mappings[Number(el.dataset.map)];if(!m||!el.dataset.field)return;m[el.dataset.field]=el.dataset.field==='enabled'?el.checked:el.value;revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
- $('template-export-files').onclick=()=>{const previousDirectory=directory;directory=null;return action(async()=>{try{await read();}catch(e){directory=previousDirectory;throw e;}});};
+ $('template-export-files').onclick=()=>action(selectDirectory);
  for(const id of ['template-export-period','template-export-absent','template-export-decimals'])$(id).onchange=()=>{revision++;invalidate();$('template-export-mapping-confirm').checked=false;};
  $('template-export-mapping-confirm').onchange=()=>{if(!$('template-export-mapping-confirm').checked)invalidate();};
  return {invalidate(){reset();},refresh(){if(previewContext&&previewContext!==context())invalidate();}};
