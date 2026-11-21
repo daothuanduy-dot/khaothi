@@ -59,8 +59,8 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   const examId=state.selectedExam;
   const sources={};for(const code of [...new Set(mappings.filter(m=>m.enabled).map(m=>m.subject))]){
    if(!code)throw new Error('Có sheet chưa chọn môn nguồn.');
-    const {data,error}=await state.client.rpc('exam_get_subject_results_for_export',{p_exam_id:examId,p_subject_code:code});if(error)throw new Error(`${code}: ${error.message} (cần migration 202)`);
-   sources[code]=[...(data||[])].sort((a,b)=>String(a.candidate_id).localeCompare(String(b.candidate_id)));
+    const {data,error}=await state.client.rpc('exam_get_official_class_subject_results_for_template',{p_exam_id:examId,p_subject_code:code});if(error)throw new Error(`${code}: ${error.message} (cần SQL v0.1.410)`);
+   sources[code]=[...(data||[])].map(r=>({...r,total_score:r.official_total_score})).sort((a,b)=>String(a.candidate_id).localeCompare(String(b.candidate_id)));
   }return sources;
  }
  function table(headers,rows){return `<div class="table-wrap" style="max-height:360px;overflow:auto"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${esc(v??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;}
@@ -77,7 +77,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   }
   const captured=context(),sources=await getSources();if(captured!==context())return;
   plan=buildTemplatePlan(mappings,sources,settings());previewContext=captured;previewSources=JSON.stringify(sources);
-  $('template-export-preview').innerHTML=`<p><b>${plan.writes.length} ô dự kiến ghi</b>; ${plan.issues.length} mục giữ nguyên/cần đối chiếu. Không sửa tiêu đề, dữ liệu học sinh hoặc các cột khác. Điểm nguồn là kết quả môn đã ghép (điểm gốc, chưa áp dụng xử lý vi phạm); không dùng điểm thống kê hay tổng các môn.</p>`+table(['Tệp','Sheet','Môn','Cột','Sẽ ghi','Giữ nguyên / lỗi'],plan.summary.map(s=>[s.file,s.sheet,s.subject,s.target,s.writes,s.skipped]))+`<h4>Chi tiết ô sẽ ghi (tối đa 200 dòng hiển thị)</h4>`+table(['Tệp','Sheet','Ô','Mã định danh','Điểm cũ','Điểm mới'],plan.writes.slice(0,200).map(w=>[files[w.fileIndex].path,w.sheetName,w.address,w.id,w.old,w.score]))+`<h4>Đối chiếu (đầy đủ, giữ nguyên các mục bị chặn)</h4>`+table(['Tệp','Sheet','Môn','Ô','Mã','Trạng thái'],plan.issues.map(i=>[i.file,i.sheet,i.subject,i.cell,i.id,i.status]));
+  $('template-export-preview').innerHTML=`<p><b>${plan.writes.length} ô dự kiến ghi</b>; ${plan.issues.length} mục giữ nguyên/cần đối chiếu. Không sửa tiêu đề, dữ liệu học sinh hoặc các cột khác. Điểm nguồn là điểm chính thức sau xử lý vi phạm, có xét điểm phúc khảo hiện hành; không lọc theo môn lựa chọn.</p>`+table(['Tệp','Sheet','Môn','Cột','Sẽ ghi','Giữ nguyên / lỗi'],plan.summary.map(s=>[s.file,s.sheet,s.subject,s.target,s.writes,s.skipped]))+`<h4>Chi tiết ô sẽ ghi (tối đa 200 dòng hiển thị)</h4>`+table(['Tệp','Sheet','Ô','Mã định danh','Điểm cũ','Điểm mới'],plan.writes.slice(0,200).map(w=>[files[w.fileIndex].path,w.sheetName,w.address,w.id,w.old,w.score]))+`<h4>Đối chiếu (đầy đủ, giữ nguyên các mục bị chặn)</h4>`+table(['Tệp','Sheet','Môn','Ô','Mã','Trạng thái'],plan.issues.map(i=>[i.file,i.sheet,i.subject,i.cell,i.id,i.status]));
   notify('Xem trước hoàn tất. Chỉ các ô hợp lệ trong danh sách sẽ được ghi; các dòng lỗi/không khớp được giữ nguyên. Chưa ghi vào tệp.');
  }
  async function write(){
