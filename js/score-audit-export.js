@@ -1,3 +1,4 @@
+// v0.1.407 - Add absence/make-up score Excel report; retain v0.1.405 behavior.
 // v0.1.405 - Report all assigned-subject scores regardless of elective registration.
 // Official totals come from the dedicated penalty-adjusted RPC; never recompute deductions in JavaScript.
 export function wireScoreAuditExport({state,$,esc,message}) {
@@ -9,10 +10,10 @@ export function wireScoreAuditExport({state,$,esc,message}) {
   const number=v=>v===null||v===undefined||v===''?'':Number.isFinite(Number(v))?Number(v):'';
   const controls=document.createElement('fieldset');
   controls.style.cssText='margin:18px 0;padding:14px;border:1px solid #cbd5e1;border-radius:10px';
-  controls.innerHTML='<legend style="font-weight:700">Kiểm tra và xuất điểm theo môn được gán cho lớp</legend><p>Chỉ đọc dữ liệu. Điểm xuất lấy từ RPC điểm chính thức sau xử lý vi phạm. Kiểm tra thành phần dựa trên cấu hình và nguồn điểm thực tế.</p><div class="form-actions"><button type="button" class="btn btn-primary" data-audit>Kiểm tra thành phần điểm</button><button type="button" class="btn btn-light" data-export>Xuất dữ liệu</button><select data-format aria-label="Định dạng xuất"><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF (in / lưu PDF)</option></select></div><div data-status class="notice hidden" role="status"></div><div data-result class="table-wrap" style="max-height:420px;overflow:auto"></div>';
+  controls.innerHTML='<legend style="font-weight:700">Kiểm tra và xuất điểm theo môn được gán cho lớp</legend><p>Chỉ đọc dữ liệu. Điểm xuất lấy từ RPC điểm chính thức sau xử lý vi phạm. Kiểm tra thành phần dựa trên cấu hình và nguồn điểm thực tế.</p><div class="form-actions"><button type="button" class="btn btn-primary" data-audit>Kiểm tra thành phần điểm</button><button type="button" class="btn btn-light" data-export>Xuất dữ liệu</button><button type="button" class="btn btn-light" data-absent-export>Xuất danh sách vắng và điểm bù</button><select data-format aria-label="Định dạng xuất"><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF (in / lưu PDF)</option></select></div><div data-status class="notice hidden" role="status"></div><div data-result class="table-wrap" style="max-height:420px;overflow:auto"></div>';
   panel.appendChild(controls);
   const status=controls.querySelector('[data-status]'),result=controls.querySelector('[data-result]');
-  const auditBtn=controls.querySelector('[data-audit]'),exportBtn=controls.querySelector('[data-export]');
+  const auditBtn=controls.querySelector('[data-audit]'),exportBtn=controls.querySelector('[data-export]'),absentBtn=controls.querySelector('[data-absent-export]');
   let cache=null,busy=false;
   const notify=(s,type='info')=>message(status,s,type);
   async function allRows(query,label){const out=[];for(let offset=0;;offset+=700){const {data,error}=await query.range(offset,offset+699);if(error)throw new Error(`${label}: ${error.message}`);out.push(...(data||[]));if((data||[]).length<700)break;}return out;}
@@ -98,7 +99,7 @@ export function wireScoreAuditExport({state,$,esc,message}) {
       }
     }return {out,checked,absent,complete,missing,unconfigured};
   }
-  async function act(fn){if(busy)return;busy=true;auditBtn.disabled=true;exportBtn.disabled=true;notify('Đang đọc cấu hình và điểm của kỳ thi…');try{const p=await load();await fn(p);}catch(e){notify(e.message||String(e),'error');}finally{busy=false;auditBtn.disabled=false;exportBtn.disabled=false;}}
+  async function act(fn){if(busy)return;busy=true;auditBtn.disabled=true;exportBtn.disabled=true;absentBtn.disabled=true;notify('Đang đọc cấu hình và điểm của kỳ thi…');try{const p=await load();await fn(p);}catch(e){notify(e.message||String(e),'error');}finally{busy=false;auditBtn.disabled=false;exportBtn.disabled=false;absentBtn.disabled=false;}}
   auditBtn.onclick=()=>act(async p=>{const x=issues(p);notify(`Đã đối chiếu ${x.checked} lượt học sinh–môn; đủ ${x.complete}, thiếu ${x.missing}, vắng ${x.absent}, thiếu cấu hình ${x.unconfigured}.`,'success');result.innerHTML=x.out.length?`<table><thead><tr>${['SBD','Họ tên','Lớp','Môn','Kết quả kiểm tra'].map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${x.out.map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p>Không phát hiện thiếu điểm/thành phần trong phạm vi kiểm tra.</p>';});
   exportBtn.onclick=()=>act(async p=>{
     const groups=classGroups(p),format=controls.querySelector('[data-format]').value;
@@ -115,5 +116,49 @@ export function wireScoreAuditExport({state,$,esc,message}) {
     }
     notify(`Đã chuẩn bị ${format==='xlsx'?'Excel':'bản in PDF'} cho ${groups.length} lớp. Điểm lấy từ RPC đã xử lý vi phạm, không trừ lại trên trình duyệt.`,'success');
   });
+  // Independent report: do not reuse elective-registration filters or stale audit cache.
+  absentBtn.onclick=async()=>{
+    if(busy)return;
+    busy=true;auditBtn.disabled=true;exportBtn.disabled=true;absentBtn.disabled=true;
+    try{
+      const examId=$('forms-exam')?.value||state.selectedExam;
+      if(!examId)throw new Error('Hãy chọn kỳ thi trước khi xuất danh sách vắng.');
+      if(!window.XLSX)throw new Error('Thư viện Excel chưa được tải.');
+      notify('Đang đọc danh sách vắng và điểm kiểm tra bù…');
+      const {data,error}=await state.client.rpc('exam_absence_makeup_report',{p_exam_id:examId});
+      if(error)throw new Error('Không đọc được danh sách vắng và điểm bù: '+error.message);
+      if(($('forms-exam')?.value||state.selectedExam)!==examId)throw new Error('Kỳ thi đã thay đổi, vui lòng thao tác lại.');
+      const list=data||[];
+      if(!list.length){notify('Kỳ thi này chưa có lượt vắng theo môn trong exam_absences. Không tạo tệp trống.','info');return;}
+      const labels={complete:'Đủ điểm bù',partial:'Thiếu thành phần điểm bù',not_entered:'Chưa có điểm bù',needs_config:'Cần kiểm tra cấu hình'};
+      const book=window.XLSX.utils.book_new();
+      const header=['STT','SBD','Mã định danh','Họ và tên','Lớp','Môn vắng','Điểm TN bù','Điểm TL bù','Hình thức','Trạng thái'];
+      const rows=list.map((r,i)=>[i+1,String(r.sbd||''),String(r.student_code||''),r.student_name||'',r.class_code||'',codes[norm(r.subject_code)]||r.subject_code||'',number(r.mcq_score),number(r.essay_score),r.score_mode||'',labels[r.status_code]||'Cần xác minh']);
+      const ws=window.XLSX.utils.aoa_to_sheet([['DANH SÁCH HỌC SINH VẮNG THI VÀ ĐIỂM KIỂM TRA BÙ'],header,...rows]);
+      ws['!cols']=[{wch:7},{wch:15},{wch:19},{wch:29},{wch:11},{wch:18},{wch:15},{wch:15},{wch:15},{wch:30}];
+      ws['!autofilter']={ref:`A2:J${rows.length+2}`};
+      for(let i=0;i<rows.length;i++)for(const col of [1,2]){const addr=window.XLSX.utils.encode_cell({r:i+2,c:col});if(ws[addr])ws[addr].t='s';}
+      window.XLSX.utils.book_append_sheet(book,ws,'Chi tiết vắng thi');
+      const groups=new Map();
+      for(const r of list){const k=norm(r.subject_code);if(!groups.has(k))groups.set(k,{total:0,complete:0,partial:0,not_entered:0,needs_config:0});const g=groups.get(k);g.total++;if(Object.hasOwn(g,r.status_code))g[r.status_code]++;}
+      const summary=[['Môn','Lượt vắng','Đủ điểm bù','Thiếu thành phần','Chưa có điểm bù','Cần kiểm tra cấu hình'],...[...groups].sort(([a],[b])=>a.localeCompare(b)).map(([k,g])=>[codes[k]||k,g.total,g.complete,g.partial,g.not_entered,g.needs_config])];
+      const ws2=window.XLSX.utils.aoa_to_sheet(summary);ws2['!cols']=[{wch:22},{wch:15},{wch:17},{wch:21},{wch:21},{wch:26}];
+      window.XLSX.utils.book_append_sheet(book,ws2,'Tổng hợp theo môn');
+      const notes=window.XLSX.utils.aoa_to_sheet([
+        ['HƯỚNG DẪN ĐỌC BÁO CÁO'],
+        ['Đủ điểm bù','Có đủ các thành phần bắt buộc theo score_mode; điểm 0 được coi là đã nhập.'],
+        ['Thiếu thành phần điểm bù','Đã nhập ít nhất một thành phần nhưng chưa đủ theo score_mode.'],
+        ['Chưa có điểm bù','Chưa có đủ dữ liệu điểm bù trong exam_absent_scores; cần kiểm tra và nhập.'],
+        ['Cần kiểm tra cấu hình','Chưa xác định được hình thức tính điểm của môn.'],
+        ['Phạm vi','Danh sách vắng theo môn từ exam_absences; không suy luận từ ô điểm trống.'],
+        ['Lưu ý','Báo cáo không thay đổi dữ liệu và không tự điền điểm 0.'],
+        ['Lưu ý','Vắng ghi nhận chỉ qua phách hoặc dấu * toàn kỳ cần đối chiếu riêng nếu có.']
+      ]);notes['!cols']=[{wch:29},{wch:100}];window.XLSX.utils.book_append_sheet(book,notes,'Ghi chú');
+      window.XLSX.writeFile(book,`vang-thi-diem-bu-${examId.slice(0,8)}.xlsx`);
+      const totals={complete:0,partial:0,not_entered:0,needs_config:0};for(const r of list)if(Object.hasOwn(totals,r.status_code))totals[r.status_code]++;
+      notify(`Đã xuất ${list.length} lượt vắng của ${new Set(list.map(r=>r.candidate_id)).size} học sinh: đủ điểm bù ${totals.complete}, thiếu thành phần ${totals.partial}, chưa có điểm bù ${totals.not_entered}, cần kiểm tra cấu hình ${totals.needs_config}.`,'success');
+    }catch(e){notify(e.message||String(e),'error');}
+    finally{busy=false;auditBtn.disabled=false;exportBtn.disabled=false;absentBtn.disabled=false;}
+  };
   return {invalidate(){cache=null;result.innerHTML='';}};
 }
