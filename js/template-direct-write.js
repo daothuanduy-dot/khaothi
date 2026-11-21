@@ -1,4 +1,4 @@
-import {writeWorkbookArchive} from './template-export-core.js?v=201';
+import {writeWorkbookArchive} from './template-export-core.js?v=412';
 export const equalBytes=(a,b)=>{const x=new Uint8Array(a),y=new Uint8Array(b);return x.length===y.length&&x.every((v,i)=>v===y[i]);};
 export async function saveDirectFiles(files,writes,JSZip,{check=()=>{},onSaved=()=>{},DOMParserClass=globalThis.DOMParser}={}){
  const prepared=[];
@@ -16,7 +16,7 @@ export async function saveDirectFiles(files,writes,JSZip,{check=()=>{},onSaved=(
   for(const {file,bytes} of prepared){
    check();if(!equalBytes(await (await file.handle.getFile()).arrayBuffer(),file.bytes))throw new Error(`${file.path}: tệp đã thay đổi; dừng ghi.`);
    const stream=await file.handle.createWritable({mode:'exclusive'});
-   try{check();if(!equalBytes(await (await file.handle.getFile()).arrayBuffer(),file.bytes))throw new Error(`${file.path}: tệp đã thay đổi trong khi mở ghi.`);await stream.write(bytes);check();if(!equalBytes(await (await file.handle.getFile()).arrayBuffer(),file.bytes))throw new Error(`${file.path}: tệp bị sửa trong lúc ghi; hủy lưu.`);await stream.close();}catch(error){try{await stream.abort();}catch{}throw error;}
+   try{check();await stream.write(bytes);check();await stream.close();}catch(error){try{await stream.abort();}catch{}throw error;}
    saved.push(file.path);file.bytes=bytes;onSaved(file.path);
   }
  }catch(error){throw new Error(`${error.message} Đã ghi ${saved.length} tệp${saved.length?': '+saved.join(', '):''}. Các tệp còn lại chưa ghi. Đọc lại thư mục trước khi tiếp tục.`);}
