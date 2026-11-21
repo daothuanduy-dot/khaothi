@@ -4,13 +4,25 @@ const codes=['TOAN','VAN','LY','HOA','SINH','SU','DIA','KTPL','N1','N2','N3','N4
 export function wireTemplateExport({state,$,esc,message,subjectName}){
  let files=[],mappings=[],plan=null,previewContext='',previewSources='',busy=false,revision=0,directory=null;
  const notify=(s,type='info')=>message($('template-export-message'),s,type);
+ const folderButton=$('template-export-files');
+ const folderPanel=document.createElement('div');
+ folderPanel.id='template-export-folder-status';
+ folderPanel.style.cssText='margin:10px 0 14px;max-width:720px';
+ folderPanel.innerHTML='<label for="template-export-folder-name" style="display:block;font-weight:600;margin-bottom:5px">Thư mục Excel đã chọn</label><input id="template-export-folder-name" type="text" readonly value="Chưa chọn thư mục" aria-label="Tên thư mục Excel đã chọn" style="box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;color:#334155"><div id="template-export-folder-detail" role="status" aria-live="polite" style="margin-top:5px;font-size:13px;color:#64748b">Chưa có quyền truy cập thư mục. Hãy nhấn “Chọn thư mục có quyền ghi”.</div>';
+ folderButton.insertAdjacentElement('afterend',folderPanel);
+ function folderStatus(detail){
+  const name=$('template-export-folder-name'),note=$('template-export-folder-detail');
+  name.value=directory?directory.name:'Chưa chọn thư mục';
+  note.textContent=detail||(directory?'Đã chọn thư mục. Nhấn “1. Đọc và xác định cột/môn” để đọc tệp.':'Chưa chọn thư mục.');
+ }
+
  const settings=()=>({includeAbsent:!!$('template-export-absent').checked,decimals:$('template-export-decimals').value});
  const context=()=>JSON.stringify([state.selectedExam,state.statisticsRevision||0,revision,$('template-export-period').value,settings(),mappings.map(({enabled,subject,target,idColumn,classColumn,classCode,firstRow})=>({enabled,subject,target,idColumn,classColumn,classCode,firstRow}))]);
  function invalidate(){plan=null;previewContext='';$('template-export-write').disabled=true;$('template-export-final').checked=false;$('template-export-preview').innerHTML='';}
  function reset(){revision++;files=[];mappings=[];invalidate();$('template-export-mappings').innerHTML='';$('template-export-mapping-confirm').checked=false;$('template-export-check').disabled=true;}
  function guard(){if(state.role!=='admin'||!state.selectedExam)throw new Error('Chọn kỳ thi với quyền Admin.');if(!['default','choice','subject'].includes(state.exams.find(e=>e.id===state.selectedExam)?.exam_mode))throw new Error('Chức năng hiện dùng kết quả kỳ mặc định/lựa chọn/theo môn; kỳ thủ công có nguồn điểm riêng.');if(!window.XLSX||!window.JSZip)throw new Error('Chưa tải thư viện Excel/ZIP. Tải lại trang.');}
  function safePath(file){const path=String(file.webkitRelativePath||file.name).replace(/\\/g,'/');if(path.startsWith('/')||path.split('/').some(p=>p==='..'||p==='.')||!path.toLowerCase().endsWith('.xlsx'))throw new Error('Đường dẫn tệp không hợp lệ.');return path;}
- async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){notify('Đã hủy chọn thư mục; thư mục đã chọn trước đó (nếu có) vẫn được giữ nguyên.','info');}else{invalidate();notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
+ async function action(fn){if(busy)return;busy=true;for(const id of ['template-export-read','template-export-check','template-export-write','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=true;try{await fn();}catch(e){if(e?.name==='AbortError'){folderStatus(directory?'Đã hủy chọn lại; vẫn giữ thư mục trước đó.':'Đã hủy chọn thư mục.');notify('Đã hủy chọn thư mục; thư mục đã chọn trước đó (nếu có) vẫn được giữ nguyên.','info');}else{invalidate();folderStatus(directory?'Thư mục đã chọn vẫn được giữ. Thao tác vừa rồi thất bại: '+(e?.message||String(e)):'Chưa chọn được thư mục: '+(e?.message||String(e)));notify(e?.message||String(e),'error');}}finally{busy=false;for(const id of ['template-export-read','template-export-files','template-export-period','template-export-absent','template-export-decimals'])$(id).disabled=false;$('template-export-check').disabled=!mappings.some(m=>m.enabled);$('template-export-write').disabled=!plan;}}
  function renderMappings(){
   const option=(v,text,current)=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(text)}</option>`;
   const subjects=[...new Set([...codes,...mappings.map(m=>m.subject).filter(Boolean)])];
@@ -29,6 +41,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
   }
   directory=selected;
   reset();
+  folderStatus('Đã chọn và cấp quyền đọc/ghi thư mục. Chưa đọc các tệp Excel.');
   notify('Đã chọn thư mục: '+directory.name+'. Nhấn “1. Đọc và xác định cột/môn” để quét các tệp Excel.','success');
  }
  async function read(){
@@ -40,6 +53,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
       permission=await directory.requestPermission({mode:'readwrite'});
     if(permission!=='granted')throw new Error('Thư mục chưa được cấp quyền đọc/ghi. Hãy chọn lại thư mục.');
   }
+  folderStatus('Đang đọc các tệp Excel trong thư mục đã chọn…');
   reset();const token=revision,examId=state.selectedExam;
   const selected=[];
   async function walk(dir,prefix){for await(const [name,handle] of dir.entries()){if(handle.kind==='directory')await walk(handle,prefix+name+'/');else if(/\.xlsx$/i.test(name)&&!name.startsWith('~$')){const file=await handle.getFile();selected.push({file,handle,path:prefix+name});}}}
@@ -53,7 +67,7 @@ export function wireTemplateExport({state,$,esc,message,subjectName}){
    for(const sheetName of wb.SheetNames){if(normalized(sheetName)==='HUONGDAN')continue;const ws=wb.Sheets[sheetName],info=inspectSheet(ws,window.XLSX,$('template-export-period').value);maps.push({...info,detectedFirstRow:info.firstRow,ws,fileIndex,fileName:path,sheetName});}
   }
   if(token!==revision||examId!==state.selectedExam)return;
-  files=loaded;mappings=maps;renderMappings();notify(`Đã đọc ${files.length} tệp, ${mappings.length} sheet. Kiểm tra môn, cột điểm, cột mã và lớp từng sheet; sửa trực tiếp nếu cần. Năm/học kỳ của mẫu chỉ tham chiếu, không tự sửa tiêu đề hoặc chặn do khác kỳ thi. Chưa ghi dữ liệu.`);
+  files=loaded;mappings=maps;renderMappings();folderStatus(`Đã đọc ${files.length} tệp Excel, ${mappings.length} sheet. Thư mục vẫn được giữ để xem trước/ghi.`);notify(`Đã đọc ${files.length} tệp, ${mappings.length} sheet. Kiểm tra môn, cột điểm, cột mã và lớp từng sheet; sửa trực tiếp nếu cần. Năm/học kỳ của mẫu chỉ tham chiếu, không tự sửa tiêu đề hoặc chặn do khác kỳ thi. Chưa ghi dữ liệu.`);
  }
  async function getSources(){
   const examId=state.selectedExam;
